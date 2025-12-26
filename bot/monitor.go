@@ -13,6 +13,7 @@ import (
 type TrackedDownload struct {
 	ID               int
 	Type             string // "torrent" or "webdl"
+	ClientIndex      int   
 	UserID           string
 	ChannelID        string
 	MessageID        string
@@ -22,19 +23,19 @@ type TrackedDownload struct {
 }
 
 type Monitor struct {
-	session      *discordgo.Session
-	torboxClient *torbox.Client
-	tracked      map[string]*TrackedDownload // key format: "type:id"
-	mu           sync.RWMutex
-	stopChan     chan struct{}
+	session         *discordgo.Session
+	torboxClientPool *torbox.ClientPool
+	tracked         map[string]*TrackedDownload // key format: "type:id:clientIndex"
+	mu              sync.RWMutex
+	stopChan        chan struct{}
 }
 
-func NewMonitor(session *discordgo.Session, torboxClient *torbox.Client) *Monitor {
+func NewMonitor(session *discordgo.Session, clientPool *torbox.ClientPool) *Monitor {
 	return &Monitor{
-		session:      session,
-		torboxClient: torboxClient,
-		tracked:      make(map[string]*TrackedDownload),
-		stopChan:     make(chan struct{}),
+		session:         session,
+		torboxClientPool: clientPool,
+		tracked:         make(map[string]*TrackedDownload),
+		stopChan:        make(chan struct{}),
 	}
 }
 
@@ -59,14 +60,15 @@ func (m *Monitor) Stop() {
 	close(m.stopChan)
 }
 
-func (m *Monitor) TrackTorrent(torrentID int, userID, channelID, messageID, name string) {
+func (m *Monitor) TrackTorrent(torrentID, clientIndex int, userID, channelID, messageID, name string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	key := fmt.Sprintf("torrent:%d", torrentID)
+	key := fmt.Sprintf("torrent:%d:%d", torrentID, clientIndex)
 	m.tracked[key] = &TrackedDownload{
 		ID:            torrentID,
 		Type:          "torrent",
+		ClientIndex:   clientIndex,
 		UserID:        userID,
 		ChannelID:     channelID,
 		MessageID:     messageID,
@@ -75,17 +77,18 @@ func (m *Monitor) TrackTorrent(torrentID int, userID, channelID, messageID, name
 		LastMilestone: 0,
 	}
 
-	log.Printf("Now tracking torrent %d for user %s", torrentID, userID)
+	log.Printf("Now tracking torrent %d (client #%d) for user %s", torrentID, clientIndex+1, userID)
 }
 
-func (m *Monitor) TrackWebDownload(webdlID int, userID, channelID, messageID, name string) {
+func (m *Monitor) TrackWebDownload(webdlID, clientIndex int, userID, channelID, messageID, name string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	key := fmt.Sprintf("webdl:%d", webdlID)
+	key := fmt.Sprintf("webdl:%d:%d", webdlID, clientIndex)
 	m.tracked[key] = &TrackedDownload{
 		ID:            webdlID,
 		Type:          "webdl",
+		ClientIndex:   clientIndex,
 		UserID:        userID,
 		ChannelID:     channelID,
 		MessageID:     messageID,
@@ -94,7 +97,7 @@ func (m *Monitor) TrackWebDownload(webdlID int, userID, channelID, messageID, na
 		LastMilestone: 0,
 	}
 
-	log.Printf("Now tracking web download %d for user %s", webdlID, userID)
+	log.Printf("Now tracking web download %d (client #%d) for user %s", webdlID, clientIndex+1, userID)
 }
 
 func (m *Monitor) checkDownloads() {
@@ -116,18 +119,19 @@ func (m *Monitor) checkDownloads() {
 }
 
 func (m *Monitor) checkTorrent(key string, download *TrackedDownload) {
-	info, err := m.torboxClient.GetTorrentInfo(download.ID)
+	client := m.torboxClientPool.GetClient(download.ClientIndex)
+	info, err := client.GetTorrentInfo(download.ID)
 	if err != nil {
-		log.Printf("Error checking torrent %d: %v", download.ID, err)
+		log.Printf("Error checking torrent %d (client #%d): %v", download.ID, download.ClientIndex+1, err)
 		return
 	}
 
 	if info.DownloadFinished && info.DownloadPresent {
-		log.Printf("Torrent %d has finished downloading", download.ID)
+		log.Printf("Torrent %d (client #%d) has finished downloading", download.ID, download.ClientIndex+1)
 		
-		downloadLink, err := m.torboxClient.RequestDownloadURL(download.ID)
+		downloadLink, err := client.RequestDownloadURL(download.ID)
 		if err != nil {
-			log.Printf("Failed to get download link for torrent %d: %v", download.ID, err)
+			log.Printf("Failed to get download link for torrent %d (client #%d): %v", download.ID, download.ClientIndex+1, err)
 			m.notifyError(download, fmt.Sprintf("Download finished but failed to get link: %v", err))
 		} else {
 			m.notifyCompletion(download, downloadLink, info)
@@ -150,18 +154,19 @@ func (m *Monitor) checkTorrent(key string, download *TrackedDownload) {
 }
 
 func (m *Monitor) checkWebDownload(key string, download *TrackedDownload) {
-	info, err := m.torboxClient.GetWebDownloadInfo(download.ID)
+	client := m.torboxClientPool.GetClient(download.ClientIndex)
+	info, err := client.GetWebDownloadInfo(download.ID)
 	if err != nil {
-		log.Printf("Error checking web download %d: %v", download.ID, err)
+		log.Printf("Error checking web download %d (client #%d): %v", download.ID, download.ClientIndex+1, err)
 		return
 	}
 
 	if info.DownloadFinished && info.DownloadPresent {
-		log.Printf("Web download %d has finished", download.ID)
+		log.Printf("Web download %d (client #%d) has finished", download.ID, download.ClientIndex+1)
 		
-		downloadLink, err := m.torboxClient.RequestWebDownloadURL(download.ID)
+		downloadLink, err := client.RequestWebDownloadURL(download.ID)
 		if err != nil {
-			log.Printf("Failed to get download link for webdl %d: %v", download.ID, err)
+			log.Printf("Failed to get download link for webdl %d (client #%d): %v", download.ID, download.ClientIndex+1, err)
 			m.notifyError(download, fmt.Sprintf("Download finished but failed to get link: %v", err))
 		} else {
 			m.notifyCompletion(download, downloadLink, nil)
@@ -197,6 +202,8 @@ func (m *Monitor) getMilestone(progress float64) int {
 func (m *Monitor) notifyCompletion(download *TrackedDownload, downloadLink string, torrentInfo *torbox.TorrentInfo) {
 	expirationTime := time.Now().Add(3 * time.Hour)
 	expirationTimestamp := expirationTime.Unix()
+	
+	log.Printf("Download %d completed using API Key #%d", download.ID, download.ClientIndex+1)
 	
 	description := fmt.Sprintf("Your download **%s** is ready!\n\n⏰ Link expires <t:%d:R>", download.Name, expirationTimestamp)
 	
@@ -256,6 +263,8 @@ func (m *Monitor) notifyProgress(download *TrackedDownload, torrentInfo *torbox.
 	if emoji == "" {
 		emoji = "📊"
 	}
+
+	log.Printf("Progress update (%d%%) for download %d using API Key #%d", milestone, download.ID, download.ClientIndex+1)
 
 	if torrentInfo != nil {
 		progressBar := createProgressBar(torrentInfo.Progress)
@@ -320,6 +329,8 @@ func (m *Monitor) notifyProgress(download *TrackedDownload, torrentInfo *torbox.
 }
 
 func (m *Monitor) notifyError(download *TrackedDownload, errorMsg string) {
+	log.Printf("Error for download %d using API Key #%d: %s", download.ID, download.ClientIndex+1, errorMsg)
+	
 	embed := &discordgo.MessageEmbed{
 		Title:       "⚠️ Download Error",
 		Description: "There was a problem with your download.",

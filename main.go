@@ -18,9 +18,12 @@ func main() {
 		log.Fatalf("Failed to load configuration: %v", err)
 	}
 
-	torboxClient := torbox.NewClient(cfg.TorboxAPIKey)
+	torboxClientPool, err := torbox.NewClientPool(cfg.TorboxAPIKeys)
+	if err != nil {
+		log.Fatalf("Failed to initialize Torbox client pool: %v", err)
+	}
 
-	discordBot, err := bot.NewBot(cfg.DiscordBotToken, torboxClient)
+	discordBot, err := bot.NewBot(cfg.DiscordBotToken, torboxClientPool)
 	if err != nil {
 		log.Fatalf("Failed to initialize bot: %v", err)
 	}

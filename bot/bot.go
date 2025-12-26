@@ -12,26 +12,26 @@ import (
 )
 
 type Bot struct {
-	Session      *discordgo.Session
-	torboxClient *torbox.Client
-	monitor      *Monitor
-	commands     []*discordgo.ApplicationCommand
-	handlers     map[string]func(s *discordgo.Session, i *discordgo.InteractionCreate)
+	Session         *discordgo.Session
+	torboxClientPool *torbox.ClientPool
+	monitor         *Monitor
+	commands        []*discordgo.ApplicationCommand
+	handlers        map[string]func(s *discordgo.Session, i *discordgo.InteractionCreate)
 }
 
-func NewBot(token string, tbClient *torbox.Client) (*Bot, error) {
+func NewBot(token string, clientPool *torbox.ClientPool) (*Bot, error) {
 	s, err := discordgo.New("Bot " + token)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create discord session: %w", err)
 	}
 
 	bot := &Bot{
-		Session:      s,
-		torboxClient: tbClient,
-		handlers:     make(map[string]func(s *discordgo.Session, i *discordgo.InteractionCreate)),
+		Session:         s,
+		torboxClientPool: clientPool,
+		handlers:        make(map[string]func(s *discordgo.Session, i *discordgo.InteractionCreate)),
 	}
 
-	bot.monitor = NewMonitor(s, tbClient)
+	bot.monitor = NewMonitor(s, clientPool)
 	bot.defineCommands()
 	bot.defineHandlers()
 
@@ -193,33 +193,30 @@ func (b *Bot) handleAddTorrent(s *discordgo.Session, i *discordgo.InteractionCre
 	}
 	
 	var resp *torbox.APIResponse
+	var clientIndex int
 	var err error
 	
 	if len(torrentFile) > 0 {
-		resp, err = b.torboxClient.AddTorrentFile(torrentFile, fileName)
+		resp, clientIndex, err = b.torboxClientPool.AddTorrentFileWithFallback(torrentFile, fileName)
 	} else {
-		resp, err = b.torboxClient.AddTorrent(magnetLink)
+		resp, clientIndex, err = b.torboxClientPool.AddTorrentWithFallback(magnetLink)
 	}
 	
 	if err != nil {
-		b.sendAPIResponseAsEmbed(s, i, "Add Torrent", sourceDescription, nil, "", i.Member.User.ID, err)
+		if strings.Contains(err.Error(), "all API keys reached active limit") {
+			totalKeys := b.torboxClientPool.GetClientCount()
+			err = fmt.Errorf("⚠️ All API keys (%d/%d) reached download limit\n\n⏳ Wait for some downloads to finish before adding new ones.\n\n💡 Use `/list-downloads` to view your active downloads.", totalKeys, totalKeys)
+		}
+		b.sendAPIResponseAsEmbed(s, i, "Add Torrent", sourceDescription, nil, "", i.Member.User.ID, err, -1)
 		return
 	}
 
 	if !resp.Success {
-		if b.isListFullError(resp) {
-			activeLimit := b.extractActiveLimit(resp)
-			if activeLimit > 0 {
-				err = fmt.Errorf("⚠️ Download limit reached (%d/%d active)\n\n⏳ Wait for some downloads to finish before adding new ones.\n\n💡 Use `/list-downloads` to view your active downloads.", activeLimit, activeLimit)
-			} else {
-				err = fmt.Errorf("⚠️ Download limit reached\n\n⏳ Wait for some downloads to finish before adding new ones.\n\n💡 Use `/list-downloads` to view your active downloads.")
-			}
-			b.sendAPIResponseAsEmbed(s, i, "Add Torrent", sourceDescription, nil, "", i.Member.User.ID, err)
-		} else if b.isDownloadTooLargeError(resp) {
+		if b.isDownloadTooLargeError(resp) {
 			err = fmt.Errorf("📦 File Too Large\n\n%s\n\n💡 Try with a smaller file.", resp.Detail)
-			b.sendAPIResponseAsEmbed(s, i, "Add Torrent", sourceDescription, nil, "", i.Member.User.ID, err)
+			b.sendAPIResponseAsEmbed(s, i, "Add Torrent", sourceDescription, nil, "", i.Member.User.ID, err, clientIndex)
 		} else {
-			b.sendAPIResponseAsEmbed(s, i, "Add Torrent", sourceDescription, resp, "", i.Member.User.ID, nil)
+			b.sendAPIResponseAsEmbed(s, i, "Add Torrent", sourceDescription, resp, "", i.Member.User.ID, nil, clientIndex)
 		}
 		return
 	}
@@ -227,21 +224,22 @@ func (b *Bot) handleAddTorrent(s *discordgo.Session, i *discordgo.InteractionCre
 	data, ok := resp.Data.(map[string]interface{})
 	if !ok {
 		err = fmt.Errorf("failed to parse API response data")
-		b.sendAPIResponseAsEmbed(s, i, "Add Torrent", sourceDescription, nil, "", i.Member.User.ID, err)
+		b.sendAPIResponseAsEmbed(s, i, "Add Torrent", sourceDescription, nil, "", i.Member.User.ID, err, clientIndex)
 		return
 	}
 
 	torrentID, ok := data["torrent_id"].(float64)
 	if !ok {
 		err = fmt.Errorf("failed to parse torrent_id from API response")
-		b.sendAPIResponseAsEmbed(s, i, "Add Torrent", sourceDescription, nil, "", i.Member.User.ID, err)
+		b.sendAPIResponseAsEmbed(s, i, "Add Torrent", sourceDescription, nil, "", i.Member.User.ID, err, clientIndex)
 		return
 	}
 
 	name, _ := data["name"].(string)
 	if name == "" {
 		time.Sleep(1 * time.Second)
-		if info, err := b.torboxClient.GetTorrentInfo(int(torrentID)); err == nil {
+		client := b.torboxClientPool.GetClient(clientIndex)
+		if info, err := client.GetTorrentInfo(int(torrentID)); err == nil {
 			name = info.Name
 		}
 	}
@@ -249,21 +247,21 @@ func (b *Bot) handleAddTorrent(s *discordgo.Session, i *discordgo.InteractionCre
 		name = "Torrent"
 	}
 
-	// Check if torrent is already cached (instant download)
-	downloadLink, err := b.torboxClient.RequestDownloadURL(int(torrentID))
+	client := b.torboxClientPool.GetClient(clientIndex)
+	downloadLink, err := client.RequestDownloadURL(int(torrentID))
 	if err != nil {
 		log.Printf("Torrent %d not ready yet, will monitor it: %s", int(torrentID), err)
 		
-		b.sendMonitoringResponse(s, i, "Torrent", name, int(torrentID), sourceDescription)
+		b.sendMonitoringResponse(s, i, "Torrent", name, int(torrentID), sourceDescription, clientIndex)
 		
 		msg, msgErr := s.InteractionResponse(i.Interaction)
 		if msgErr == nil {
-			b.monitor.TrackTorrent(int(torrentID), i.Member.User.ID, i.ChannelID, msg.ID, name)
+			b.monitor.TrackTorrent(int(torrentID), clientIndex, i.Member.User.ID, i.ChannelID, msg.ID, name)
 		}
 		return
 	}
 
-	b.sendAPIResponseAsEmbed(s, i, "Add Torrent", sourceDescription, resp, downloadLink, i.Member.User.ID, nil)
+	b.sendAPIResponseAsEmbed(s, i, "Add Torrent", sourceDescription, resp, downloadLink, i.Member.User.ID, nil, clientIndex)
 }
 
 func (b *Bot) handleAddWebDownload(s *discordgo.Session, i *discordgo.InteractionCreate) {
@@ -274,27 +272,23 @@ func (b *Bot) handleAddWebDownload(s *discordgo.Session, i *discordgo.Interactio
 	options := i.ApplicationCommandData().Options
 	downloadLink := options[0].StringValue()
 
-	resp, err := b.torboxClient.AddWebDownload(downloadLink)
+	resp, clientIndex, err := b.torboxClientPool.AddWebDownloadWithFallback(downloadLink)
 	
 	if err != nil {
-		b.sendAPIResponseAsEmbed(s, i, "Add Web Download", downloadLink, nil, "", i.Member.User.ID, err)
+		if strings.Contains(err.Error(), "all API keys reached active limit") {
+			totalKeys := b.torboxClientPool.GetClientCount()
+			err = fmt.Errorf("⚠️ All API keys (%d/%d) reached download limit\n\n⏳ Wait for some downloads to finish before adding new ones.\n\n💡 Use `/list-downloads` to view your active downloads.", totalKeys, totalKeys)
+		}
+		b.sendAPIResponseAsEmbed(s, i, "Add Web Download", downloadLink, nil, "", i.Member.User.ID, err, -1)
 		return
 	}
 
 	if !resp.Success {
-		if b.isListFullError(resp) {
-			activeLimit := b.extractActiveLimit(resp)
-			if activeLimit > 0 {
-				err = fmt.Errorf("⚠️ Download limit reached (%d/%d active)\n\n⏳ Wait for some downloads to finish before adding new ones.\n\n💡 Use `/list-downloads` to view your active downloads.", activeLimit, activeLimit)
-			} else {
-				err = fmt.Errorf("⚠️ Download limit reached\n\n⏳ Wait for some downloads to finish before adding new ones.\n\n💡 Use `/list-downloads` to view your active downloads.")
-			}
-			b.sendAPIResponseAsEmbed(s, i, "Add Web Download", downloadLink, nil, "", i.Member.User.ID, err)
-		} else if b.isDownloadTooLargeError(resp) {
+		if b.isDownloadTooLargeError(resp) {
 			err = fmt.Errorf("📦 File Too Large\n\n%s\n\n💡 Try with a smaller file.", resp.Detail)
-			b.sendAPIResponseAsEmbed(s, i, "Add Web Download", downloadLink, nil, "", i.Member.User.ID, err)
+			b.sendAPIResponseAsEmbed(s, i, "Add Web Download", downloadLink, nil, "", i.Member.User.ID, err, clientIndex)
 		} else {
-			b.sendAPIResponseAsEmbed(s, i, "Add Web Download", downloadLink, resp, "", i.Member.User.ID, nil)
+			b.sendAPIResponseAsEmbed(s, i, "Add Web Download", downloadLink, resp, "", i.Member.User.ID, nil, clientIndex)
 		}
 		return
 	}
@@ -302,21 +296,22 @@ func (b *Bot) handleAddWebDownload(s *discordgo.Session, i *discordgo.Interactio
 	data, ok := resp.Data.(map[string]interface{})
 	if !ok {
 		err = fmt.Errorf("failed to parse API response data")
-		b.sendAPIResponseAsEmbed(s, i, "Add Web Download", downloadLink, nil, "", i.Member.User.ID, err)
+		b.sendAPIResponseAsEmbed(s, i, "Add Web Download", downloadLink, nil, "", i.Member.User.ID, err, clientIndex)
 		return
 	}
 
 	webdlID, ok := data["webdownload_id"].(float64)
 	if !ok {
 		err = fmt.Errorf("failed to parse webdownload_id from API response")
-		b.sendAPIResponseAsEmbed(s, i, "Add Web Download", downloadLink, nil, "", i.Member.User.ID, err)
+		b.sendAPIResponseAsEmbed(s, i, "Add Web Download", downloadLink, nil, "", i.Member.User.ID, err, clientIndex)
 		return
 	}
 
 	name := "Getting info..."
 	
 	time.Sleep(1 * time.Second)
-	if info, err := b.torboxClient.GetWebDownloadInfo(int(webdlID)); err == nil {
+	client := b.torboxClientPool.GetClient(clientIndex)
+	if info, err := client.GetWebDownloadInfo(int(webdlID)); err == nil {
 		name = info.Name
 	}
 	
@@ -324,55 +319,12 @@ func (b *Bot) handleAddWebDownload(s *discordgo.Session, i *discordgo.Interactio
 		name = "Web Download"
 	}
 
-	b.sendMonitoringResponse(s, i, "Web Download", name, int(webdlID), downloadLink)
+	b.sendMonitoringResponse(s, i, "Web Download", name, int(webdlID), downloadLink, clientIndex)
 	
 	msg, msgErr := s.InteractionResponse(i.Interaction)
 	if msgErr == nil {
-		b.monitor.TrackWebDownload(int(webdlID), i.Member.User.ID, i.ChannelID, msg.ID, name)
+		b.monitor.TrackWebDownload(int(webdlID), clientIndex, i.Member.User.ID, i.ChannelID, msg.ID, name)
 	}
-}
-
-func (b *Bot) isListFullError(resp *torbox.APIResponse) bool {
-	if resp == nil || resp.Success {
-		return false
-	}
-	
-	if resp.Error == "ACTIVE_LIMIT" {
-		return true
-	}
-	
-	if data, ok := resp.Data.(map[string]interface{}); ok {
-		if errorType, exists := data["error"]; exists {
-			if errorType == "ACTIVE_LIMIT" {
-				return true
-			}
-		}
-	}
-	
-	detailLower := strings.ToLower(resp.Detail)
-	return strings.Contains(detailLower, "limit") || 
-	       strings.Contains(detailLower, "active download") || 
-	       strings.Contains(detailLower, "reached") ||
-	       strings.Contains(detailLower, "maximum")
-}
-
-func (b *Bot) extractActiveLimit(resp *torbox.APIResponse) int {
-	if resp == nil || resp.Data == nil {
-		return 0
-	}
-	
-	data, ok := resp.Data.(map[string]interface{})
-	if !ok {
-		return 0
-	}
-	
-	if limitVal, exists := data["active_limit"]; exists {
-		if limit, ok := limitVal.(float64); ok {
-			return int(limit)
-		}
-	}
-	
-	return 0
 }
 
 func (b *Bot) isDownloadTooLargeError(resp *torbox.APIResponse) bool {
@@ -394,27 +346,36 @@ func (b *Bot) handleListDownloads(s *discordgo.Session, i *discordgo.Interaction
 		Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
 	})
 
-	torrents, err := b.torboxClient.ListTorrents()
-	if err != nil {
-		b.sendError(s, i, "Error listing torrents", err)
-		return
-	}
+	allTorrents := []torbox.TorrentInfo{}
+	allWebDLs := []torbox.WebDownloadInfo{}
 
-	webdls, err := b.torboxClient.ListWebDownloads()
-	if err != nil {
-		b.sendError(s, i, "Error listing web downloads", err)
-		return
+	for idx := 0; idx < b.torboxClientPool.GetClientCount(); idx++ {
+		client := b.torboxClientPool.GetClient(idx)
+		
+		torrents, err := client.ListTorrents()
+		if err != nil {
+			log.Printf("Error listing torrents from client #%d: %v", idx+1, err)
+			continue
+		}
+		allTorrents = append(allTorrents, torrents...)
+
+		webdls, err := client.ListWebDownloads()
+		if err != nil {
+			log.Printf("Error listing web downloads from client #%d: %v", idx+1, err)
+			continue
+		}
+		allWebDLs = append(allWebDLs, webdls...)
 	}
 
 	var activeTorrents []torbox.TorrentInfo
-	for _, t := range torrents {
+	for _, t := range allTorrents {
 		if t.Active && !t.DownloadFinished {
 			activeTorrents = append(activeTorrents, t)
 		}
 	}
 
 	var activeWebDLs []torbox.WebDownloadInfo
-	for _, w := range webdls {
+	for _, w := range allWebDLs {
 		if w.Active && !w.DownloadFinished {
 			activeWebDLs = append(activeWebDLs, w)
 		}
@@ -484,7 +445,19 @@ func (b *Bot) handleTorrentStatus(s *discordgo.Session, i *discordgo.Interaction
 	options := i.ApplicationCommandData().Options
 	torrentID := int(options[0].IntValue())
 
-	info, err := b.torboxClient.GetTorrentInfo(torrentID)
+	var info *torbox.TorrentInfo
+	var foundClientIndex int
+	var err error
+
+	for idx := 0; idx < b.torboxClientPool.GetClientCount(); idx++ {
+		client := b.torboxClientPool.GetClient(idx)
+		info, err = client.GetTorrentInfo(torrentID)
+		if err == nil {
+			foundClientIndex = idx
+			break
+		}
+	}
+
 	if err != nil {
 		b.sendError(s, i, "Error getting torrent info", err)
 		return
@@ -492,7 +465,7 @@ func (b *Bot) handleTorrentStatus(s *discordgo.Session, i *discordgo.Interaction
 
 	progressBar := createProgressBar(info.Progress)
 	
-	stateEmoji := "⏸️"
+	stateEmoji := "⸸️"
 	if info.Active {
 		stateEmoji = "▶️"
 	}
@@ -539,7 +512,8 @@ func (b *Bot) handleTorrentStatus(s *discordgo.Session, i *discordgo.Interaction
 	}
 
 	if info.DownloadFinished && info.DownloadPresent {
-		downloadLink, err := b.torboxClient.RequestDownloadURL(torrentID)
+		client := b.torboxClientPool.GetClient(foundClientIndex)
+		downloadLink, err := client.RequestDownloadURL(torrentID)
 		if err == nil {
 			expirationTime := time.Now().Add(3 * time.Hour)
 			expirationTimestamp := expirationTime.Unix()
@@ -577,7 +551,19 @@ func (b *Bot) handleWebDLStatus(s *discordgo.Session, i *discordgo.InteractionCr
 	options := i.ApplicationCommandData().Options
 	webdlID := int(options[0].IntValue())
 
-	info, err := b.torboxClient.GetWebDownloadInfo(webdlID)
+	var info *torbox.WebDownloadInfo
+	var foundClientIndex int
+	var err error
+
+	for idx := 0; idx < b.torboxClientPool.GetClientCount(); idx++ {
+		client := b.torboxClientPool.GetClient(idx)
+		info, err = client.GetWebDownloadInfo(webdlID)
+		if err == nil {
+			foundClientIndex = idx
+			break
+		}
+	}
+
 	if err != nil {
 		b.sendError(s, i, "Error getting web download info", err)
 		return
@@ -585,7 +571,7 @@ func (b *Bot) handleWebDLStatus(s *discordgo.Session, i *discordgo.InteractionCr
 
 	progressBar := createProgressBar(info.Progress)
 	
-	stateEmoji := "⏸️"
+	stateEmoji := "⸸️"
 	if info.Active {
 		stateEmoji = "▶️"
 	}
@@ -622,7 +608,8 @@ func (b *Bot) handleWebDLStatus(s *discordgo.Session, i *discordgo.InteractionCr
 	}
 
 	if info.DownloadFinished && info.DownloadPresent {
-		downloadLink, err := b.torboxClient.RequestWebDownloadURL(webdlID)
+		client := b.torboxClientPool.GetClient(foundClientIndex)
+		downloadLink, err := client.RequestWebDownloadURL(webdlID)
 		if err == nil {
 			expirationTime := time.Now().Add(3 * time.Hour)
 			expirationTimestamp := expirationTime.Unix()
@@ -652,10 +639,14 @@ func (b *Bot) handleWebDLStatus(s *discordgo.Session, i *discordgo.InteractionCr
 	})
 }
 
-func (b *Bot) sendAPIResponseAsEmbed(s *discordgo.Session, i *discordgo.InteractionCreate, title, link string, resp *torbox.APIResponse, downloadLink, userID string, err error) {
+func (b *Bot) sendAPIResponseAsEmbed(s *discordgo.Session, i *discordgo.InteractionCreate, title, link string, resp *torbox.APIResponse, downloadLink, userID string, err error, clientIndex int) {
 	var embed *discordgo.MessageEmbed
 	var components []discordgo.MessageComponent
 	var content string
+
+	if clientIndex >= 0 {
+		log.Printf("Response sent using API Key #%d", clientIndex+1)
+	}
 
 	if err != nil {
 		embed = &discordgo.MessageEmbed{
@@ -734,7 +725,11 @@ func (b *Bot) sendAPIResponseAsEmbed(s *discordgo.Session, i *discordgo.Interact
 	})
 }
 
-func (b *Bot) sendMonitoringResponse(s *discordgo.Session, i *discordgo.InteractionCreate, downloadType, name string, id int, link string) {
+func (b *Bot) sendMonitoringResponse(s *discordgo.Session, i *discordgo.InteractionCreate, downloadType, name string, id int, link string, clientIndex int) {
+	if clientIndex >= 0 {
+		log.Printf("Monitoring %s %d using API Key #%d", downloadType, id, clientIndex+1)
+	}
+
 	embed := &discordgo.MessageEmbed{
 		Title:       fmt.Sprintf("⏳ %s Added", downloadType),
 		Description: "Your download has been added and is being monitored!",
