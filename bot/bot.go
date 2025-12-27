@@ -42,10 +42,16 @@ func NewBot(token string, clientPool *torbox.ClientPool, cacheOnly bool) (*Bot, 
 
 func (b *Bot) Start() error {
 	b.Session.AddHandler(func(s *discordgo.Session, i *discordgo.InteractionCreate) {
-		if handler, ok := b.handlers[i.ApplicationCommandData().Name]; ok {
-			handler(s, i)
+		// Only process ApplicationCommand interactions here
+		if i.Type == discordgo.InteractionApplicationCommand {
+			if handler, ok := b.handlers[i.ApplicationCommandData().Name]; ok {
+				handler(s, i)
+			}
 		}
 	})
+
+	// Setup component handlers for interactive buttons
+	b.setupComponentHandlers()
 
 	if err := b.Session.Open(); err != nil {
 		return fmt.Errorf("cannot open the session: %w", err)
@@ -134,6 +140,22 @@ func (b *Bot) defineCommands() {
 				},
 			},
 		},
+		{
+			Name:        "hosters",
+			Description: "List all available file hosters and their status.",
+		},
+		{
+			Name:        "search-hoster",
+			Description: "Search for detailed information about a specific hoster.",
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        "name",
+					Description: "Name or domain of the hoster to search",
+					Required:    true,
+				},
+			},
+		},
 	}
 }
 
@@ -143,6 +165,8 @@ func (b *Bot) defineHandlers() {
 	b.handlers["list-downloads"] = b.handleListDownloads
 	b.handlers["torrent-status"] = b.handleTorrentStatus
 	b.handlers["webdl-status"] = b.handleWebDLStatus
+	b.handlers["hosters"] = b.handleHosters
+	b.handlers["search-hoster"] = b.handleSearchHoster
 }
 
 func (b *Bot) handleAddTorrent(s *discordgo.Session, i *discordgo.InteractionCreate) {
