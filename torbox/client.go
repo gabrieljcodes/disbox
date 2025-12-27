@@ -72,7 +72,7 @@ type WebDownloadInfo struct {
 }
 
 // AddTorrent adds a torrent via magnet link with seed parameter set to 3 (no seeding)
-func (c *Client) AddTorrent(magnetLink string) (*APIResponse, error) {
+func (c *Client) AddTorrent(magnetLink string, cacheOnly bool) (*APIResponse, error) {
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
 	
@@ -82,6 +82,12 @@ func (c *Client) AddTorrent(magnetLink string) (*APIResponse, error) {
 	
 	if err := writer.WriteField("seed", "3"); err != nil {
 		return nil, fmt.Errorf("failed to write seed parameter to form: %w", err)
+	}
+	
+	if cacheOnly {
+		if err := writer.WriteField("add_only_if_cached", "true"); err != nil {
+			return nil, fmt.Errorf("failed to write add_only_if_cached parameter to form: %w", err)
+		}
 	}
 	
 	if err := writer.Close(); err != nil {
@@ -100,7 +106,7 @@ func (c *Client) AddTorrent(magnetLink string) (*APIResponse, error) {
 }
 
 // AddTorrentFile adds a torrent via .torrent file with seed parameter set to 3 (no seeding)
-func (c *Client) AddTorrentFile(fileData []byte, fileName string) (*APIResponse, error) {
+func (c *Client) AddTorrentFile(fileData []byte, fileName string, cacheOnly bool) (*APIResponse, error) {
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
 	
@@ -115,6 +121,12 @@ func (c *Client) AddTorrentFile(fileData []byte, fileName string) (*APIResponse,
 	
 	if err := writer.WriteField("seed", "3"); err != nil {
 		return nil, fmt.Errorf("failed to write seed parameter to form: %w", err)
+	}
+	
+	if cacheOnly {
+		if err := writer.WriteField("add_only_if_cached", "true"); err != nil {
+			return nil, fmt.Errorf("failed to write add_only_if_cached parameter to form: %w", err)
+		}
 	}
 	
 	if err := writer.Close(); err != nil {
@@ -361,4 +373,4 @@ func (c *Client) doRequest(req *http.Request) (*APIResponse, error) {
 	}
 
 	return &apiResp, nil
-}	
+}

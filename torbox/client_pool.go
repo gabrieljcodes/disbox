@@ -70,12 +70,12 @@ func (p *ClientPool) GetClientCount() int {
 	return len(p.clients)
 }
 
-func (p *ClientPool) AddTorrentWithFallback(magnetLink string) (*APIResponse, int, error) {
+func (p *ClientPool) AddTorrentWithFallback(magnetLink string, cacheOnly bool) (*APIResponse, int, error) {
 	p.ResetToFirst()
 	
 	for attempt := 0; attempt < len(p.clients); attempt++ {
 		client := p.GetCurrentClient()
-		resp, err := client.AddTorrent(magnetLink)
+		resp, err := client.AddTorrent(magnetLink, cacheOnly)
 		
 		if err != nil {
 			log.Printf("Error with API key #%d: %v", p.currentIndex+1, err)
@@ -99,12 +99,12 @@ func (p *ClientPool) AddTorrentWithFallback(magnetLink string) (*APIResponse, in
 	return nil, -1, fmt.Errorf("failed to add torrent with all available API keys")
 }
 
-func (p *ClientPool) AddTorrentFileWithFallback(fileData []byte, fileName string) (*APIResponse, int, error) {
+func (p *ClientPool) AddTorrentFileWithFallback(fileData []byte, fileName string, cacheOnly bool) (*APIResponse, int, error) {
 	p.ResetToFirst()
 	
 	for attempt := 0; attempt < len(p.clients); attempt++ {
 		client := p.GetCurrentClient()
-		resp, err := client.AddTorrentFile(fileData, fileName)
+		resp, err := client.AddTorrentFile(fileData, fileName, cacheOnly)
 		
 		if err != nil {
 			log.Printf("Error with API key #%d: %v", p.currentIndex+1, err)

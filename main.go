@@ -23,7 +23,7 @@ func main() {
 		log.Fatalf("Failed to initialize Torbox client pool: %v", err)
 	}
 
-	discordBot, err := bot.NewBot(cfg.DiscordBotToken, torboxClientPool)
+	discordBot, err := bot.NewBot(cfg.DiscordBotToken, torboxClientPool, cfg.CacheOnly)
 	if err != nil {
 		log.Fatalf("Failed to initialize bot: %v", err)
 	}

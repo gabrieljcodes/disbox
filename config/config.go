@@ -11,6 +11,7 @@ import (
 type Config struct {
 	DiscordBotToken string
 	TorboxAPIKeys   []string
+	CacheOnly       bool
 }
 
 func LoadConfig() (*Config, error) {
@@ -21,6 +22,7 @@ func LoadConfig() (*Config, error) {
 	cfg := &Config{
 		DiscordBotToken: os.Getenv("DISCORD_BOT_TOKEN"),
 		TorboxAPIKeys:   parseTorboxAPIKeys(),
+		CacheOnly:       strings.ToLower(os.Getenv("CACHE_ONLY")) == "true",
 	}
 
 	if cfg.DiscordBotToken == "" {
@@ -31,6 +33,10 @@ func LoadConfig() (*Config, error) {
 	}
 
 	log.Printf("Loaded %d Torbox API key(s)", len(cfg.TorboxAPIKeys))
+	if cfg.CacheOnly {
+		log.Println("⚡ CACHE_ONLY mode enabled - only cached torrents will be added")
+		log.Println("🚫 Web downloads are disabled in CACHE_ONLY mode")
+	}
 
 	return cfg, nil
 }

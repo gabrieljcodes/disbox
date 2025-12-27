@@ -17,9 +17,10 @@ type Bot struct {
 	monitor         *Monitor
 	commands        []*discordgo.ApplicationCommand
 	handlers        map[string]func(s *discordgo.Session, i *discordgo.InteractionCreate)
+	cacheOnly       bool
 }
 
-func NewBot(token string, clientPool *torbox.ClientPool) (*Bot, error) {
+func NewBot(token string, clientPool *torbox.ClientPool, cacheOnly bool) (*Bot, error) {
 	s, err := discordgo.New("Bot " + token)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create discord session: %w", err)
@@ -29,6 +30,7 @@ func NewBot(token string, clientPool *torbox.ClientPool) (*Bot, error) {
 		Session:         s,
 		torboxClientPool: clientPool,
 		handlers:        make(map[string]func(s *discordgo.Session, i *discordgo.InteractionCreate)),
+		cacheOnly:       cacheOnly,
 	}
 
 	bot.monitor = NewMonitor(s, clientPool)
@@ -197,9 +199,9 @@ func (b *Bot) handleAddTorrent(s *discordgo.Session, i *discordgo.InteractionCre
 	var err error
 	
 	if len(torrentFile) > 0 {
-		resp, clientIndex, err = b.torboxClientPool.AddTorrentFileWithFallback(torrentFile, fileName)
+		resp, clientIndex, err = b.torboxClientPool.AddTorrentFileWithFallback(torrentFile, fileName, b.cacheOnly)
 	} else {
-		resp, clientIndex, err = b.torboxClientPool.AddTorrentWithFallback(magnetLink)
+		resp, clientIndex, err = b.torboxClientPool.AddTorrentWithFallback(magnetLink, b.cacheOnly)
 	}
 	
 	if err != nil {
@@ -212,7 +214,11 @@ func (b *Bot) handleAddTorrent(s *discordgo.Session, i *discordgo.InteractionCre
 	}
 
 	if !resp.Success {
-		if b.isDownloadTooLargeError(resp) {
+		// Verifica se é erro de cache
+		if b.isDownloadNotCachedError(resp) {
+			err = fmt.Errorf("⚡ **Torrent Not Cached**\n\nThis torrent is not available in Torbox's cache.\n\n💡 To download this file, disable cache-only mode in your `.env` configuration and restart the bot:\n\n```\nCACHE_ONLY=false\n```")
+			b.sendAPIResponseAsEmbed(s, i, "Add Torrent", sourceDescription, nil, "", i.Member.User.ID, err, clientIndex)
+		} else if b.isDownloadTooLargeError(resp) {
 			err = fmt.Errorf("📦 File Too Large\n\n%s\n\n💡 Try with a smaller file.", resp.Detail)
 			b.sendAPIResponseAsEmbed(s, i, "Add Torrent", sourceDescription, nil, "", i.Member.User.ID, err, clientIndex)
 		} else {
@@ -268,6 +274,13 @@ func (b *Bot) handleAddWebDownload(s *discordgo.Session, i *discordgo.Interactio
 	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
 	})
+
+	// Check if cache-only mode is enabled
+	if b.cacheOnly {
+		err := fmt.Errorf("🚫 **Web Downloads Disabled**\n\nWeb downloads are not available in **CACHE_ONLY** mode.\n\n💡 To enable web downloads, disable cache-only mode in your `.env` configuration and restart the bot:\n\n```\nCACHE_ONLY=false\n```")
+		b.sendAPIResponseAsEmbed(s, i, "Add Web Download", "", nil, "", i.Member.User.ID, err, -1)
+		return
+	}
 
 	options := i.ApplicationCommandData().Options
 	downloadLink := options[0].StringValue()
@@ -325,6 +338,14 @@ func (b *Bot) handleAddWebDownload(s *discordgo.Session, i *discordgo.Interactio
 	if msgErr == nil {
 		b.monitor.TrackWebDownload(int(webdlID), clientIndex, i.Member.User.ID, i.ChannelID, msg.ID, name)
 	}
+}
+
+func (b *Bot) isDownloadNotCachedError(resp *torbox.APIResponse) bool {
+	if resp == nil || resp.Success {
+		return false
+	}
+	
+	return resp.Error == "DOWNLOAD_NOT_CACHED"
 }
 
 func (b *Bot) isDownloadTooLargeError(resp *torbox.APIResponse) bool {
@@ -465,7 +486,7 @@ func (b *Bot) handleTorrentStatus(s *discordgo.Session, i *discordgo.Interaction
 
 	progressBar := createProgressBar(info.Progress)
 	
-	stateEmoji := "⸸️"
+	stateEmoji := "⏸️"
 	if info.Active {
 		stateEmoji = "▶️"
 	}
@@ -571,7 +592,7 @@ func (b *Bot) handleWebDLStatus(s *discordgo.Session, i *discordgo.InteractionCr
 
 	progressBar := createProgressBar(info.Progress)
 	
-	stateEmoji := "⸸️"
+	stateEmoji := "⏸️"
 	if info.Active {
 		stateEmoji = "▶️"
 	}
@@ -651,7 +672,7 @@ func (b *Bot) sendAPIResponseAsEmbed(s *discordgo.Session, i *discordgo.Interact
 	if err != nil {
 		embed = &discordgo.MessageEmbed{
 			Title:       fmt.Sprintf("❌ Error to %s", title),
-			Description: fmt.Sprintf("An error occurred while processing your request.\n`%s`", err.Error()),
+			Description: fmt.Sprintf("An error occurred while processing your request.\n%s", err.Error()),
 			Color:       0xff0000,
 		}
 	} else if !resp.Success {
