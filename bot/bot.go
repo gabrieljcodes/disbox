@@ -156,6 +156,30 @@ func (b *Bot) defineCommands() {
 				},
 			},
 		},
+		{
+			Name:        "search-media",
+			Description: "Search for movies, TV shows, or anime by title.",
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        "query",
+					Description: "Name of the movie, TV show, or anime",
+					Required:    true,
+				},
+			},
+		},
+		{
+			Name:        "search-torrents",
+			Description: "Search for torrents by title or name.",
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        "query",
+					Description: "What do you want to download?",
+					Required:    true,
+				},
+			},
+		},
 	}
 }
 
@@ -167,6 +191,8 @@ func (b *Bot) defineHandlers() {
 	b.handlers["webdl-status"] = b.handleWebDLStatus
 	b.handlers["hosters"] = b.handleHosters
 	b.handlers["search-hoster"] = b.handleSearchHoster
+	b.handlers["search-media"] = b.handleSearchMedia
+	b.handlers["search-torrents"] = b.handleSearchTorrents
 }
 
 func (b *Bot) handleAddTorrent(s *discordgo.Session, i *discordgo.InteractionCreate) {
@@ -321,8 +347,11 @@ func (b *Bot) handleAddWebDownload(s *discordgo.Session, i *discordgo.Interactio
 	}
 
 	if !resp.Success {
-		if b.isDownloadTooLargeError(resp) {
-			err = fmt.Errorf("📦 File Too Large\n\n%s\n\n💡 Try with a smaller file.", resp.Detail)
+		if b.isUnsupportedHosterError(resp) {
+			err = fmt.Errorf("🚫 **Unsupported File Hoster**\n\nThe website you're trying to download from is not supported by TorBox.\n\n**What you can do:**\n• Use `/hosters` to see all supported file hosting sites\n• Use `/search-hoster <name>` to check if a specific site is supported\n• Try uploading your file to a supported hoster\n\n**Need help?** Check the hosters list to find alternatives like Mega, Rapidgator, or MediaFire.")
+			b.sendAPIResponseAsEmbed(s, i, "Add Web Download", downloadLink, nil, "", i.Member.User.ID, err, clientIndex)
+		} else if b.isDownloadTooLargeError(resp) {
+			err = fmt.Errorf("📦 **File Too Large**\n\n%s\n\n💡 Try with a smaller file or split it into parts.", resp.Detail)
 			b.sendAPIResponseAsEmbed(s, i, "Add Web Download", downloadLink, nil, "", i.Member.User.ID, err, clientIndex)
 		} else {
 			b.sendAPIResponseAsEmbed(s, i, "Add Web Download", downloadLink, resp, "", i.Member.User.ID, nil, clientIndex)
@@ -384,6 +413,16 @@ func (b *Bot) isDownloadTooLargeError(resp *torbox.APIResponse) bool {
 	detailLower := strings.ToLower(resp.Detail)
 	return strings.Contains(detailLower, "too large") ||
 	       strings.Contains(detailLower, "larger than")
+}
+
+func (b *Bot) isUnsupportedHosterError(resp *torbox.APIResponse) bool {
+	if resp == nil || resp.Success {
+		return false
+	}
+	
+	detailLower := strings.ToLower(resp.Detail)
+	return strings.Contains(detailLower, "not supported") ||
+	       strings.Contains(detailLower, "unsupported")
 }
 
 func (b *Bot) handleListDownloads(s *discordgo.Session, i *discordgo.InteractionCreate) {

@@ -18,6 +18,10 @@ func (b *Bot) setupComponentHandlers() {
 
 		if strings.HasPrefix(customID, "hosters_") {
 			b.handleHostersButton(s, i)
+		} else if strings.HasPrefix(customID, "media_search_") || strings.HasPrefix(customID, "torrent_search_") {
+			b.handleSearchButtons(s, i)
+		} else if strings.HasPrefix(customID, "add_torrent_") {
+			b.handleAddTorrentFromSearch(s, i)
 		}
 	})
 }
