@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/logo.png" alt="Logo do projeto" width="220">
+  <img src="assets/logo.svg" alt="Logo do projeto" width="220">
 </p>
 
 # Disbox
