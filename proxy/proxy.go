@@ -93,6 +93,13 @@ func NewServer(baseURL, port string, clientPool *torbox.ClientPool, discordClien
 			client_index INTEGER NOT NULL,
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 		);
+		CREATE TABLE IF NOT EXISTS api_tokens (
+			token TEXT PRIMARY KEY,
+			discord_id TEXT NOT NULL,
+			name TEXT NOT NULL,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			last_used_at DATETIME
+		);
 	`); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("failed to create download_links table: %w", err)
@@ -129,7 +136,15 @@ func NewServer(baseURL, port string, clientPool *torbox.ClientPool, discordClien
 		mux.HandleFunc("/api/history", s.handleApiHistory)
 		mux.HandleFunc("/api/add-torrent", s.handleApiAddTorrent)
 		mux.HandleFunc("/api/add-webdl", s.handleApiAddWebdl)
+		mux.HandleFunc("/api/tokens", s.handleApiTokens)
+		mux.HandleFunc("/api/tokens/revoke", s.handleApiTokenRevoke)
 	}
+
+	// Public API (token-authenticated, always registered)
+	mux.HandleFunc("/v1/me", s.handleV1Me)
+	mux.HandleFunc("/v1/add-torrent", s.handleV1AddTorrent)
+	mux.HandleFunc("/v1/add-webdl", s.handleV1AddWebdl)
+	mux.HandleFunc("/v1/history", s.handleV1History)
 
 	s.httpServer = &http.Server{
 		Addr:    ":" + port,

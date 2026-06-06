@@ -162,6 +162,59 @@ The bot automatically monitors download progress and sends notifications:
 - Notification when the download is complete
 - Download link valid for 3 hours
 
+## 🔌 Public REST API
+
+Disbox provides a public REST API that allows you to integrate your downloads with other services (like Sonarr, Radarr, or custom scripts).
+
+### Authentication
+
+API endpoints are authenticated via Bearer tokens. To generate a token:
+1. Log in to the Disbox Web Dashboard
+2. Go to the **API Keys** tab
+3. Create a new token and copy it
+
+Include the token in your requests using the `Authorization` header:
+```bash
+Authorization: Bearer dbx_your_token_here
+```
+
+### Endpoints
+
+All responses follow a consistent JSON format:
+```json
+{
+  "success": true,
+  "data": { ... }
+}
+```
+
+#### Get User Profile
+`GET /v1/me`
+Retrieves information about the token owner.
+
+#### Add Torrent
+`POST /v1/add-torrent`
+Body: `{"link": "magnet:?xt=urn:btih:..."}`
+Adds a torrent and returns a proxy download link.
+
+#### Add Web Download
+`POST /v1/add-webdl`
+Body: `{"link": "https://hoster.com/file..."}`
+Adds a direct download link.
+
+#### Get History
+`GET /v1/history`
+Returns the user's download history and active proxy links.
+
+### Example Request
+
+```bash
+curl -X POST http://localhost:8080/v1/add-torrent \
+  -H "Authorization: Bearer dbx_123456789abcdef" \
+  -H "Content-Type: application/json" \
+  -d '{"link": "magnet:?xt=urn:btih:example"}'
+```
+
 ## 🔧 Build
 
 To compile the bot:

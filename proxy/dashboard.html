@@ -510,6 +510,41 @@
             border-radius: 50%; animation: spin 0.8s linear infinite;
         }
 
+        /* ─── API Keys ─── */
+        .token-list { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
+        .token-card {
+            background: var(--bg-card); border: 1px solid var(--border-subtle);
+            border-radius: var(--radius); padding: 16px; display: flex; align-items: center; justify-content: space-between; gap: 16px;
+        }
+        .token-info { flex: 1; min-width: 0; }
+        .token-name { font-size: 14px; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; }
+        .token-value {
+            font-family: monospace; font-size: 13px; color: var(--accent-indigo);
+            background: rgba(99, 102, 241, 0.1); padding: 4px 8px; border-radius: 6px; display: inline-block;
+        }
+        .token-meta { font-size: 11px; color: var(--text-muted); margin-top: 8px; display: flex; gap: 12px; }
+        .token-actions { display: flex; gap: 8px; }
+        .btn-revoke {
+            background: rgba(251, 113, 133, 0.1); color: var(--accent-rose); border: 1px solid rgba(251, 113, 133, 0.2);
+            padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; transition: var(--transition);
+        }
+        .btn-revoke:hover { background: rgba(251, 113, 133, 0.2); }
+        .btn-copy {
+            background: rgba(255, 255, 255, 0.05); color: var(--text-secondary); border: 1px solid var(--border-subtle);
+            padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; transition: var(--transition);
+        }
+        .btn-copy:hover { background: rgba(255, 255, 255, 0.1); color: var(--text-primary); }
+        .token-created-banner {
+            background: rgba(52, 211, 153, 0.1); border: 1px solid rgba(52, 211, 153, 0.3); border-radius: var(--radius);
+            padding: 16px; margin-bottom: 24px; animation: fadeSlideIn 0.3s ease forwards;
+        }
+        .token-created-banner h3 { color: var(--accent-emerald); font-size: 15px; margin-bottom: 8px; }
+        .token-created-banner p { font-size: 13px; color: var(--text-primary); margin-bottom: 12px; }
+        .token-created-value {
+            font-family: monospace; font-size: 16px; color: #fff; background: rgba(0,0,0,0.3);
+            padding: 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); word-break: break-all; margin-bottom: 12px;
+        }
+
         /* ─── Responsive ─── */
         @media (max-width: 640px) {
             .topbar { padding: 12px 16px; }
@@ -565,6 +600,10 @@
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
                     Add New
                 </button>
+                <button class="tab-btn" data-tab="api" id="tab-api">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+                    API Keys
+                </button>
             </div>
 
             <!-- History Tab -->
@@ -601,6 +640,35 @@
                     </button>
 
                     <div class="toast" id="toast"></div>
+                </div>
+            </div>
+        </div>
+
+            <!-- API Keys Tab -->
+            <div class="tab-panel" id="panel-api">
+                <div class="add-form">
+                    <h2>API Keys</h2>
+                    <p class="add-form-subtitle">Generate tokens to interact with Disbox via the public REST API.</p>
+
+                    <div id="new-token-container"></div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="input-token-name">Create New Token</label>
+                        <div style="display: flex; gap: 8px;">
+                            <input type="text" class="form-input" id="input-token-name" placeholder="E.g., Sonarr, Radarr, Script..." autocomplete="off">
+                            <button class="btn-submit" id="btn-create-token" style="width: auto; padding: 12px 24px;">Generate</button>
+                        </div>
+                    </div>
+
+                    <h3 style="font-size: 14px; margin-top: 32px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 8px; margin-bottom: 16px;">Active Tokens</h3>
+                    <div class="loading-state" id="tokens-loading" style="display:none; padding: 20px;">
+                        <div class="spinner"></div>
+                    </div>
+                    <div class="token-list" id="token-list"></div>
+                    <div class="empty-state" id="tokens-empty" style="display:none; padding: 30px;">
+                        <div class="empty-state-icon">🔑</div>
+                        <p>No active API keys</p>
+                    </div>
                 </div>
             </div>
         </div>
@@ -789,6 +857,118 @@
             d.textContent = text;
             return d.innerHTML;
         }
+
+        // ─── API Keys ───
+        const tokenList = document.getElementById('token-list');
+        const tokensLoading = document.getElementById('tokens-loading');
+        const tokensEmpty = document.getElementById('tokens-empty');
+        const inputTokenName = document.getElementById('input-token-name');
+        const btnCreateToken = document.getElementById('btn-create-token');
+        const newTokenContainer = document.getElementById('new-token-container');
+
+        document.getElementById('tab-api').addEventListener('click', () => {
+            loadTokens();
+            newTokenContainer.innerHTML = '';
+        });
+
+        function loadTokens() {
+            tokensLoading.style.display = '';
+            tokenList.style.display = 'none';
+            tokensEmpty.style.display = 'none';
+
+            fetch('/api/tokens')
+                .then(r => r.json())
+                .then(tokens => {
+                    tokensLoading.style.display = 'none';
+                    // We expect tokens to be an array or {success, data} depending on if handleApiTokensList uses jsonOK
+                    // Wait, handleApiTokensList does NOT use jsonOK, it returns [] directly. Let's handle both.
+                    const data = tokens.data ? tokens.data : tokens;
+                    if (!data || !Array.isArray(data) || data.length === 0) {
+                        tokensEmpty.style.display = '';
+                        return;
+                    }
+                    tokenList.style.display = '';
+                    tokenList.innerHTML = '';
+                    data.forEach(t => {
+                        const date = new Date(t.created_at).toLocaleDateString();
+                        const lastUsed = t.last_used_at ? new Date(t.last_used_at).toLocaleDateString() : 'Never';
+                        const el = document.createElement('div');
+                        el.className = 'token-card';
+                        el.innerHTML = `
+                            <div class="token-info">
+                                <div class="token-name">${escapeHtml(t.name)}</div>
+                                <div class="token-value">${escapeHtml(t.token)}</div>
+                                <div class="token-meta">
+                                    <span>Created: ${date}</span>
+                                    <span>Last used: ${lastUsed}</span>
+                                </div>
+                            </div>
+                            <div class="token-actions">
+                                <button class="btn-revoke" onclick="revokeToken('${escapeHtml(t.token)}')">Revoke</button>
+                            </div>
+                        `;
+                        tokenList.appendChild(el);
+                    });
+                })
+                .catch(() => {
+                    tokensLoading.style.display = 'none';
+                    tokensEmpty.style.display = '';
+                });
+        }
+
+        btnCreateToken.addEventListener('click', () => {
+            const name = inputTokenName.value.trim();
+            if (!name) return;
+
+            btnCreateToken.disabled = true;
+            btnCreateToken.textContent = '...';
+
+            fetch('/api/tokens', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name })
+            })
+            .then(r => r.json())
+            .then(res => {
+                btnCreateToken.disabled = false;
+                btnCreateToken.textContent = 'Generate';
+                if (!res.success) {
+                    alert(res.error || 'Failed to create token');
+                    return;
+                }
+                
+                inputTokenName.value = '';
+                newTokenContainer.innerHTML = `
+                    <div class="token-created-banner">
+                        <h3>✅ Token Generated Successfully</h3>
+                        <p>Copy your new API token below. <strong>You will not be able to see it again!</strong></p>
+                        <div class="token-created-value" id="new-token-val">${escapeHtml(res.data.token)}</div>
+                        <button class="btn-copy" onclick="navigator.clipboard.writeText(document.getElementById('new-token-val').textContent); this.textContent='Copied!'; setTimeout(()=>this.textContent='Copy to Clipboard', 2000);">Copy to Clipboard</button>
+                    </div>
+                `;
+                loadTokens();
+            })
+            .catch(() => {
+                btnCreateToken.disabled = false;
+                btnCreateToken.textContent = 'Generate';
+                alert('Network error');
+            });
+        });
+
+        window.revokeToken = function(token) {
+            if (!confirm('Are you sure you want to revoke this token? Any applications using it will lose access.')) return;
+            
+            fetch('/api/tokens/revoke', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token })
+            })
+            .then(r => r.json())
+            .then(res => {
+                if (res.success) loadTokens();
+                else alert(res.error || 'Failed to revoke token');
+            });
+        };
     })();
     </script>
 </body>
