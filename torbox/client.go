@@ -35,10 +35,18 @@ type APIResponse struct {
 	Data    interface{} `json:"data"`
 }
 
+type TorrentFile struct {
+	ID        int    `json:"id"`
+	Name      string `json:"name"`
+	Size      int64  `json:"size"`
+	Mimetype  string `json:"mimetype"`
+	ShortName string `json:"short_name"`
+}
+
 type TorrentInfo struct {
-	ID               int     `json:"id"`
-	Hash             string  `json:"hash"`
-	Name             string  `json:"name"`
+	ID               int           `json:"id"`
+	Hash             string        `json:"hash"`
+	Name             string        `json:"name"`
 	Size             int64   `json:"size"`
 	Progress         float64 `json:"progress"`
 	DownloadSpeed    int64   `json:"download_speed"`
@@ -52,23 +60,25 @@ type TorrentInfo struct {
 	DownloadPresent  bool    `json:"download_present"`
 	DownloadFinished bool    `json:"download_finished"`
 	Active           bool    `json:"active"`
-	CreatedAt        string  `json:"created_at"`
-	UpdatedAt        string  `json:"updated_at"`
+	CreatedAt        string        `json:"created_at"`
+	UpdatedAt        string        `json:"updated_at"`
+	Files            []TorrentFile `json:"files"`
 }
 
 type WebDownloadInfo struct {
-	ID               int     `json:"id"`
-	Name             string  `json:"name"`
-	Size             int64   `json:"size"`
-	Progress         float64 `json:"progress"`
-	DownloadSpeed    int64   `json:"download_speed"`
-	DownloadState    string  `json:"download_state"`
-	Downloaded       int64   `json:"downloaded"`
-	DownloadPresent  bool    `json:"download_present"`
-	DownloadFinished bool    `json:"download_finished"`
-	Active           bool    `json:"active"`
-	CreatedAt        string  `json:"created_at"`
-	UpdatedAt        string  `json:"updated_at"`
+	ID               int           `json:"id"`
+	Name             string        `json:"name"`
+	Size             int64         `json:"size"`
+	Progress         float64       `json:"progress"`
+	DownloadSpeed    int64         `json:"download_speed"`
+	DownloadState    string        `json:"download_state"`
+	Downloaded       int64         `json:"downloaded"`
+	DownloadPresent  bool          `json:"download_present"`
+	DownloadFinished bool          `json:"download_finished"`
+	Active           bool          `json:"active"`
+	CreatedAt        string        `json:"created_at"`
+	UpdatedAt        string        `json:"updated_at"`
+	Files            []TorrentFile `json:"files"`
 }
 
 // AddTorrent adds a torrent via magnet link with seed parameter set to 3 (no seeding)
@@ -297,7 +307,7 @@ func (c *Client) ListWebDownloads() ([]WebDownloadInfo, error) {
 	return webdls, nil
 }
 
-func (c *Client) RequestDownloadURL(torrentID int) (string, error) {
+func (c *Client) RequestDownloadURL(torrentID int, fileID int) (string, error) {
 	req, err := http.NewRequest("GET", fmt.Sprintf("%s/torrents/requestdl", apiBaseURL), nil)
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %w", err)
@@ -306,7 +316,11 @@ func (c *Client) RequestDownloadURL(torrentID int) (string, error) {
 	q := req.URL.Query()
 	q.Add("token", c.apiKey)
 	q.Add("torrent_id", fmt.Sprintf("%d", torrentID))
-	q.Add("zip_link", "true")
+	if fileID >= 0 {
+		q.Add("file_id", fmt.Sprintf("%d", fileID))
+	} else {
+		q.Add("zip_link", "true")
+	}
 	req.URL.RawQuery = q.Encode()
 
 	apiResp, err := c.doRequest(req)
@@ -326,7 +340,7 @@ func (c *Client) RequestDownloadURL(torrentID int) (string, error) {
 	return downloadLink, nil
 }
 
-func (c *Client) RequestWebDownloadURL(webdlID int) (string, error) {
+func (c *Client) RequestWebDownloadURL(webdlID int, fileID int) (string, error) {
 	req, err := http.NewRequest("GET", fmt.Sprintf("%s/webdl/requestdl", apiBaseURL), nil)
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %w", err)
@@ -335,7 +349,11 @@ func (c *Client) RequestWebDownloadURL(webdlID int) (string, error) {
 	q := req.URL.Query()
 	q.Add("token", c.apiKey)
 	q.Add("web_id", fmt.Sprintf("%d", webdlID))
-	q.Add("zip_link", "true")
+	if fileID >= 0 {
+		q.Add("file_id", fmt.Sprintf("%d", fileID))
+	} else {
+		q.Add("zip_link", "true")
+	}
 	req.URL.RawQuery = q.Encode()
 
 	apiResp, err := c.doRequest(req)

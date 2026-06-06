@@ -7,6 +7,7 @@ import (
 	"syscall"
 	"torbox-discord-bot/bot"
 	"torbox-discord-bot/config"
+	"torbox-discord-bot/proxy"
 	"torbox-discord-bot/torbox"
 )
 
@@ -23,7 +24,17 @@ func main() {
 		log.Fatalf("Failed to initialize Torbox client pool: %v", err)
 	}
 
-	discordBot, err := bot.NewBot(cfg.DiscordBotToken, torboxClientPool, cfg.CacheOnly)
+	proxyServer, err := proxy.NewServer(cfg.ProxyBaseURL, cfg.ProxyPort, torboxClientPool, cfg.DiscordClientID, cfg.DiscordClientSecret)
+	if err != nil {
+		log.Fatalf("Failed to initialize proxy server: %v", err)
+	}
+	go func() {
+		if err := proxyServer.Start(); err != nil {
+			log.Fatalf("Failed to start proxy server: %v", err)
+		}
+	}()
+
+	discordBot, err := bot.NewBot(cfg.DiscordBotToken, torboxClientPool, proxyServer, cfg.CacheOnly)
 	if err != nil {
 		log.Fatalf("Failed to initialize bot: %v", err)
 	}
@@ -40,5 +51,6 @@ func main() {
 
 	log.Println("Shutting down...")
 	discordBot.Stop()
+	proxyServer.Stop()
 	log.Println("Bot has been shut down gracefully.")
 }

@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.Title}} - Web Media Player</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Video.js CSS -->
+    <link href="https://vjs.zencdn.net/8.10.0/video-js.css" rel="stylesheet" />
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0f1115;
+            color: #e2e8f0;
+        }
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        .playlist-item {
+            transition: all 0.2s ease-in-out;
+        }
+        .playlist-item:hover {
+            background: rgba(56, 189, 248, 0.1);
+            border-left-color: #38bdf8;
+        }
+        .playlist-item.active {
+            background: rgba(56, 189, 248, 0.2);
+            border-left-color: #38bdf8;
+        }
+        /* Custom Video.js Theme overrides */
+        .video-js {
+            width: 100%;
+            height: 100%;
+            border-radius: 0.5rem;
+            overflow: hidden;
+        }
+        .vjs-big-play-button {
+            background-color: rgba(56, 189, 248, 0.8) !important;
+            border-color: transparent !important;
+            border-radius: 50% !important;
+            width: 80px !important;
+            height: 80px !important;
+            line-height: 80px !important;
+            top: 50% !important;
+            left: 50% !important;
+            transform: translate(-50%, -50%) !important;
+        }
+    </style>
+</head>
+<body class="h-screen flex flex-col overflow-hidden">
+    
+    <!-- Navbar -->
+    <nav class="glass-panel border-b border-slate-800 px-6 py-4 flex items-center justify-between z-10 shrink-0">
+        <div class="flex items-center space-x-3">
+            <span class="text-2xl">🎬</span>
+            <div>
+                <h1 class="text-lg font-semibold text-white tracking-tight leading-tight truncate max-w-[300px] md:max-w-xl" title="{{.Title}}">
+                    {{.Title}}
+                </h1>
+                <p class="text-xs text-slate-400">Web Media Player</p>
+            </div>
+        </div>
+        <div class="flex items-center space-x-3">
+            <a href="{{.ActiveStreamURL}}" download class="bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium px-4 py-2 rounded-lg transition shadow-lg flex items-center space-x-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                <span class="hidden sm:inline">Download Current</span>
+            </a>
+            <a href="{{.DownloadURL}}" class="bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition shadow-lg shadow-blue-500/20 flex items-center space-x-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                </svg>
+                <span class="hidden sm:inline">Download Full ZIP</span>
+            </a>
+            <a href="{{.BrowseURL}}" class="bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium px-4 py-2 rounded-lg transition shadow-lg flex items-center space-x-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                </svg>
+                <span class="hidden sm:inline">Browse Files</span>
+            </a>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="flex-1 flex flex-col md:flex-row overflow-hidden relative">
+        
+        <!-- Player Area -->
+        <div class="flex-1 bg-black flex items-center justify-center p-2 md:p-6 overflow-hidden relative">
+            {{if eq .ActiveType "video"}}
+            <video
+                id="main-player"
+                class="video-js vjs-theme-city vjs-big-play-centered shadow-2xl ring-1 ring-white/10 rounded-xl"
+                controls
+                preload="auto"
+                data-setup='{"fluid": true}'
+            >
+                <source src="{{.ActiveStreamURL}}" type="{{.ActiveMime}}">
+                {{range .Subtitles}}
+                <track kind="captions" src="{{.URL}}" srclang="pt" label="{{.Name}}" default>
+                {{end}}
+                <p class="vjs-no-js">
+                    To view this video please enable JavaScript, and consider upgrading to a web browser that supports HTML5 video
+                </p>
+            </video>
+            {{else if eq .ActiveType "image"}}
+            <div class="w-full h-full flex items-center justify-center">
+                <img src="{{.ActiveStreamURL}}" alt="Image Preview" class="max-w-full max-h-full object-contain rounded-lg shadow-2xl ring-1 ring-white/10" />
+            </div>
+            {{else}}
+            <div class="text-center text-slate-400">
+                <span class="text-4xl block mb-2">📄</span>
+                <p>No supported media selected.</p>
+            </div>
+            {{end}}
+        </div>
+
+        <!-- Sidebar / Playlist (only if there are multiple files) -->
+        {{if gt (len .MediaList) 1}}
+        <aside class="w-full md:w-80 lg:w-96 glass-panel border-l border-slate-800 flex flex-col h-64 md:h-auto shrink-0 z-10">
+            <div class="p-4 border-b border-slate-800 flex justify-between items-center">
+                <h2 class="font-semibold text-slate-200">Media Files</h2>
+                <span class="bg-slate-800 text-xs text-slate-300 py-1 px-2 rounded-md">{{len .MediaList}} items</span>
+            </div>
+            <div class="flex-1 overflow-y-auto p-2 space-y-1 custom-scrollbar">
+                {{range .MediaList}}
+                <div class="flex items-center space-x-1 group">
+                    <a href="{{.ViewerURL}}" class="playlist-item flex-1 block p-3 rounded-lg border-l-4 border-transparent flex items-start space-x-3 {{if eq .ID $.ActiveID}}active{{end}}">
+                        <div class="shrink-0 mt-1">
+                            {{if eq .Type "video"}}
+                            <span class="text-blue-400">🎥</span>
+                            {{else}}
+                            <span class="text-green-400">🖼️</span>
+                            {{end}}
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <p class="text-sm font-medium text-slate-200 truncate" title="{{.Name}}">{{.Name}}</p>
+                            <p class="text-xs text-slate-500 mt-1">{{.SizeStr}}</p>
+                        </div>
+                    </a>
+                    <a href="{{.DownloadURL}}" title="Download File" class="p-2 mr-1 rounded-lg bg-slate-800 hover:bg-blue-600 text-slate-400 hover:text-white transition opacity-100 md:opacity-0 md:group-hover:opacity-100 flex-shrink-0">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                        </svg>
+                    </a>
+                </div>
+                {{end}}
+            </div>
+        </aside>
+        {{end}}
+
+    </main>
+
+    <!-- Video.js JS -->
+    <script src="https://vjs.zencdn.net/8.10.0/video.min.js"></script>
+    <style>
+        /* Custom scrollbar for sidebar */
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.1);
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+    </style>
+</body>
+</html>

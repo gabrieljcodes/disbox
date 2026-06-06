@@ -3,8 +3,10 @@ package bot
 import (
 	"fmt"
 	"log"
+	"strings"
 	"sync"
 	"time"
+	"torbox-discord-bot/proxy"
 	"torbox-discord-bot/torbox"
 
 	"github.com/bwmarrin/discordgo"
@@ -25,15 +27,17 @@ type TrackedDownload struct {
 type Monitor struct {
 	session         *discordgo.Session
 	torboxClientPool *torbox.ClientPool
+	proxyServer     *proxy.Server
 	tracked         map[string]*TrackedDownload // key format: "type:id:clientIndex"
 	mu              sync.RWMutex
 	stopChan        chan struct{}
 }
 
-func NewMonitor(session *discordgo.Session, clientPool *torbox.ClientPool) *Monitor {
+func NewMonitor(session *discordgo.Session, clientPool *torbox.ClientPool, proxyServer *proxy.Server) *Monitor {
 	return &Monitor{
 		session:         session,
 		torboxClientPool: clientPool,
+		proxyServer:     proxyServer,
 		tracked:         make(map[string]*TrackedDownload),
 		stopChan:        make(chan struct{}),
 	}
@@ -129,11 +133,14 @@ func (m *Monitor) checkTorrent(key string, download *TrackedDownload) {
 	if info.DownloadFinished && info.DownloadPresent {
 		log.Printf("Torrent %d (client #%d) has finished downloading", download.ID, download.ClientIndex+1)
 		
-		downloadLink, err := client.RequestDownloadURL(download.ID)
+		downloadLink, err := client.RequestDownloadURL(download.ID, -1)
 		if err != nil {
 			log.Printf("Failed to get download link for torrent %d (client #%d): %v", download.ID, download.ClientIndex+1, err)
 			m.notifyError(download, fmt.Sprintf("Download finished but failed to get link: %v", err))
 		} else {
+			if info.Name != "" && download.Name != info.Name {
+				download.Name = info.Name
+			}
 			m.notifyCompletion(download, downloadLink, info)
 		}
 
@@ -164,11 +171,14 @@ func (m *Monitor) checkWebDownload(key string, download *TrackedDownload) {
 	if info.DownloadFinished && info.DownloadPresent {
 		log.Printf("Web download %d (client #%d) has finished", download.ID, download.ClientIndex+1)
 		
-		downloadLink, err := client.RequestWebDownloadURL(download.ID)
+		downloadLink, err := client.RequestWebDownloadURL(download.ID, -1)
 		if err != nil {
 			log.Printf("Failed to get download link for webdl %d (client #%d): %v", download.ID, download.ClientIndex+1, err)
 			m.notifyError(download, fmt.Sprintf("Download finished but failed to get link: %v", err))
 		} else {
+			if info.Name != "" && download.Name != info.Name {
+				download.Name = info.Name
+			}
 			m.notifyCompletion(download, downloadLink, nil)
 		}
 
@@ -200,12 +210,12 @@ func (m *Monitor) getMilestone(progress float64) int {
 }
 
 func (m *Monitor) notifyCompletion(download *TrackedDownload, downloadLink string, torrentInfo *torbox.TorrentInfo) {
-	expirationTime := time.Now().Add(3 * time.Hour)
-	expirationTimestamp := expirationTime.Unix()
-	
 	log.Printf("Download %d completed using API Key #%d", download.ID, download.ClientIndex+1)
 	
-	description := fmt.Sprintf("Your download **%s** is ready!\n\n⏰ Link expires <t:%d:R>", download.Name, expirationTimestamp)
+	// Register a proxy link instead of using the direct TorBox URL
+	proxyLink := m.proxyServer.RegisterDownloadWithUser(download.Type, download.ID, download.ClientIndex, download.UserID, download.Name)
+	
+	description := fmt.Sprintf("Your download **%s** is ready!\n\n🔒 Permanent link via proxy", download.Name)
 	
 	embed := &discordgo.MessageEmbed{
 		Title:       "✅ Download Complete!",
@@ -233,10 +243,18 @@ func (m *Monitor) notifyCompletion(download *TrackedDownload, downloadLink strin
 		})
 	}
 
-	button := discordgo.Button{
-		Label: "🔗 Download File",
-		Style: discordgo.LinkButton,
-		URL:   downloadLink,
+	browseLink := strings.Replace(proxyLink, "/dl/", "/browse/", 1)
+	buttons := []discordgo.MessageComponent{
+		discordgo.Button{
+			Label: "🔗 Download File",
+			Style: discordgo.LinkButton,
+			URL:   proxyLink,
+		},
+		discordgo.Button{
+			Label: "📂 Browse Files",
+			Style: discordgo.LinkButton,
+			URL:   browseLink,
+		},
 	}
 
 	m.session.ChannelMessageSendComplex(download.ChannelID, &discordgo.MessageSend{
@@ -244,7 +262,7 @@ func (m *Monitor) notifyCompletion(download *TrackedDownload, downloadLink strin
 		Embeds:  []*discordgo.MessageEmbed{embed},
 		Components: []discordgo.MessageComponent{
 			discordgo.ActionsRow{
-				Components: []discordgo.MessageComponent{button},
+				Components: buttons,
 			},
 		},
 	})

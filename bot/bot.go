@@ -6,6 +6,7 @@ import (
 	"log"
 	"strings"
 	"time"
+	"torbox-discord-bot/proxy"
 	"torbox-discord-bot/torbox"
 
 	"github.com/bwmarrin/discordgo"
@@ -14,13 +15,14 @@ import (
 type Bot struct {
 	Session         *discordgo.Session
 	torboxClientPool *torbox.ClientPool
+	proxyServer     *proxy.Server
 	monitor         *Monitor
 	commands        []*discordgo.ApplicationCommand
 	handlers        map[string]func(s *discordgo.Session, i *discordgo.InteractionCreate)
 	cacheOnly       bool
 }
 
-func NewBot(token string, clientPool *torbox.ClientPool, cacheOnly bool) (*Bot, error) {
+func NewBot(token string, clientPool *torbox.ClientPool, proxyServer *proxy.Server, cacheOnly bool) (*Bot, error) {
 	s, err := discordgo.New("Bot " + token)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create discord session: %w", err)
@@ -29,11 +31,12 @@ func NewBot(token string, clientPool *torbox.ClientPool, cacheOnly bool) (*Bot, 
 	bot := &Bot{
 		Session:         s,
 		torboxClientPool: clientPool,
+		proxyServer:     proxyServer,
 		handlers:        make(map[string]func(s *discordgo.Session, i *discordgo.InteractionCreate)),
 		cacheOnly:       cacheOnly,
 	}
 
-	bot.monitor = NewMonitor(s, clientPool)
+	bot.monitor = NewMonitor(s, clientPool, proxyServer)
 	bot.defineCommands()
 	bot.defineHandlers()
 
@@ -180,6 +183,10 @@ func (b *Bot) defineCommands() {
 				},
 			},
 		},
+		{
+			Name:        "dashboard",
+			Description: "Get a link to the web dashboard to manage your downloads.",
+		},
 	}
 }
 
@@ -193,6 +200,7 @@ func (b *Bot) defineHandlers() {
 	b.handlers["search-hoster"] = b.handleSearchHoster
 	b.handlers["search-media"] = b.handleSearchMedia
 	b.handlers["search-torrents"] = b.handleSearchTorrents
+	b.handlers["dashboard"] = b.handleDashboard
 }
 
 func (b *Bot) handleAddTorrent(s *discordgo.Session, i *discordgo.InteractionCreate) {
@@ -304,9 +312,9 @@ func (b *Bot) handleAddTorrent(s *discordgo.Session, i *discordgo.InteractionCre
 	}
 
 	client := b.torboxClientPool.GetClient(clientIndex)
-	downloadLink, err := client.RequestDownloadURL(int(torrentID))
-	if err != nil {
-		log.Printf("Torrent %d not ready yet, will monitor it: %s", int(torrentID), err)
+	_, dlErr := client.RequestDownloadURL(int(torrentID), -1)
+	if dlErr != nil {
+		log.Printf("Torrent %d not ready yet, will monitor it: %s", int(torrentID), dlErr)
 		
 		b.sendMonitoringResponse(s, i, "Torrent", name, int(torrentID), sourceDescription, clientIndex)
 		
@@ -317,7 +325,10 @@ func (b *Bot) handleAddTorrent(s *discordgo.Session, i *discordgo.InteractionCre
 		return
 	}
 
-	b.sendAPIResponseAsEmbed(s, i, "Add Torrent", sourceDescription, resp, downloadLink, i.Member.User.ID, nil, clientIndex)
+	// Register a proxy link instead of using the direct TorBox URL
+	proxyLink := b.proxyServer.RegisterDownloadWithUser("torrent", int(torrentID), clientIndex, i.Member.User.ID, name)
+	
+	b.sendAPIResponseAsEmbed(s, i, "Add Torrent", sourceDescription, resp, proxyLink, i.Member.User.ID, nil, clientIndex)
 }
 
 func (b *Bot) handleAddWebDownload(s *discordgo.Session, i *discordgo.InteractionCreate) {
@@ -596,30 +607,34 @@ func (b *Bot) handleTorrentStatus(s *discordgo.Session, i *discordgo.Interaction
 	}
 
 	if info.DownloadFinished && info.DownloadPresent {
-		client := b.torboxClientPool.GetClient(foundClientIndex)
-		downloadLink, err := client.RequestDownloadURL(torrentID)
-		if err == nil {
-			expirationTime := time.Now().Add(3 * time.Hour)
-			expirationTimestamp := expirationTime.Unix()
-			
-			embed.Description = fmt.Sprintf("**%s**\n\n⏰ Link expires <t:%d:R>", info.Name, expirationTimestamp)
-			
-			button := discordgo.Button{
-				Label: "🔗 Download File",
+		// Register a proxy link (permanent, no expiration)
+		proxyLink := b.proxyServer.RegisterDownloadWithUser("torrent", torrentID, foundClientIndex, i.Member.User.ID, info.Name)
+		
+		embed.Description = fmt.Sprintf("**%s**\n\n🔒 Permanent link via proxy", info.Name)
+		
+		browseLink := strings.Replace(proxyLink, "/dl/", "/browse/", 1)
+		buttons := []discordgo.MessageComponent{
+			discordgo.Button{
+				Label: "🔗 Download ZIP",
 				Style: discordgo.LinkButton,
-				URL:   downloadLink,
-			}
-			
-			s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
-				Embeds: &[]*discordgo.MessageEmbed{embed},
-				Components: &[]discordgo.MessageComponent{
-					discordgo.ActionsRow{
-						Components: []discordgo.MessageComponent{button},
-					},
-				},
-			})
-			return
+				URL:   proxyLink,
+			},
+			discordgo.Button{
+				Label: "📂 Browse Files",
+				Style: discordgo.LinkButton,
+				URL:   browseLink,
+			},
 		}
+		
+		s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
+			Embeds: &[]*discordgo.MessageEmbed{embed},
+			Components: &[]discordgo.MessageComponent{
+				discordgo.ActionsRow{
+					Components: buttons,
+				},
+			},
+		})
+		return
 	}
 
 	s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
@@ -692,30 +707,34 @@ func (b *Bot) handleWebDLStatus(s *discordgo.Session, i *discordgo.InteractionCr
 	}
 
 	if info.DownloadFinished && info.DownloadPresent {
-		client := b.torboxClientPool.GetClient(foundClientIndex)
-		downloadLink, err := client.RequestWebDownloadURL(webdlID)
-		if err == nil {
-			expirationTime := time.Now().Add(3 * time.Hour)
-			expirationTimestamp := expirationTime.Unix()
-			
-			embed.Description = fmt.Sprintf("**%s**\n\n⏰ Link expires <t:%d:R>", info.Name, expirationTimestamp)
-			
-			button := discordgo.Button{
+		// Register a proxy link (permanent, no expiration)
+		proxyLink := b.proxyServer.RegisterDownloadWithUser("webdl", webdlID, foundClientIndex, i.Member.User.ID, info.Name)
+		
+		embed.Description = fmt.Sprintf("**%s**\n\n🔒 Permanent link via proxy", info.Name)
+		
+		browseLink := strings.Replace(proxyLink, "/dl/", "/browse/", 1)
+		buttons := []discordgo.MessageComponent{
+			discordgo.Button{
 				Label: "🔗 Download File",
 				Style: discordgo.LinkButton,
-				URL:   downloadLink,
-			}
-			
-			s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
-				Embeds: &[]*discordgo.MessageEmbed{embed},
-				Components: &[]discordgo.MessageComponent{
-					discordgo.ActionsRow{
-						Components: []discordgo.MessageComponent{button},
-					},
-				},
-			})
-			return
+				URL:   proxyLink,
+			},
+			discordgo.Button{
+				Label: "📂 Browse Files",
+				Style: discordgo.LinkButton,
+				URL:   browseLink,
+			},
 		}
+		
+		s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
+			Embeds: &[]*discordgo.MessageEmbed{embed},
+			Components: &[]discordgo.MessageComponent{
+				discordgo.ActionsRow{
+					Components: buttons,
+				},
+			},
+		})
+		return
 	}
 
 	s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
@@ -753,11 +772,8 @@ func (b *Bot) sendAPIResponseAsEmbed(s *discordgo.Session, i *discordgo.Interact
 	} else {
 		description := resp.Detail
 		if downloadLink != "" {
-			expirationTime := time.Now().Add(3 * time.Hour)
-			expirationTimestamp := expirationTime.Unix()
-			
 			content = fmt.Sprintf("<@%s>", userID)
-			description = fmt.Sprintf("%s\n\n⏰ Link expires <t:%d:R>", resp.Detail, expirationTimestamp)
+			description = fmt.Sprintf("%s\n\n🔒 Permanent link via proxy", resp.Detail)
 			
 			embed = &discordgo.MessageEmbed{
 				Title:       fmt.Sprintf("✅ Success to %s", title),
@@ -771,15 +787,23 @@ func (b *Bot) sendAPIResponseAsEmbed(s *discordgo.Session, i *discordgo.Interact
 				},
 			}
 			
-			button := discordgo.Button{
-				Label: "🔗 Download File",
-				Style: discordgo.LinkButton,
-				URL:   downloadLink,
+			browseLink := strings.Replace(downloadLink, "/dl/", "/browse/", 1)
+			buttons := []discordgo.MessageComponent{
+				discordgo.Button{
+					Label: "🔗 Download File",
+					Style: discordgo.LinkButton,
+					URL:   downloadLink,
+				},
+				discordgo.Button{
+					Label: "📂 Browse Files",
+					Style: discordgo.LinkButton,
+					URL:   browseLink,
+				},
 			}
 			
 			components = []discordgo.MessageComponent{
 				discordgo.ActionsRow{
-					Components: []discordgo.MessageComponent{button},
+					Components: buttons,
 				},
 			}
 		} else {
@@ -867,4 +891,54 @@ func truncateString(s string, maxLen int) string {
 		return s
 	}
 	return s[:maxLen-3] + "..."
+}
+
+func hasMediaFiles(files []torbox.TorrentFile) bool {
+	for _, f := range files {
+		if isMediaName(f.Name) {
+			return true
+		}
+	}
+	return false
+}
+
+func isMediaName(name string) bool {
+	lower := strings.ToLower(name)
+	return strings.HasSuffix(lower, ".mp4") ||
+		strings.HasSuffix(lower, ".mkv") ||
+		strings.HasSuffix(lower, ".webm") ||
+		strings.HasSuffix(lower, ".png") ||
+		strings.HasSuffix(lower, ".jpg") ||
+		strings.HasSuffix(lower, ".jpeg") ||
+		strings.HasSuffix(lower, ".gif") ||
+		strings.HasSuffix(lower, ".webp")
+}
+
+func (b *Bot) handleDashboard(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	embed := &discordgo.MessageEmbed{
+		Title:       "📦 Disbox Web Dashboard",
+		Description: "Manage your downloads, view history, and add new links directly from your browser!\n\nClick the button below to access the dashboard and log in with your Discord account.",
+		Color:       0x5865F2, // Discord blurple
+	}
+
+	buttons := []discordgo.MessageComponent{
+		discordgo.Button{
+			Label: "🌐 Open Dashboard",
+			Style: discordgo.LinkButton,
+			URL:   b.proxyServer.GetBaseURL() + "/dashboard",
+		},
+	}
+
+	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Embeds: []*discordgo.MessageEmbed{embed},
+			Components: []discordgo.MessageComponent{
+				discordgo.ActionsRow{
+					Components: buttons,
+				},
+			},
+			Flags: discordgo.MessageFlagsEphemeral, // Only the user can see this message
+		},
+	})
 }

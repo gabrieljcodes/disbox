@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.FileName}} - Text Reader</title>
+    <meta name="description" content="Read {{.FileName}}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg-primary: #0d1117;
+            --bg-editor: #0d1117;
+            --bg-gutter: rgba(22, 27, 34, 0.8);
+            --bg-toolbar: rgba(13, 17, 23, 0.95);
+            --border-subtle: rgba(255, 255, 255, 0.06);
+            --border-accent: rgba(99, 102, 241, 0.3);
+            --text-primary: #e6edf3;
+            --text-secondary: #8b949e;
+            --text-muted: #484f58;
+            --text-line-num: #484f58;
+            --accent-indigo: #818cf8;
+            --accent-emerald: #34d399;
+            --accent-amber: #fbbf24;
+            --gradient-primary: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --shadow-lg: 0 20px 40px rgba(0,0,0,0.4);
+            --radius: 10px;
+            --transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* Ambient glow */
+        body::before {
+            content: '';
+            position: fixed;
+            top: -200px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 600px;
+            height: 400px;
+            background: radial-gradient(ellipse, rgba(99,102,241,0.06) 0%, transparent 70%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* ─── Toolbar ─── */
+        .toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 20px;
+            background: var(--bg-toolbar);
+            border-bottom: 1px solid var(--border-subtle);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            z-index: 10;
+            flex-shrink: 0;
+            gap: 12px;
+        }
+
+        .toolbar-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            min-width: 0;
+            flex: 1;
+        }
+
+        .btn-back {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 14px;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid var(--border-subtle);
+            border-radius: 8px;
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 13px;
+            font-weight: 500;
+            font-family: inherit;
+            transition: var(--transition);
+            flex-shrink: 0;
+        }
+
+        .btn-back:hover {
+            background: rgba(255,255,255,0.08);
+            color: var(--text-primary);
+        }
+
+        .btn-back svg { width: 14px; height: 14px; }
+
+        .toolbar-filename {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-primary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .toolbar-right {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-shrink: 0;
+        }
+
+        .toolbar-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 7px 12px;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid var(--border-subtle);
+            border-radius: 8px;
+            color: var(--text-secondary);
+            font-size: 12px;
+            font-weight: 500;
+            font-family: inherit;
+            cursor: pointer;
+            transition: var(--transition);
+            text-decoration: none;
+        }
+
+        .toolbar-btn:hover {
+            background: rgba(255,255,255,0.08);
+            color: var(--text-primary);
+        }
+
+        .toolbar-btn.active {
+            background: rgba(99, 102, 241, 0.12);
+            color: var(--accent-indigo);
+            border-color: var(--border-accent);
+        }
+
+        .toolbar-btn svg { width: 14px; height: 14px; }
+
+        .btn-copy.copied {
+            background: rgba(52, 211, 153, 0.12);
+            color: var(--accent-emerald);
+            border-color: rgba(52, 211, 153, 0.3);
+        }
+
+        /* ─── Info Bar ─── */
+        .info-bar {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 8px 20px;
+            background: rgba(22, 27, 34, 0.5);
+            border-bottom: 1px solid var(--border-subtle);
+            font-size: 12px;
+            color: var(--text-muted);
+            flex-shrink: 0;
+        }
+
+        .info-item {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        /* ─── Editor ─── */
+        .editor-container {
+            flex: 1;
+            overflow: auto;
+            position: relative;
+        }
+
+        .editor {
+            display: flex;
+            min-height: 100%;
+            font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+            font-size: 13px;
+            line-height: 1.7;
+            tab-size: 4;
+        }
+
+        .line-numbers {
+            position: sticky;
+            left: 0;
+            z-index: 2;
+            padding: 16px 0;
+            background: var(--bg-gutter);
+            border-right: 1px solid var(--border-subtle);
+            user-select: none;
+            text-align: right;
+            color: var(--text-line-num);
+            min-width: 56px;
+            flex-shrink: 0;
+        }
+
+        .line-num {
+            display: block;
+            padding: 0 14px 0 10px;
+            font-size: 12px;
+        }
+
+        .code-content {
+            flex: 1;
+            padding: 16px 20px;
+            color: var(--text-primary);
+            min-width: 0;
+        }
+
+        .code-content.wrap-enabled {
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+
+        .code-content.no-wrap {
+            white-space: pre;
+            overflow-x: visible;
+        }
+
+        /* ─── Loading ─── */
+        .loading {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 60px 20px;
+            gap: 16px;
+            color: var(--text-muted);
+        }
+
+        .spinner {
+            width: 32px;
+            height: 32px;
+            border: 3px solid var(--border-subtle);
+            border-top-color: var(--accent-indigo);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .error-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--text-muted);
+        }
+
+        .error-state-icon { font-size: 48px; margin-bottom: 12px; }
+        .error-state p { font-size: 14px; margin-bottom: 8px; }
+        .error-state .error-detail { font-size: 12px; color: #f87171; }
+
+        /* ─── Responsive ─── */
+        @media (max-width: 640px) {
+            .toolbar { padding: 10px 14px; }
+            .toolbar-filename { font-size: 12px; }
+            .toolbar-btn .btn-label { display: none; }
+            .editor { font-size: 12px; }
+            .line-numbers { min-width: 44px; }
+            .line-num { padding: 0 8px; font-size: 11px; }
+            .code-content { padding: 16px 12px; }
+        }
+    </style>
+</head>
+<body>
+    <!-- Toolbar -->
+    <div class="toolbar">
+        <div class="toolbar-left">
+            <a href="{{.BrowseURL}}" class="btn-back" title="Back to File Browser">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                Back
+            </a>
+            <span class="toolbar-filename" title="{{.FileName}}">{{.FileName}}</span>
+        </div>
+        <div class="toolbar-right">
+            <button class="toolbar-btn" id="btn-wrap" title="Toggle Word Wrap">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M3 12h15a3 3 0 1 1 0 6h-4"></path><polyline points="16 16 14 18 16 20"></polyline><path d="M3 18h7"></path></svg>
+                <span class="btn-label">Wrap</span>
+            </button>
+            <button class="toolbar-btn btn-copy" id="btn-copy" title="Copy to Clipboard">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                <span class="btn-label">Copy</span>
+            </button>
+            <a href="{{.DownloadURL}}" class="toolbar-btn" title="Download File">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                <span class="btn-label">Download</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- Info Bar -->
+    <div class="info-bar">
+        <span class="info-item" id="info-lines">Lines: —</span>
+        <span class="info-item" id="info-size">Size: {{.FileSize}}</span>
+        <span class="info-item" id="info-encoding">UTF-8</span>
+    </div>
+
+    <!-- Editor Area -->
+    <div class="editor-container" id="editor-container">
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <span>Loading file content...</span>
+        </div>
+    </div>
+
+    <script>
+        (function() {
+            const editorContainer = document.getElementById('editor-container');
+            const loadingEl = document.getElementById('loading');
+            const infoLines = document.getElementById('info-lines');
+            const btnWrap = document.getElementById('btn-wrap');
+            const btnCopy = document.getElementById('btn-copy');
+            let textContent = '';
+            let wrapEnabled = true;
+
+            // Fetch the raw file content
+            fetch('{{.ContentURL}}')
+                .then(resp => {
+                    if (!resp.ok) throw new Error('Failed to load file (HTTP ' + resp.status + ')');
+                    return resp.text();
+                })
+                .then(text => {
+                    textContent = text;
+                    renderEditor(text);
+                })
+                .catch(err => {
+                    loadingEl.innerHTML = '<div class="error-state"><div class="error-state-icon">⚠️</div><p>Could not load file content</p><p class="error-detail">' + err.message + '</p></div>';
+                });
+
+            function renderEditor(text) {
+                const lines = text.split('\n');
+                infoLines.textContent = 'Lines: ' + lines.length;
+
+                let lineNumsHTML = '';
+                for (let i = 1; i <= lines.length; i++) {
+                    lineNumsHTML += '<span class="line-num">' + i + '</span>';
+                }
+
+                const wrapClass = wrapEnabled ? 'wrap-enabled' : 'no-wrap';
+                editorContainer.innerHTML =
+                    '<div class="editor">' +
+                        '<div class="line-numbers" id="line-numbers">' + lineNumsHTML + '</div>' +
+                        '<pre class="code-content ' + wrapClass + '" id="code-content"></pre>' +
+                    '</div>';
+
+                // Use textContent to safely escape HTML
+                document.getElementById('code-content').textContent = text;
+            }
+
+            // Toggle word wrap
+            btnWrap.addEventListener('click', function() {
+                wrapEnabled = !wrapEnabled;
+                btnWrap.classList.toggle('active', wrapEnabled);
+                const codeEl = document.getElementById('code-content');
+                if (codeEl) {
+                    codeEl.classList.toggle('wrap-enabled', wrapEnabled);
+                    codeEl.classList.toggle('no-wrap', !wrapEnabled);
+                }
+            });
+
+            // Copy to clipboard
+            btnCopy.addEventListener('click', function() {
+                if (!textContent) return;
+                navigator.clipboard.writeText(textContent).then(() => {
+                    btnCopy.classList.add('copied');
+                    const label = btnCopy.querySelector('.btn-label');
+                    const oldText = label ? label.textContent : '';
+                    if (label) label.textContent = 'Copied!';
+                    setTimeout(() => {
+                        btnCopy.classList.remove('copied');
+                        if (label) label.textContent = oldText;
+                    }, 2000);
+                });
+            });
+        })();
+    </script>
+</body>
+</html>

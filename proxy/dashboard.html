@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Disbox — Dashboard</title>
+    <meta name="description" content="Manage your downloads with Disbox Dashboard">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg-primary: #0a0b0f;
+            --bg-secondary: #12141a;
+            --bg-card: rgba(22, 25, 35, 0.8);
+            --bg-card-hover: rgba(30, 34, 48, 0.9);
+            --bg-input: rgba(18, 20, 28, 0.9);
+            --bg-glass: rgba(255, 255, 255, 0.03);
+            --border-subtle: rgba(255, 255, 255, 0.06);
+            --border-accent: rgba(99, 102, 241, 0.3);
+            --text-primary: #e8eaf0;
+            --text-secondary: #8b8fa3;
+            --text-muted: #5a5e72;
+            --accent-indigo: #818cf8;
+            --accent-blue: #60a5fa;
+            --accent-emerald: #34d399;
+            --accent-rose: #fb7185;
+            --accent-amber: #fbbf24;
+            --accent-violet: #a78bfa;
+            --gradient-primary: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --gradient-discord: linear-gradient(135deg, #5865F2 0%, #4752C4 100%);
+            --shadow-lg: 0 20px 40px rgba(0,0,0,0.4);
+            --shadow-glow: 0 0 30px rgba(99, 102, 241, 0.15);
+            --radius: 12px;
+            --radius-lg: 16px;
+            --transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: -200px; left: 50%; transform: translateX(-50%);
+            width: 800px; height: 600px;
+            background: radial-gradient(ellipse, rgba(99,102,241,0.08) 0%, transparent 70%);
+            pointer-events: none; z-index: 0;
+        }
+
+        /* ─── Login Page ─── */
+        .login-page {
+            display: none;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .login-page.visible {
+            display: flex;
+        }
+
+        .login-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-lg);
+            padding: 48px 40px;
+            text-align: center;
+            max-width: 400px;
+            width: 100%;
+            box-shadow: var(--shadow-lg);
+            position: relative;
+            z-index: 1;
+        }
+
+        .login-logo {
+            font-size: 48px;
+            margin-bottom: 8px;
+        }
+
+        .login-title {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 6px;
+        }
+
+        .login-subtitle {
+            font-size: 14px;
+            color: var(--text-secondary);
+            margin-bottom: 32px;
+        }
+
+        .btn-discord {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            width: 100%;
+            padding: 14px 24px;
+            background: var(--gradient-discord);
+            color: #fff;
+            font-size: 15px;
+            font-weight: 600;
+            font-family: inherit;
+            border: none;
+            border-radius: var(--radius);
+            cursor: pointer;
+            transition: var(--transition);
+            text-decoration: none;
+            box-shadow: 0 4px 15px rgba(88, 101, 242, 0.3);
+        }
+
+        .btn-discord:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(88, 101, 242, 0.4);
+        }
+
+        .btn-discord svg { width: 20px; height: 20px; }
+
+        /* ─── Dashboard Layout ─── */
+        .dashboard { display: none; position: relative; z-index: 1; }
+        .dashboard.active { display: block; }
+
+        .topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 24px;
+            border-bottom: 1px solid var(--border-subtle);
+            background: rgba(10, 11, 15, 0.8);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            position: sticky;
+            top: 0;
+            z-index: 50;
+        }
+
+        .topbar-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .topbar-brand {
+            font-size: 18px;
+            font-weight: 700;
+            background: var(--gradient-primary);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .topbar-right {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .user-badge {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 6px 14px 6px 6px;
+            background: var(--bg-glass);
+            border: 1px solid var(--border-subtle);
+            border-radius: 50px;
+        }
+
+        .user-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            object-fit: cover;
+        }
+
+        .user-name {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .btn-logout {
+            padding: 8px 16px;
+            background: rgba(251, 113, 133, 0.1);
+            border: 1px solid rgba(251, 113, 133, 0.15);
+            border-radius: 8px;
+            color: var(--accent-rose);
+            font-size: 12px;
+            font-weight: 600;
+            font-family: inherit;
+            cursor: pointer;
+            transition: var(--transition);
+            text-decoration: none;
+        }
+
+        .btn-logout:hover {
+            background: rgba(251, 113, 133, 0.2);
+        }
+
+        /* ─── Container ─── */
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 24px 20px 60px;
+        }
+
+        /* ─── Tabs ─── */
+        .tabs {
+            display: flex;
+            gap: 4px;
+            padding: 4px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius);
+            margin-bottom: 24px;
+        }
+
+        .tab-btn {
+            flex: 1;
+            padding: 10px 20px;
+            background: transparent;
+            border: none;
+            border-radius: 8px;
+            color: var(--text-secondary);
+            font-size: 13px;
+            font-weight: 600;
+            font-family: inherit;
+            cursor: pointer;
+            transition: var(--transition);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .tab-btn:hover { color: var(--text-primary); }
+
+        .tab-btn.active {
+            background: var(--gradient-primary);
+            color: #fff;
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+        }
+
+        .tab-btn svg { width: 16px; height: 16px; }
+
+        .tab-panel { display: none; }
+        .tab-panel.active { display: block; }
+
+        /* ─── History ─── */
+        .history-list {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .history-item {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 14px 16px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius);
+            transition: var(--transition);
+            animation: fadeSlideIn 0.3s ease forwards;
+            opacity: 0;
+        }
+
+        .history-item:hover {
+            background: var(--bg-card-hover);
+            border-color: var(--border-accent);
+            transform: translateX(4px);
+        }
+
+        @keyframes fadeSlideIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .history-icon {
+            width: 40px; height: 40px;
+            border-radius: 10px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 18px; flex-shrink: 0;
+        }
+
+        .history-icon.torrent { background: rgba(96, 165, 250, 0.12); }
+        .history-icon.webdl { background: rgba(52, 211, 153, 0.12); }
+
+        .history-details { flex: 1; min-width: 0; }
+
+        .history-name {
+            font-size: 13px; font-weight: 500;
+            color: var(--text-primary);
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+
+        .history-meta {
+            display: flex; align-items: center; gap: 8px; margin-top: 3px;
+        }
+
+        .history-type {
+            font-size: 10px; font-weight: 600;
+            text-transform: uppercase; letter-spacing: 0.5px;
+            padding: 2px 6px; border-radius: 4px;
+            background: var(--bg-glass); border: 1px solid var(--border-subtle);
+        }
+
+        .history-type.torrent { color: var(--accent-blue); }
+        .history-type.webdl { color: var(--accent-emerald); }
+
+        .history-date { font-size: 11px; color: var(--text-muted); }
+
+        .history-actions {
+            display: flex; gap: 6px; flex-shrink: 0;
+        }
+
+        .btn-sm {
+            display: inline-flex; align-items: center; gap: 5px;
+            padding: 7px 12px; border-radius: 8px;
+            font-size: 11px; font-weight: 600;
+            text-decoration: none; transition: var(--transition);
+            border: 1px solid transparent;
+        }
+
+        .btn-sm svg { width: 13px; height: 13px; }
+
+        .btn-browse {
+            background: rgba(99, 102, 241, 0.1);
+            color: var(--accent-indigo);
+            border-color: rgba(99, 102, 241, 0.15);
+        }
+        .btn-browse:hover {
+            background: rgba(99, 102, 241, 0.2);
+        }
+
+        .btn-dl {
+            background: rgba(139, 143, 163, 0.08);
+            color: var(--text-secondary);
+            border-color: var(--border-subtle);
+        }
+        .btn-dl:hover {
+            background: rgba(139, 143, 163, 0.15);
+            color: var(--text-primary);
+        }
+
+        /* ─── Add New ─── */
+        .add-form {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-lg);
+            padding: 28px;
+        }
+
+        .add-form h2 {
+            font-size: 18px; font-weight: 700; margin-bottom: 4px;
+        }
+
+        .add-form-subtitle {
+            font-size: 13px; color: var(--text-secondary); margin-bottom: 24px;
+        }
+
+        .form-group { margin-bottom: 20px; }
+
+        .form-label {
+            display: block; font-size: 12px; font-weight: 600;
+            color: var(--text-secondary); margin-bottom: 8px;
+            text-transform: uppercase; letter-spacing: 0.5px;
+        }
+
+        .form-input {
+            width: 100%; padding: 12px 16px;
+            background: var(--bg-input);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius);
+            color: var(--text-primary);
+            font-size: 14px; font-family: inherit;
+            outline: none; transition: var(--transition);
+        }
+
+        .form-input::placeholder { color: var(--text-muted); }
+
+        .form-input:focus {
+            border-color: var(--border-accent);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+        }
+
+        .form-hint {
+            font-size: 11px; color: var(--text-muted); margin-top: 6px;
+        }
+
+        .type-indicator {
+            display: inline-flex; align-items: center; gap: 4px;
+            padding: 3px 8px; border-radius: 6px;
+            font-size: 11px; font-weight: 600;
+            margin-top: 8px;
+        }
+
+        .type-indicator.torrent {
+            background: rgba(96, 165, 250, 0.1);
+            color: var(--accent-blue);
+        }
+
+        .type-indicator.webdl {
+            background: rgba(52, 211, 153, 0.1);
+            color: var(--accent-emerald);
+        }
+
+        .type-indicator.unknown {
+            background: rgba(139, 143, 163, 0.1);
+            color: var(--text-muted);
+        }
+
+        .btn-submit {
+            display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+            width: 100%; padding: 13px 24px;
+            background: var(--gradient-primary);
+            color: #fff; font-size: 14px; font-weight: 600; font-family: inherit;
+            border: none; border-radius: var(--radius);
+            cursor: pointer; transition: var(--transition);
+            box-shadow: 0 4px 15px rgba(99, 102, 241, 0.3);
+        }
+
+        .btn-submit:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(99, 102, 241, 0.4);
+        }
+
+        .btn-submit:disabled {
+            opacity: 0.6; cursor: not-allowed; transform: none;
+            box-shadow: none;
+        }
+
+        .btn-submit svg { width: 16px; height: 16px; }
+
+        /* ─── Feedback Toast ─── */
+        .toast {
+            display: none; padding: 14px 18px; border-radius: var(--radius);
+            margin-top: 16px; font-size: 13px; font-weight: 500;
+            animation: fadeSlideIn 0.3s ease;
+        }
+
+        .toast.success {
+            display: block;
+            background: rgba(52, 211, 153, 0.1);
+            border: 1px solid rgba(52, 211, 153, 0.2);
+            color: var(--accent-emerald);
+        }
+
+        .toast.error {
+            display: block;
+            background: rgba(251, 113, 133, 0.1);
+            border: 1px solid rgba(251, 113, 133, 0.2);
+            color: var(--accent-rose);
+        }
+
+        .toast-links {
+            display: flex; gap: 8px; margin-top: 10px;
+        }
+
+        .toast-links a {
+            font-size: 12px; font-weight: 600; text-decoration: none;
+            padding: 6px 12px; border-radius: 6px;
+        }
+
+        .toast-links .link-browse {
+            background: rgba(99, 102, 241, 0.15); color: var(--accent-indigo);
+        }
+
+        .toast-links .link-dl {
+            background: rgba(255, 255, 255, 0.05); color: var(--text-secondary);
+        }
+
+        /* ─── Empty State ─── */
+        .empty-state {
+            text-align: center; padding: 60px 20px;
+            color: var(--text-muted);
+        }
+
+        .empty-state-icon { font-size: 48px; margin-bottom: 12px; opacity: 0.5; }
+        .empty-state p { font-size: 14px; margin-bottom: 4px; }
+        .empty-state .hint { font-size: 12px; color: var(--text-muted); }
+
+        /* ─── Loading ─── */
+        .spinner-inline {
+            display: inline-block; width: 16px; height: 16px;
+            border: 2px solid rgba(255,255,255,0.2);
+            border-top-color: #fff; border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .loading-state {
+            display: flex; flex-direction: column; align-items: center;
+            padding: 60px 20px; gap: 12px; color: var(--text-muted);
+        }
+
+        .loading-state .spinner {
+            width: 32px; height: 32px;
+            border: 3px solid var(--border-subtle);
+            border-top-color: var(--accent-indigo);
+            border-radius: 50%; animation: spin 0.8s linear infinite;
+        }
+
+        /* ─── Responsive ─── */
+        @media (max-width: 640px) {
+            .topbar { padding: 12px 16px; }
+            .container { padding: 16px 14px 40px; }
+            .tabs { flex-direction: column; }
+            .history-item { flex-direction: column; align-items: flex-start; gap: 10px; }
+            .history-actions { width: 100%; }
+            .btn-sm { flex: 1; justify-content: center; }
+            .user-name { display: none; }
+            .add-form { padding: 20px; }
+        }
+    </style>
+</head>
+<body>
+    <!-- Login Page -->
+    <div class="login-page" id="login-page">
+        <div class="login-card">
+            <div class="login-logo">📦</div>
+            <h1 class="login-title">Disbox</h1>
+            <p class="login-subtitle">Sign in to manage your downloads</p>
+            <a href="/auth/login" class="btn-discord" id="btn-login">
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/></svg>
+                Sign in with Discord
+            </a>
+        </div>
+    </div>
+
+    <!-- Dashboard -->
+    <div class="dashboard" id="dashboard">
+        <!-- Top Bar -->
+        <div class="topbar">
+            <div class="topbar-left">
+                <span style="font-size:22px">📦</span>
+                <span class="topbar-brand">Disbox</span>
+            </div>
+            <div class="topbar-right">
+                <div class="user-badge">
+                    <img class="user-avatar" id="user-avatar" src="" alt="">
+                    <span class="user-name" id="user-name"></span>
+                </div>
+                <a href="/auth/logout" class="btn-logout">Logout</a>
+            </div>
+        </div>
+
+        <div class="container">
+            <!-- Tabs -->
+            <div class="tabs">
+                <button class="tab-btn active" data-tab="history" id="tab-history">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                    My Downloads
+                </button>
+                <button class="tab-btn" data-tab="add" id="tab-add">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+                    Add New
+                </button>
+            </div>
+
+            <!-- History Tab -->
+            <div class="tab-panel active" id="panel-history">
+                <div class="loading-state" id="history-loading">
+                    <div class="spinner"></div>
+                    <span>Loading your downloads...</span>
+                </div>
+                <div class="history-list" id="history-list" style="display:none;"></div>
+                <div class="empty-state" id="history-empty" style="display:none;">
+                    <div class="empty-state-icon">📭</div>
+                    <p>No downloads yet</p>
+                    <p class="hint">Add a torrent or web download to get started!</p>
+                </div>
+            </div>
+
+            <!-- Add Tab -->
+            <div class="tab-panel" id="panel-add">
+                <div class="add-form">
+                    <h2>Add a Download</h2>
+                    <p class="add-form-subtitle">Paste a magnet link or a direct download URL</p>
+
+                    <div class="form-group">
+                        <label class="form-label" for="input-link">Link</label>
+                        <input type="text" class="form-input" id="input-link" placeholder="magnet:?xt=urn:btih:... or https://..." autocomplete="off" spellcheck="false">
+                        <div class="type-indicator unknown" id="type-indicator">
+                            <span>Paste a link to detect type</span>
+                        </div>
+                    </div>
+
+                    <button class="btn-submit" id="btn-submit" disabled>
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>
+                        Add Download
+                    </button>
+
+                    <div class="toast" id="toast"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    (function() {
+        const loginPage = document.getElementById('login-page');
+        const dashboard = document.getElementById('dashboard');
+        const userAvatar = document.getElementById('user-avatar');
+        const userName = document.getElementById('user-name');
+        const historyLoading = document.getElementById('history-loading');
+        const historyList = document.getElementById('history-list');
+        const historyEmpty = document.getElementById('history-empty');
+        const inputLink = document.getElementById('input-link');
+        const typeIndicator = document.getElementById('type-indicator');
+        const btnSubmit = document.getElementById('btn-submit');
+        const toast = document.getElementById('toast');
+
+        // Use the browser's current origin for links, so they work correctly
+        // regardless of how the user accesses the server (domain, reverse proxy, etc.)
+        const baseURL = window.location.origin;
+
+        // ─── Check Auth ───
+        fetch('/api/me')
+            .then(r => { if (!r.ok) throw new Error(); return r.json(); })
+            .then(user => {
+                loginPage.classList.remove('visible');
+                dashboard.classList.add('active');
+                userAvatar.src = user.avatar_url;
+                userName.textContent = user.username;
+                loadHistory();
+            })
+            .catch(() => {
+                loginPage.classList.add('visible');
+                dashboard.classList.remove('active');
+            });
+
+        // ─── Tabs ───
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+                btn.classList.add('active');
+                document.getElementById('panel-' + btn.dataset.tab).classList.add('active');
+            });
+        });
+
+        // ─── Load History ───
+        function loadHistory() {
+            historyLoading.style.display = '';
+            historyList.style.display = 'none';
+            historyEmpty.style.display = 'none';
+
+            fetch('/api/history')
+                .then(r => r.json())
+                .then(items => {
+                    historyLoading.style.display = 'none';
+                    if (!items || items.length === 0) {
+                        historyEmpty.style.display = '';
+                        return;
+                    }
+                    historyList.style.display = '';
+                    historyList.innerHTML = '';
+                    items.forEach((item, i) => {
+                        const el = document.createElement('div');
+                        el.className = 'history-item';
+                        el.style.animationDelay = (i * 0.04) + 's';
+                        const icon = item.type === 'torrent' ? '🌊' : '🌐';
+                        const typeLabel = item.type === 'torrent' ? 'Torrent' : 'Web DL';
+                        const date = new Date(item.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+                        // Add a cache buster to bypass Cloudflare/browser redirect caches
+                        const cacheBuster = '?v=' + Date.now();
+                        const browseURL = baseURL + '/browse/' + item.token + cacheBuster;
+                        const dlURL = baseURL + '/dl/' + item.token + cacheBuster;
+                        el.innerHTML = `
+                            <div class="history-icon ${item.type}">${icon}</div>
+                            <div class="history-details">
+                                <div class="history-name" title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</div>
+                                <div class="history-meta">
+                                    <span class="history-type ${item.type}">${typeLabel}</span>
+                                    <span class="history-date">${date}</span>
+                                </div>
+                            </div>
+                            <div class="history-actions">
+                                <a href="${browseURL}" class="btn-sm btn-browse" target="_blank" rel="noopener noreferrer">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                                    Browse
+                                </a>
+                                <a href="${dlURL}" class="btn-sm btn-dl">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                                    Download
+                                </a>
+                            </div>`;
+                        historyList.appendChild(el);
+                    });
+                })
+                .catch(() => {
+                    historyLoading.style.display = 'none';
+                    historyEmpty.style.display = '';
+                });
+        }
+
+        // ─── Type Detection ───
+        inputLink.addEventListener('input', () => {
+            const val = inputLink.value.trim();
+            typeIndicator.className = 'type-indicator';
+            if (val.startsWith('magnet:')) {
+                typeIndicator.className = 'type-indicator torrent';
+                typeIndicator.innerHTML = '🌊 Detected: <strong>Torrent (Magnet)</strong>';
+                btnSubmit.disabled = false;
+            } else if (val.match(/^https?:\/\//)) {
+                typeIndicator.className = 'type-indicator webdl';
+                typeIndicator.innerHTML = '🌐 Detected: <strong>Web Download</strong>';
+                btnSubmit.disabled = false;
+            } else if (val.length > 0) {
+                typeIndicator.className = 'type-indicator unknown';
+                typeIndicator.innerHTML = '⚠️ Unrecognized link format';
+                btnSubmit.disabled = true;
+            } else {
+                typeIndicator.className = 'type-indicator unknown';
+                typeIndicator.innerHTML = 'Paste a link to detect type';
+                btnSubmit.disabled = true;
+            }
+        });
+
+        // ─── Submit ───
+        btnSubmit.addEventListener('click', () => {
+            const link = inputLink.value.trim();
+            if (!link) return;
+
+            const isTorrent = link.startsWith('magnet:');
+            const endpoint = isTorrent ? '/api/add-torrent' : '/api/add-webdl';
+
+            btnSubmit.disabled = true;
+            btnSubmit.innerHTML = '<span class="spinner-inline"></span> Adding...';
+            toast.className = 'toast';
+            toast.style.display = 'none';
+
+            fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ link: link })
+            })
+            .then(r => r.json())
+            .then(data => {
+                btnSubmit.disabled = false;
+                btnSubmit.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg> Add Download';
+
+                if (data.error) {
+                    toast.className = 'toast error';
+                    toast.innerHTML = '❌ ' + escapeHtml(data.error);
+                } else {
+                    toast.className = 'toast success';
+                    let html = '✅ Download added successfully!';
+                    if (data.browse_url || data.download_url) {
+                        html += '<div class="toast-links">';
+                        const cacheBuster = '?v=' + Date.now();
+                        // Convert server-side URLs to use browser origin
+                        const toLocalURL = (u) => { try { return window.location.origin + new URL(u).pathname; } catch(e) { return u; } };
+                        if (data.browse_url) html += '<a href="' + toLocalURL(data.browse_url) + cacheBuster + '" class="link-browse" target="_blank" rel="noopener noreferrer">📂 Browse Files</a>';
+                        if (data.download_url) html += '<a href="' + toLocalURL(data.download_url) + cacheBuster + '" class="link-dl">🔗 Download</a>';
+                        html += '</div>';
+                    }
+                    if (data.status === 'monitoring') {
+                        html = '⏳ Download added and is being monitored. Check back later!';
+                    }
+                    toast.innerHTML = html;
+                    inputLink.value = '';
+                    typeIndicator.className = 'type-indicator unknown';
+                    typeIndicator.innerHTML = 'Paste a link to detect type';
+                    // Reload history
+                    loadHistory();
+                }
+            })
+            .catch(() => {
+                btnSubmit.disabled = false;
+                btnSubmit.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg> Add Download';
+                toast.className = 'toast error';
+                toast.innerHTML = '❌ Network error. Please try again.';
+            });
+        });
+
+        function escapeHtml(text) {
+            const d = document.createElement('div');
+            d.textContent = text;
+            return d.innerHTML;
+        }
+    })();
+    </script>
+</body>
+</html>
