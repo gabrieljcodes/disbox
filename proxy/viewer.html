@@ -110,8 +110,27 @@
                 </p>
             </video>
             {{else if eq .ActiveType "image"}}
-            <div class="w-full h-full flex items-center justify-center">
-                <img src="{{.ActiveStreamURL}}" alt="Image Preview" class="max-w-full max-h-full object-contain rounded-lg shadow-2xl ring-1 ring-white/10" />
+            <div id="image-container" class="w-full h-full flex items-center justify-center overflow-hidden relative cursor-grab active:cursor-grabbing">
+                <img id="image-preview" src="{{.ActiveStreamURL}}" alt="Image Preview" class="max-w-none shadow-2xl transition-transform duration-75 ease-out select-none" style="max-width: 100%; max-height: 100%; object-fit: contain;" draggable="false" />
+                
+                <!-- Image Controls Overlay -->
+                <div class="absolute bottom-6 left-1/2 transform -translate-x-1/2 flex items-center space-x-2 bg-slate-900/80 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 opacity-0 hover:opacity-100 transition-opacity duration-300" id="img-controls">
+                    <button id="btn-prev" class="p-2 text-slate-300 hover:text-white hover:bg-white/10 rounded-full transition" title="Previous (Left Arrow)">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd" /></svg>
+                    </button>
+                    <div class="w-px h-5 bg-slate-700 mx-1"></div>
+                    <button id="btn-zoom-out" class="p-2 text-slate-300 hover:text-white hover:bg-white/10 rounded-full transition" title="Zoom Out">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5 10a1 1 0 011-1h8a1 1 0 110 2H6a1 1 0 01-1-1z" clip-rule="evenodd" /></svg>
+                    </button>
+                    <button id="btn-zoom-reset" class="px-2 text-xs font-medium text-slate-300 hover:text-white transition" title="Reset Zoom">100%</button>
+                    <button id="btn-zoom-in" class="p-2 text-slate-300 hover:text-white hover:bg-white/10 rounded-full transition" title="Zoom In">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clip-rule="evenodd" /></svg>
+                    </button>
+                    <div class="w-px h-5 bg-slate-700 mx-1"></div>
+                    <button id="btn-next" class="p-2 text-slate-300 hover:text-white hover:bg-white/10 rounded-full transition" title="Next (Right Arrow)">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" /></svg>
+                    </button>
+                </div>
             </div>
             {{else}}
             <div class="text-center text-slate-400">
@@ -159,6 +178,123 @@
 
     <!-- Video.js JS -->
     <script src="https://vjs.zencdn.net/8.10.0/video.min.js"></script>
+    
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        // Navigation Logic
+        const playlistLinks = Array.from(document.querySelectorAll('.playlist-item'));
+        const activeIndex = playlistLinks.findIndex(el => el.classList.contains('active'));
+        
+        function goPrev() {
+            if (activeIndex > 0) window.location.href = playlistLinks[activeIndex - 1].href;
+        }
+        function goNext() {
+            if (activeIndex >= 0 && activeIndex < playlistLinks.length - 1) window.location.href = playlistLinks[activeIndex + 1].href;
+        }
+
+        const isImage = {{if eq .ActiveType "image"}}true{{else}}false{{end}};
+
+        if (isImage) {
+            // Keyboard navigation for images
+            window.addEventListener('keydown', (e) => {
+                if (e.key === 'ArrowLeft') goPrev();
+                if (e.key === 'ArrowRight') goNext();
+            });
+
+            // Image Pan and Zoom Logic
+            const container = document.getElementById('image-container');
+            const img = document.getElementById('image-preview');
+            const controls = document.getElementById('img-controls');
+            
+            // Show controls permanently if mouse is moving
+            let hideTimeout;
+            container.addEventListener('mousemove', () => {
+                controls.style.opacity = '1';
+                clearTimeout(hideTimeout);
+                hideTimeout = setTimeout(() => { controls.style.opacity = '0'; }, 2000);
+            });
+
+            let scale = 1;
+            let pointX = 0;
+            let pointY = 0;
+            let panning = false;
+            let start = { x: 0, y: 0 };
+
+            function setTransform() {
+                img.style.transform = `translate(${pointX}px, ${pointY}px) scale(${scale})`;
+                document.getElementById('btn-zoom-reset').textContent = Math.round(scale * 100) + '%';
+            }
+
+            container.addEventListener('mousedown', (e) => {
+                if (e.button !== 0) return;
+                e.preventDefault();
+                start = { x: e.clientX - pointX, y: e.clientY - pointY };
+                panning = true;
+            });
+
+            window.addEventListener('mouseup', () => { panning = false; });
+
+            window.addEventListener('mousemove', (e) => {
+                if (!panning) return;
+                e.preventDefault();
+                pointX = (e.clientX - start.x);
+                pointY = (e.clientY - start.y);
+                setTransform();
+            });
+
+            container.addEventListener('wheel', (e) => {
+                e.preventDefault();
+                
+                const delta = (e.wheelDelta ? e.wheelDelta : -e.deltaY);
+                const zoomFactor = 1.15;
+                const newScale = delta > 0 ? scale * zoomFactor : scale / zoomFactor;
+                
+                const boundedScale = Math.min(Math.max(0.1, newScale), 15);
+                
+                if (boundedScale !== scale) {
+                    const rect = container.getBoundingClientRect();
+                    const mouseX = e.clientX - rect.left - rect.width / 2;
+                    const mouseY = e.clientY - rect.top - rect.height / 2;
+
+                    const ratio = boundedScale / scale;
+                    pointX = mouseX - (mouseX - pointX) * ratio;
+                    pointY = mouseY - (mouseY - pointY) * ratio;
+                    
+                    scale = boundedScale;
+                    setTransform();
+                }
+            }, { passive: false });
+
+            document.getElementById('btn-zoom-in').onclick = () => { 
+                scale = Math.min(scale * 1.5, 15); 
+                // Zoom to center when using buttons
+                pointX = pointX * 1.5;
+                pointY = pointY * 1.5;
+                setTransform(); 
+            };
+            document.getElementById('btn-zoom-out').onclick = () => { 
+                scale = Math.max(scale / 1.5, 0.1); 
+                pointX = pointX / 1.5;
+                pointY = pointY / 1.5;
+                setTransform(); 
+            };
+            document.getElementById('btn-zoom-reset').onclick = () => { 
+                scale = 1; pointX = 0; pointY = 0; setTransform(); 
+            };
+            
+            const btnPrev = document.getElementById('btn-prev');
+            const btnNext = document.getElementById('btn-next');
+            if (btnPrev) {
+                btnPrev.onclick = goPrev;
+                if (activeIndex <= 0) btnPrev.style.opacity = '0.3', btnPrev.style.cursor = 'not-allowed';
+            }
+            if (btnNext) {
+                btnNext.onclick = goNext;
+                if (activeIndex >= playlistLinks.length - 1 || activeIndex === -1) btnNext.style.opacity = '0.3', btnNext.style.cursor = 'not-allowed';
+            }
+        }
+    });
+    </script>
     <style>
         /* Custom scrollbar for sidebar */
         .custom-scrollbar::-webkit-scrollbar {

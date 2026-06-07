@@ -164,13 +164,22 @@ func NewServer(baseURL, port string, clientPool *torbox.ClientPool, discordClien
 		mux.HandleFunc("/api/admin/access/add", s.handleApiAdminAccessAdd)
 		mux.HandleFunc("/api/admin/access/remove", s.handleApiAdminAccessRemove)
 		mux.HandleFunc("/api/admin/user", s.handleApiAdminUserProfile)
+		mux.HandleFunc("/api/remove-download", s.handleApiRemoveDownload)
 	}
 
 	// Public API (token-authenticated, always registered)
 	mux.HandleFunc("/v1/me", s.handleV1Me)
 	mux.HandleFunc("/v1/add-torrent", s.handleV1AddTorrent)
 	mux.HandleFunc("/v1/add-webdl", s.handleV1AddWebdl)
+	mux.HandleFunc("/v1/remove-download", s.handleV1RemoveDownload)
 	mux.HandleFunc("/v1/history", s.handleV1History)
+	
+	// Public API Admin Routes
+	mux.HandleFunc("/v1/admin/access", s.handleV1AdminAccessGet)
+	mux.HandleFunc("/v1/admin/access/check", s.handleV1AdminAccessCheck)
+	mux.HandleFunc("/v1/admin/access/add", s.handleV1AdminAccessAdd)
+	mux.HandleFunc("/v1/admin/access/remove", s.handleV1AdminAccessRemove)
+	mux.HandleFunc("/v1/admin/access/toggle", s.handleV1AdminAccessToggle)
 
 	s.httpServer = &http.Server{
 		Addr:    ":" + port,

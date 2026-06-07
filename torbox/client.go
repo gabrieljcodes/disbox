@@ -154,6 +154,27 @@ func (c *Client) AddTorrentFile(fileData []byte, fileName string, cacheOnly bool
 	return c.doRequest(req)
 }
 
+func (c *Client) ControlTorrent(torrentID int, operation string, all bool) (*APIResponse, error) {
+	payload := map[string]interface{}{
+		"operation": operation,
+		"all":       all,
+	}
+	if !all {
+		payload["torrent_id"] = torrentID
+	}
+	
+	bodyBytes, _ := json.Marshal(payload)
+	req, err := http.NewRequest("POST", fmt.Sprintf("%s/torrents/controltorrent", apiBaseURL), bytes.NewBuffer(bodyBytes))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	return c.doRequest(req)
+}
+
 func (c *Client) AddWebDownload(downloadLink string) (*APIResponse, error) {
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
@@ -171,6 +192,27 @@ func (c *Client) AddWebDownload(downloadLink string) (*APIResponse, error) {
 
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
+
+	return c.doRequest(req)
+}
+
+func (c *Client) ControlWebDownload(webdlID int, operation string, all bool) (*APIResponse, error) {
+	payload := map[string]interface{}{
+		"operation": operation,
+		"all":       all,
+	}
+	if !all {
+		payload["webdl_id"] = webdlID
+	}
+	
+	bodyBytes, _ := json.Marshal(payload)
+	req, err := http.NewRequest("POST", fmt.Sprintf("%s/webdl/controlwebdownload", apiBaseURL), bytes.NewBuffer(bodyBytes))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	req.Header.Set("Content-Type", "application/json")
 
 	return c.doRequest(req)
 }
