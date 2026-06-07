@@ -24,7 +24,7 @@ func main() {
 		log.Fatalf("Failed to initialize Torbox client pool: %v", err)
 	}
 
-	proxyServer, err := proxy.NewServer(cfg.ProxyBaseURL, cfg.ProxyPort, torboxClientPool, cfg.DiscordClientID, cfg.DiscordClientSecret)
+	proxyServer, err := proxy.NewServer(cfg.ProxyBaseURL, cfg.ProxyPort, torboxClientPool, cfg.DiscordClientID, cfg.DiscordClientSecret, cfg.AdminUsers)
 	if err != nil {
 		log.Fatalf("Failed to initialize proxy server: %v", err)
 	}

@@ -281,11 +281,13 @@ func (s *Server) handleV1AddTorrent(w http.ResponseWriter, r *http.Request) {
 	torrentID, _ := data["torrent_id"].(float64)
 	name, _ := data["name"].(string)
 
+	var size int64 = 0
 	if name == "" {
 		time.Sleep(1 * time.Second)
 		client := s.clientPool.GetClient(clientIndex)
 		if info, err := client.GetTorrentInfo(int(torrentID)); err == nil {
 			name = info.Name
+			size = info.Size
 		}
 	}
 	if name == "" {
@@ -296,7 +298,13 @@ func (s *Server) handleV1AddTorrent(w http.ResponseWriter, r *http.Request) {
 	client := s.clientPool.GetClient(clientIndex)
 	_, dlErr := client.RequestDownloadURL(int(torrentID), -1)
 
-	proxyLink := s.RegisterDownloadWithUser("torrent", int(torrentID), clientIndex, discordID, name)
+	var discordUsername, discordAvatar string
+	if errUser := s.db.QueryRow("SELECT discord_username, discord_avatar FROM user_sessions WHERE discord_id = ? LIMIT 1", discordID).Scan(&discordUsername, &discordAvatar); errUser != nil {
+		discordUsername = "API User"
+		discordAvatar = ""
+	}
+
+	proxyLink := s.RegisterDownloadWithUser("torrent", int(torrentID), clientIndex, discordID, discordUsername, discordAvatar, name, size)
 
 	result := map[string]string{
 		"name": name,
@@ -348,11 +356,13 @@ func (s *Server) handleV1AddWebdl(w http.ResponseWriter, r *http.Request) {
 	webdlID, _ := data["webdownload_id"].(float64)
 	name, _ := data["name"].(string)
 
+	var size int64 = 0
 	if name == "" || name == "Getting info..." {
 		time.Sleep(1 * time.Second)
 		client := s.clientPool.GetClient(clientIndex)
 		if info, err := client.GetWebDownloadInfo(int(webdlID)); err == nil {
 			name = info.Name
+			size = info.Size
 		}
 	}
 	if name == "" || name == "Getting info..." {
@@ -363,7 +373,13 @@ func (s *Server) handleV1AddWebdl(w http.ResponseWriter, r *http.Request) {
 	client := s.clientPool.GetClient(clientIndex)
 	_, dlErr := client.RequestWebDownloadURL(int(webdlID), -1)
 
-	proxyLink := s.RegisterDownloadWithUser("webdl", int(webdlID), clientIndex, discordID, name)
+	var discordUsername, discordAvatar string
+	if errUser := s.db.QueryRow("SELECT discord_username, discord_avatar FROM user_sessions WHERE discord_id = ? LIMIT 1", discordID).Scan(&discordUsername, &discordAvatar); errUser != nil {
+		discordUsername = "API User"
+		discordAvatar = ""
+	}
+
+	proxyLink := s.RegisterDownloadWithUser("webdl", int(webdlID), clientIndex, discordID, discordUsername, discordAvatar, name, size)
 
 	result := map[string]string{
 		"name": name,

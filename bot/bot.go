@@ -47,6 +47,20 @@ func (b *Bot) Start() error {
 	b.Session.AddHandler(func(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		// Only process ApplicationCommand interactions here
 		if i.Type == discordgo.InteractionApplicationCommand {
+			// Check access control
+			if i.Member != nil && i.Member.User != nil {
+				if isAllowed, reason := b.proxyServer.CheckAccess(i.Member.User.ID); !isAllowed {
+					s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+						Type: discordgo.InteractionResponseChannelMessageWithSource,
+						Data: &discordgo.InteractionResponseData{
+							Content: "⚠️ **Access Denied**: " + reason,
+							Flags:   discordgo.MessageFlagsEphemeral,
+						},
+					})
+					return
+				}
+			}
+
 			if handler, ok := b.handlers[i.ApplicationCommandData().Name]; ok {
 				handler(s, i)
 			}
@@ -299,12 +313,14 @@ func (b *Bot) handleAddTorrent(s *discordgo.Session, i *discordgo.InteractionCre
 		return
 	}
 
+	var size int64 = 0
 	name, _ := data["name"].(string)
 	if name == "" {
 		time.Sleep(1 * time.Second)
 		client := b.torboxClientPool.GetClient(clientIndex)
 		if info, err := client.GetTorrentInfo(int(torrentID)); err == nil {
 			name = info.Name
+			size = info.Size
 		}
 	}
 	if name == "" {
@@ -320,13 +336,13 @@ func (b *Bot) handleAddTorrent(s *discordgo.Session, i *discordgo.InteractionCre
 		
 		msg, msgErr := s.InteractionResponse(i.Interaction)
 		if msgErr == nil {
-			b.monitor.TrackTorrent(int(torrentID), clientIndex, i.Member.User.ID, i.ChannelID, msg.ID, name)
+			b.monitor.TrackTorrent(int(torrentID), clientIndex, i.Member.User.ID, i.Member.User.Username, i.Member.User.AvatarURL(""), i.ChannelID, msg.ID, name)
 		}
 		return
 	}
 
 	// Register a proxy link instead of using the direct TorBox URL
-	proxyLink := b.proxyServer.RegisterDownloadWithUser("torrent", int(torrentID), clientIndex, i.Member.User.ID, name)
+	proxyLink := b.proxyServer.RegisterDownloadWithUser("torrent", int(torrentID), clientIndex, i.Member.User.ID, i.Member.User.Username, i.Member.User.AvatarURL(""), name, size)
 	
 	b.sendAPIResponseAsEmbed(s, i, "Add Torrent", sourceDescription, resp, proxyLink, i.Member.User.ID, nil, clientIndex)
 }
@@ -400,7 +416,7 @@ func (b *Bot) handleAddWebDownload(s *discordgo.Session, i *discordgo.Interactio
 	
 	msg, msgErr := s.InteractionResponse(i.Interaction)
 	if msgErr == nil {
-		b.monitor.TrackWebDownload(int(webdlID), clientIndex, i.Member.User.ID, i.ChannelID, msg.ID, name)
+		b.monitor.TrackWebDownload(int(webdlID), clientIndex, i.Member.User.ID, i.Member.User.Username, i.Member.User.AvatarURL(""), i.ChannelID, msg.ID, name)
 	}
 }
 
@@ -608,7 +624,7 @@ func (b *Bot) handleTorrentStatus(s *discordgo.Session, i *discordgo.Interaction
 
 	if info.DownloadFinished && info.DownloadPresent {
 		// Register a proxy link (permanent, no expiration)
-		proxyLink := b.proxyServer.RegisterDownloadWithUser("torrent", torrentID, foundClientIndex, i.Member.User.ID, info.Name)
+		proxyLink := b.proxyServer.RegisterDownloadWithUser("torrent", torrentID, foundClientIndex, i.Member.User.ID, i.Member.User.Username, i.Member.User.AvatarURL(""), info.Name, info.Size)
 		
 		embed.Description = fmt.Sprintf("**%s**\n\n🔒 Permanent link via proxy", info.Name)
 		
@@ -708,7 +724,7 @@ func (b *Bot) handleWebDLStatus(s *discordgo.Session, i *discordgo.InteractionCr
 
 	if info.DownloadFinished && info.DownloadPresent {
 		// Register a proxy link (permanent, no expiration)
-		proxyLink := b.proxyServer.RegisterDownloadWithUser("webdl", webdlID, foundClientIndex, i.Member.User.ID, info.Name)
+		proxyLink := b.proxyServer.RegisterDownloadWithUser("webdl", webdlID, foundClientIndex, i.Member.User.ID, i.Member.User.Username, i.Member.User.AvatarURL(""), info.Name, info.Size)
 		
 		embed.Description = fmt.Sprintf("**%s**\n\n🔒 Permanent link via proxy", info.Name)
 		

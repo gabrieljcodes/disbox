@@ -523,7 +523,7 @@ func (b *Bot) handleAddTorrentFromSearch(s *discordgo.Session, i *discordgo.Inte
 	// Track the download
 	client := b.torboxClientPool.GetClient(clientIndex)
 	if _, err := client.GetTorrentInfo(torrentID); err == nil {
-		b.monitor.TrackTorrent(torrentID, clientIndex, i.Member.User.ID, i.ChannelID, "", name)
+		b.monitor.TrackTorrent(torrentID, clientIndex, i.Member.User.ID, i.Member.User.Username, i.Member.User.AvatarURL(""), i.ChannelID, "", name)
 	}
 }
 

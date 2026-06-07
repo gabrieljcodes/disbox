@@ -17,6 +17,8 @@ type TrackedDownload struct {
 	Type             string // "torrent" or "webdl"
 	ClientIndex      int   
 	UserID           string
+	Username         string
+	AvatarURL        string
 	ChannelID        string
 	MessageID        string
 	Name             string
@@ -64,7 +66,7 @@ func (m *Monitor) Stop() {
 	close(m.stopChan)
 }
 
-func (m *Monitor) TrackTorrent(torrentID, clientIndex int, userID, channelID, messageID, name string) {
+func (m *Monitor) TrackTorrent(torrentID, clientIndex int, userID, username, avatarURL, channelID, messageID, name string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -74,6 +76,8 @@ func (m *Monitor) TrackTorrent(torrentID, clientIndex int, userID, channelID, me
 		Type:          "torrent",
 		ClientIndex:   clientIndex,
 		UserID:        userID,
+		Username:      username,
+		AvatarURL:     avatarURL,
 		ChannelID:     channelID,
 		MessageID:     messageID,
 		Name:          name,
@@ -84,7 +88,7 @@ func (m *Monitor) TrackTorrent(torrentID, clientIndex int, userID, channelID, me
 	log.Printf("Now tracking torrent %d (client #%d) for user %s", torrentID, clientIndex+1, userID)
 }
 
-func (m *Monitor) TrackWebDownload(webdlID, clientIndex int, userID, channelID, messageID, name string) {
+func (m *Monitor) TrackWebDownload(webdlID, clientIndex int, userID, username, avatarURL, channelID, messageID, name string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -94,6 +98,8 @@ func (m *Monitor) TrackWebDownload(webdlID, clientIndex int, userID, channelID, 
 		Type:          "webdl",
 		ClientIndex:   clientIndex,
 		UserID:        userID,
+		Username:      username,
+		AvatarURL:     avatarURL,
 		ChannelID:     channelID,
 		MessageID:     messageID,
 		Name:          name,
@@ -141,7 +147,7 @@ func (m *Monitor) checkTorrent(key string, download *TrackedDownload) {
 			if info.Name != "" && download.Name != info.Name {
 				download.Name = info.Name
 			}
-			m.notifyCompletion(download, downloadLink, info)
+			m.notifyCompletion(download, downloadLink, info, info.Size)
 		}
 
 		m.mu.Lock()
@@ -179,7 +185,7 @@ func (m *Monitor) checkWebDownload(key string, download *TrackedDownload) {
 			if info.Name != "" && download.Name != info.Name {
 				download.Name = info.Name
 			}
-			m.notifyCompletion(download, downloadLink, nil)
+			m.notifyCompletion(download, downloadLink, nil, info.Size)
 		}
 
 		m.mu.Lock()
@@ -209,11 +215,11 @@ func (m *Monitor) getMilestone(progress float64) int {
 	return 0
 }
 
-func (m *Monitor) notifyCompletion(download *TrackedDownload, downloadLink string, torrentInfo *torbox.TorrentInfo) {
+func (m *Monitor) notifyCompletion(download *TrackedDownload, downloadLink string, torrentInfo *torbox.TorrentInfo, size int64) {
 	log.Printf("Download %d completed using API Key #%d", download.ID, download.ClientIndex+1)
 	
 	// Register a proxy link instead of using the direct TorBox URL
-	proxyLink := m.proxyServer.RegisterDownloadWithUser(download.Type, download.ID, download.ClientIndex, download.UserID, download.Name)
+	proxyLink := m.proxyServer.RegisterDownloadWithUser(download.Type, download.ID, download.ClientIndex, download.UserID, download.Username, download.AvatarURL, download.Name, size)
 	
 	description := fmt.Sprintf("Your download **%s** is ready!\n\n🔒 Permanent link via proxy", download.Name)
 	

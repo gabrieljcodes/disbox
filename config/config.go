@@ -13,6 +13,7 @@ type Config struct {
 	DiscordClientID      string
 	DiscordClientSecret  string
 	TorboxAPIKeys        []string
+	AdminUsers           []string
 	CacheOnly            bool
 	ProxyBaseURL         string
 	ProxyPort            string
@@ -38,6 +39,7 @@ func LoadConfig() (*Config, error) {
 		DiscordClientID:     os.Getenv("DISCORD_CLIENT_ID"),
 		DiscordClientSecret: os.Getenv("DISCORD_CLIENT_SECRET"),
 		TorboxAPIKeys:       parseTorboxAPIKeys(),
+		AdminUsers:          parseAdminUsers(),
 		CacheOnly:           strings.ToLower(os.Getenv("CACHE_ONLY")) == "true",
 		ProxyBaseURL:        proxyBaseURL,
 		ProxyPort:           proxyPort,
@@ -86,6 +88,28 @@ func parseTorboxAPIKeys() []string {
 	}
 
 	return keys
+}
+
+func parseAdminUsers() []string {
+	var users []string
+
+	adminEnv := os.Getenv("ADMIN_USERS")
+	if adminEnv == "" {
+		return users
+	}
+
+	adminEnv = strings.Trim(adminEnv, "[]")
+
+	rawUsers := strings.Split(adminEnv, ",")
+
+	for _, user := range rawUsers {
+		trimmedUser := strings.TrimSpace(user)
+		if trimmedUser != "" && !contains(users, trimmedUser) {
+			users = append(users, trimmedUser)
+		}
+	}
+
+	return users
 }
 
 func contains(slice []string, item string) bool {

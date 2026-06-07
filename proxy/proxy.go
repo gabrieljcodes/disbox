@@ -53,9 +53,10 @@ type Server struct {
 	db                  *sql.DB
 	discordClientID     string
 	discordClientSecret string
+	adminUsers          []string
 }
 
-func NewServer(baseURL, port string, clientPool *torbox.ClientPool, discordClientID, discordClientSecret string) (*Server, error) {
+func NewServer(baseURL, port string, clientPool *torbox.ClientPool, discordClientID, discordClientSecret string, adminUsers []string) (*Server, error) {
 	db, err := sql.Open("sqlite", "proxy_links.db")
 	if err != nil {
 		return nil, fmt.Errorf("failed to open SQLite database: %w", err)
@@ -86,11 +87,14 @@ func NewServer(baseURL, port string, clientPool *torbox.ClientPool, discordClien
 		CREATE TABLE IF NOT EXISTS download_history (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			discord_id TEXT NOT NULL,
+			discord_username TEXT DEFAULT '',
+			discord_avatar TEXT DEFAULT '',
 			token TEXT NOT NULL,
 			name TEXT NOT NULL,
 			type TEXT NOT NULL,
 			download_id INTEGER NOT NULL,
 			client_index INTEGER NOT NULL,
+			size INTEGER DEFAULT 0,
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 		);
 		CREATE TABLE IF NOT EXISTS api_tokens (
@@ -100,10 +104,25 @@ func NewServer(baseURL, port string, clientPool *torbox.ClientPool, discordClien
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 			last_used_at DATETIME
 		);
+		CREATE TABLE IF NOT EXISTS access_settings (
+			key TEXT PRIMARY KEY,
+			value TEXT NOT NULL
+		);
+		CREATE TABLE IF NOT EXISTS access_list (
+			discord_id TEXT PRIMARY KEY,
+			type TEXT NOT NULL,
+			added_by TEXT NOT NULL,
+			added_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		);
 	`); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("failed to create download_links table: %w", err)
 	}
+
+	// Migrations for existing databases
+	db.Exec("ALTER TABLE download_history ADD COLUMN discord_username TEXT DEFAULT ''")
+	db.Exec("ALTER TABLE download_history ADD COLUMN discord_avatar TEXT DEFAULT ''")
+	db.Exec("ALTER TABLE download_history ADD COLUMN size INTEGER DEFAULT 0")
 
 	s := &Server{
 		baseURL:             strings.TrimRight(baseURL, "/"),
@@ -113,6 +132,7 @@ func NewServer(baseURL, port string, clientPool *torbox.ClientPool, discordClien
 		db:                  db,
 		discordClientID:     discordClientID,
 		discordClientSecret: discordClientSecret,
+		adminUsers:          adminUsers,
 	}
 
 	// Load existing links from database into memory
@@ -138,6 +158,12 @@ func NewServer(baseURL, port string, clientPool *torbox.ClientPool, discordClien
 		mux.HandleFunc("/api/add-webdl", s.handleApiAddWebdl)
 		mux.HandleFunc("/api/tokens", s.handleApiTokens)
 		mux.HandleFunc("/api/tokens/revoke", s.handleApiTokenRevoke)
+		mux.HandleFunc("/api/admin/history", s.handleApiAdminHistory)
+		mux.HandleFunc("/api/admin/access", s.handleApiAdminAccessGet)
+		mux.HandleFunc("/api/admin/access/toggle", s.handleApiAdminAccessToggle)
+		mux.HandleFunc("/api/admin/access/add", s.handleApiAdminAccessAdd)
+		mux.HandleFunc("/api/admin/access/remove", s.handleApiAdminAccessRemove)
+		mux.HandleFunc("/api/admin/user", s.handleApiAdminUserProfile)
 	}
 
 	// Public API (token-authenticated, always registered)
@@ -799,6 +825,44 @@ func formatBytes(bytes int64) string {
 		exp++
 	}
 	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
+}
+
+// CheckAccess verifies if a discord user is allowed to use the bot/dashboard.
+// Returns (isAllowed, reasonIfNotAllowed)
+func (s *Server) CheckAccess(discordID string) (bool, string) {
+	// 1. Admins are always allowed
+	for _, admin := range s.adminUsers {
+		if admin == discordID {
+			return true, ""
+		}
+	}
+
+	// Read settings
+	var whitelistEnabled, blacklistEnabled string
+	s.db.QueryRow("SELECT value FROM access_settings WHERE key = 'whitelist_enabled'").Scan(&whitelistEnabled)
+	s.db.QueryRow("SELECT value FROM access_settings WHERE key = 'blacklist_enabled'").Scan(&blacklistEnabled)
+
+	// Read user list type
+	var listType string
+	err := s.db.QueryRow("SELECT type FROM access_list WHERE discord_id = ?", discordID).Scan(&listType)
+
+	// 2. Whitelist takes precedence if enabled
+	if whitelistEnabled == "true" {
+		if err == nil && listType == "whitelist" {
+			return true, ""
+		}
+		return false, "This bot is restricted to whitelisted users."
+	}
+
+	// 3. Blacklist check
+	if blacklistEnabled == "true" {
+		if err == nil && listType == "blacklist" {
+			return false, "You have been blocked from using this bot."
+		}
+	}
+
+	// Allowed by default if not blocked and whitelist is not required
+	return true, ""
 }
 
 func generateToken() string {

@@ -387,6 +387,58 @@
 
         .form-input::placeholder { color: var(--text-muted); }
 
+        .custom-select:focus {
+            border-color: var(--accent-indigo);
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+        }
+
+        /* ─── Modals ─── */
+        .modal {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+            z-index: 1000; display: none; align-items: center; justify-content: center; padding: 20px;
+            animation: fadeIn 0.2s ease-out forwards;
+        }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .modal-content {
+            background: var(--bg-secondary); border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-lg); width: 100%; position: relative;
+            box-shadow: var(--shadow-lg); overflow: hidden;
+            animation: slideUpModal 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+        @keyframes slideUpModal { from { opacity: 0; transform: translateY(20px) scale(0.95); } to { opacity: 1; transform: translateY(0) scale(1); } }
+        .btn-close {
+            position: absolute; top: 16px; right: 16px; background: transparent; border: none;
+            color: var(--text-secondary); cursor: pointer; padding: 8px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center; transition: var(--transition);
+        }
+        .btn-close:hover { background: rgba(255, 255, 255, 0.1); color: var(--text-primary); }
+        .btn-close svg { width: 20px; height: 20px; }
+
+        /* User Profile Modal */
+        #user-profile-modal .modal-content { max-width: 650px; padding: 24px; }
+        .profile-header { display: flex; align-items: center; gap: 16px; margin-bottom: 24px; }
+        .profile-avatar { width: 64px; height: 64px; border-radius: 50%; object-fit: cover; border: 2px solid var(--border-subtle); }
+        .profile-info { flex: 1; min-width: 0; }
+        .profile-name { font-size: 20px; font-weight: 600; color: var(--text-primary); margin: 0 0 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .profile-id { font-size: 13px; color: var(--text-secondary); font-family: monospace; }
+        .profile-metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+        .metric-card { background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 12px; padding: 16px; text-align: center; }
+        .metric-value { font-size: 24px; font-weight: 700; color: var(--accent-indigo); margin-bottom: 4px; }
+        .metric-label { font-size: 13px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; }
+        .profile-actions { display: flex; gap: 12px; margin-bottom: 24px; padding-bottom: 24px; border-bottom: 1px solid var(--border-subtle); }
+        .profile-actions .btn { flex: 1; justify-content: center; }
+        .profile-history-list { max-height: 300px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 8px; }
+        .profile-history-list::-webkit-scrollbar { width: 6px; }
+        .profile-history-list::-webkit-scrollbar-thumb { background: var(--border-subtle); border-radius: 4px; }
+        .user-profile-trigger { cursor: pointer; transition: background-color 0.2s, opacity 0.2s; border-radius: 6px; padding: 2px 4px; margin: -2px -4px; display: flex; align-items: center; gap: 8px; min-width: 120px; border-left: 1px solid var(--border-subtle); padding-left: 16px; }
+        .user-profile-trigger:hover { background-color: rgba(255, 255, 255, 0.05); opacity: 0.8; }
+
+        .btn { display: inline-flex; align-items: center; justify-content: center; padding: 10px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; transition: var(--transition); border: none; font-family: inherit; }
+        .btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        .btn:active { transform: translateY(0); }
+
         .form-input:focus {
             border-color: var(--border-accent);
             box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
@@ -556,6 +608,57 @@
             .user-name { display: none; }
             .add-form { padding: 20px; }
         }
+
+        /* Custom Toggle Switch */
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 44px;
+            height: 24px;
+            margin-right: 12px;
+            flex-shrink: 0;
+        }
+        .toggle-switch input { opacity: 0; width: 0; height: 0; }
+        .toggle-slider {
+            position: absolute; cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: var(--bg-input);
+            border: 1px solid var(--border-subtle);
+            transition: .3s; border-radius: 24px;
+        }
+        .toggle-slider:before {
+            position: absolute; content: "";
+            height: 16px; width: 16px;
+            left: 3px; bottom: 3px;
+            background-color: var(--text-secondary);
+            transition: .3s; border-radius: 50%;
+        }
+        input:checked + .toggle-slider {
+            background-color: rgba(99, 102, 241, 0.2);
+            border-color: var(--accent-indigo);
+        }
+        input:checked + .toggle-slider:before {
+            transform: translateX(20px);
+            background-color: var(--accent-indigo);
+        }
+        .toggle-label {
+            display: flex; align-items: center;
+            cursor: pointer; font-size: 14px;
+            font-weight: 500; color: var(--text-primary);
+        }
+
+        .custom-select {
+            appearance: none;
+            background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238b8fa3' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+            background-repeat: no-repeat; background-position: right 1rem center; background-size: 1em;
+            padding-right: 2.5rem;
+        }
+
+        .access-list-empty {
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            padding: 3rem 1rem; color: var(--text-secondary); text-align: center;
+            background: var(--bg-glass); border-radius: var(--radius); border: 1px dashed var(--border-subtle);
+        }
     </style>
 </head>
 <body>
@@ -603,6 +706,10 @@
                 <button class="tab-btn" data-tab="api" id="tab-api">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
                     API Keys
+                </button>
+                <button class="tab-btn" data-tab="admin" id="tab-admin" style="display: none;">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:20px; height:20px;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                    Admin Panel
                 </button>
             </div>
 
@@ -671,11 +778,89 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Admin Tab -->
+            <div class="tab-panel" id="panel-admin">
+                <div class="add-form">
+                    <h2>Access Control</h2>
+                    <p class="add-form-subtitle">Manage who can access the bot.</p>
+                    
+                    <div style="display: flex; flex-direction: column; gap: 16px; margin-bottom: 24px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; background: var(--bg-input); padding: 16px; border-radius: var(--radius); border: 1px solid var(--border-subtle);">
+                            <div>
+                                <div style="font-weight: 600; margin-bottom: 4px;">Whitelist Mode</div>
+                                <div style="font-size: 13px; color: var(--text-secondary);">Only users in the whitelist can access the bot.</div>
+                            </div>
+                            <label class="toggle-label">
+                                <span class="toggle-switch">
+                                    <input type="checkbox" id="whitelist-toggle">
+                                    <span class="toggle-slider"></span>
+                                </span>
+                            </label>
+                        </div>
+                        
+                        <div style="display: flex; justify-content: space-between; align-items: center; background: var(--bg-input); padding: 16px; border-radius: var(--radius); border: 1px solid var(--border-subtle);">
+                            <div>
+                                <div style="font-weight: 600; margin-bottom: 4px;">Blacklist Mode</div>
+                                <div style="font-size: 13px; color: var(--text-secondary);">Users in the blacklist are blocked from accessing the bot.</div>
+                            </div>
+                            <label class="toggle-label">
+                                <span class="toggle-switch">
+                                    <input type="checkbox" id="blacklist-toggle">
+                                    <span class="toggle-slider"></span>
+                                </span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="form-group" style="margin-top: 32px;">
+                        <label class="form-label" for="access-id-input">Add User to List</label>
+                        <div style="display:flex; gap:12px; align-items: center;">
+                            <input type="text" id="access-id-input" placeholder="Discord User ID" class="form-input" style="flex:1;">
+                            <select id="access-type-select" class="form-input custom-select" style="width: 140px;">
+                                <option value="whitelist">Whitelist</option>
+                                <option value="blacklist">Blacklist</option>
+                            </select>
+                            <button id="access-add-btn" class="btn-submit" style="width: auto; padding: 13px 24px; white-space: nowrap;">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px; height:16px;"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                                Add
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <h3 style="font-size: 14px; margin-top: 32px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 8px; margin-bottom: 16px;">Access List</h3>
+                    <div id="access-list-container" class="history-list" style="max-height:400px; overflow-y:auto; padding-right: 8px;"></div>
+                </div>
+
+                <div class="add-form" style="margin-top: 24px;">
+                    <h2>Global History</h2>
+                    <p class="add-form-subtitle">Recent downloads across all users.</p>
+                    
+                    <div class="loading-state" id="admin-loading">
+                        <div class="spinner"></div>
+                        <span>Loading global history...</span>
+                    </div>
+                    <div class="history-list" id="admin-list" style="display:none;"></div>
+                    <div class="empty-state" id="admin-empty" style="display:none;">
+                        <div class="empty-state-icon">📭</div>
+                        <p>No downloads across all users</p>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
     <script>
     (function() {
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('error') === 'access_denied') {
+            setTimeout(() => {
+                showToast('Access Denied: You are not authorized to use the dashboard.', 'error');
+                // Remove param from URL
+                window.history.replaceState({}, document.title, window.location.pathname);
+            }, 500);
+        }
+
         const loginPage = document.getElementById('login-page');
         const dashboard = document.getElementById('dashboard');
         const userAvatar = document.getElementById('user-avatar');
@@ -700,6 +885,11 @@
                 dashboard.classList.add('active');
                 userAvatar.src = user.avatar_url;
                 userName.textContent = user.username;
+                if (user.is_admin) {
+                    document.getElementById('tab-admin').style.display = '';
+                    loadAdminHistory();
+                    loadAccessList();
+                }
                 loadHistory();
             })
             .catch(() => {
@@ -769,6 +959,171 @@
                 .catch(() => {
                     historyLoading.style.display = 'none';
                     historyEmpty.style.display = '';
+                });
+        }
+
+          // ─── Load Admin Access List ───
+          function loadAccessList() {
+              fetch('/api/admin/access')
+                  .then(r => { if(!r.ok) throw new Error(); return r.json(); })
+                  .then(data => {
+                      document.getElementById('whitelist-toggle').checked = data.whitelist_enabled;
+                      document.getElementById('blacklist-toggle').checked = data.blacklist_enabled;
+                      
+                      const container = document.getElementById('access-list-container');
+                      container.innerHTML = '';
+                      if (data.users && data.users.length > 0) {
+                          data.users.forEach(u => {
+                              const el = document.createElement('div');
+                              el.className = 'history-item';
+                              const icon = u.type === 'whitelist' ? '✅' : '🚫';
+                              const date = new Date(u.added_at).toLocaleDateString('en-US');
+                              const svgIcon = u.type === 'whitelist' 
+                                  ? '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent-emerald)"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>'
+                                  : '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent-rose)"><circle cx="12" cy="12" r="10"></circle><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line></svg>';
+                              
+                              el.innerHTML = `
+                                  <div class="history-icon" style="background: ${u.type === 'whitelist' ? 'rgba(52, 211, 153, 0.1)' : 'rgba(251, 113, 133, 0.1)'}; box-shadow: none;">
+                                      ${svgIcon}
+                                  </div>
+                                  <div class="history-details" style="flex:1;">
+                                      <div class="history-name" style="display:flex; align-items:center; gap:8px;">
+                                          ${u.discord_id}
+                                          <span style="font-size:10px; text-transform:uppercase; letter-spacing:1px; font-weight:700; padding:2px 6px; border-radius:4px; background:${u.type === 'whitelist' ? 'rgba(52, 211, 153, 0.1)' : 'rgba(251, 113, 133, 0.1)'}; color:${u.type === 'whitelist' ? 'var(--accent-emerald)' : 'var(--accent-rose)'}">${u.type}</span>
+                                      </div>
+                                      <div class="history-meta">Added by <strong>${u.added_by}</strong> on ${date}</div>
+                                  </div>
+                                  <button class="btn-sm" style="background:rgba(251, 113, 133, 0.1); border:1px solid rgba(251, 113, 133, 0.2); color:var(--accent-rose); padding:6px 12px; border-radius:8px;" onclick="removeAccessUser('${u.discord_id}')">
+                                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px; height:14px;"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                                      Remove
+                                  </button>
+                              `;
+                              container.appendChild(el);
+                          });
+                      } else {
+                          container.innerHTML = '<div class="access-list-empty"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:48px; height:48px; margin-bottom:16px; opacity:0.5;"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg><p style="font-weight:600; color:var(--text-primary); margin-bottom:4px;">No users added yet</p><p style="font-size:13px;">Add a Discord User ID above to manage their access.</p></div>';
+                      }
+                  })
+                  .catch(console.error);
+          }
+
+          window.removeAccessUser = function(id) {
+              fetch('/api/admin/access/remove', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ discord_id: id })
+              }).then(() => loadAccessList());
+          };
+
+          document.getElementById('access-add-btn')?.addEventListener('click', () => {
+              const id = document.getElementById('access-id-input').value.trim();
+              const type = document.getElementById('access-type-select').value;
+              if (!id) return;
+              fetch('/api/admin/access/add', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ discord_id: id, type: type })
+              }).then(r => r.json()).then(res => {
+                  if(res.success) {
+                      document.getElementById('access-id-input').value = '';
+                      loadAccessList();
+                  } else {
+                      showToast('Failed to add user', 'error');
+                  }
+              });
+          });
+
+          function toggleAccess(type, enabled) {
+              fetch('/api/admin/access/toggle', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ list_type: type, enabled: enabled })
+              }).then(() => showToast(type.charAt(0).toUpperCase() + type.slice(1) + (enabled ? ' Enabled' : ' Disabled'), 'success'));
+          }
+
+          document.getElementById('whitelist-toggle')?.addEventListener('change', (e) => {
+              const enabled = e.target.checked;
+              toggleAccess('whitelist', enabled);
+              if (enabled) {
+                  const blToggle = document.getElementById('blacklist-toggle');
+                  if (blToggle) blToggle.checked = false;
+              }
+          });
+          document.getElementById('blacklist-toggle')?.addEventListener('change', (e) => {
+              const enabled = e.target.checked;
+              toggleAccess('blacklist', enabled);
+              if (enabled) {
+                  const wlToggle = document.getElementById('whitelist-toggle');
+                  if (wlToggle) wlToggle.checked = false;
+              }
+          });
+
+
+        // ─── Load Admin History ───
+        function loadAdminHistory() {
+            const adminLoading = document.getElementById('admin-loading');
+            const adminList = document.getElementById('admin-list');
+            const adminEmpty = document.getElementById('admin-empty');
+
+            adminLoading.style.display = '';
+            adminList.style.display = 'none';
+            adminEmpty.style.display = 'none';
+
+            fetch('/api/admin/history')
+                .then(r => { if (!r.ok) throw new Error(); return r.json(); })
+                .then(items => {
+                    adminLoading.style.display = 'none';
+                    if (!items || items.length === 0) {
+                        adminEmpty.style.display = '';
+                        return;
+                    }
+                    adminList.style.display = '';
+                    adminList.innerHTML = '';
+                    items.forEach((item, i) => {
+                        const el = document.createElement('div');
+                        el.className = 'history-item';
+                        el.style.animationDelay = (i * 0.04) + 's';
+                        const icon = item.type === 'torrent' ? '🌊' : '🌐';
+                        const typeLabel = item.type === 'torrent' ? 'Torrent' : 'Web DL';
+                        const date = new Date(item.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+                        const cacheBuster = '?v=' + Date.now();
+                        const browseURL = baseURL + '/browse/' + item.token + cacheBuster;
+                        const dlURL = baseURL + '/dl/' + item.token + cacheBuster;
+                        
+                        const avatarUrl = item.discord_avatar || 'https://cdn.discordapp.com/embed/avatars/0.png';
+                        const username = item.discord_username || 'Unknown User';
+
+                        el.innerHTML = `
+                            <div class="history-icon ${item.type}">${icon}</div>
+                            <div class="history-details" style="display: flex; gap: 16px; align-items: center;">
+                                <div style="flex: 1; min-width: 0;">
+                                    <div class="history-name" title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</div>
+                                    <div class="history-meta">
+                                        <span class="history-type ${item.type}">${typeLabel}</span>
+                                        <span class="history-date">${date}</span>
+                                    </div>
+                                </div>
+                                <div class="user-profile-trigger" onclick="openUserProfile('${item.discord_id}')">
+                                    <img src="${avatarUrl}" alt="${escapeHtml(username)}" style="width: 24px; height: 24px; border-radius: 50%; object-fit: cover;">
+                                    <span style="font-size: 12px; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100px;">${escapeHtml(username)}</span>
+                                </div>
+                            </div>
+                            <div class="history-actions">
+                                <a href="${browseURL}" class="btn-sm btn-browse" target="_blank" rel="noopener noreferrer">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                                    Browse
+                                </a>
+                                <a href="${dlURL}" class="btn-sm btn-dl">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                                    Download
+                                </a>
+                            </div>`;
+                        adminList.appendChild(el);
+                    });
+                })
+                .catch(() => {
+                    adminLoading.style.display = 'none';
+                    adminEmpty.style.display = '';
                 });
         }
 
@@ -842,6 +1197,10 @@
                     typeIndicator.innerHTML = 'Paste a link to detect type';
                     // Reload history
                     loadHistory();
+                    const adminTab = document.getElementById('tab-admin');
+                    if (adminTab && adminTab.style.display !== 'none') {
+                        loadAdminHistory();
+                    }
                 }
             })
             .catch(() => {
@@ -969,7 +1328,172 @@
                 else alert(res.error || 'Failed to revoke token');
             });
         };
+
+        // ─── User Profile Modal ───
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024, sizes = ['B', 'KB', 'MB', 'GB', 'TB'], i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        window.openUserProfile = function(discordId) {
+            if (!discordId) return;
+            const modal = document.getElementById('user-profile-modal');
+            const loading = document.getElementById('profile-loading');
+            const content = document.getElementById('profile-content');
+            
+            modal.style.display = 'flex';
+            loading.style.display = 'flex';
+            content.style.display = 'none';
+
+            fetch('/api/admin/user?discord_id=' + discordId)
+                .then(r => r.json())
+                .then(data => {
+                    loading.style.display = 'none';
+                    content.style.display = 'block';
+
+                    document.getElementById('profile-avatar').src = data.discord_avatar || 'https://cdn.discordapp.com/embed/avatars/0.png';
+                    document.getElementById('profile-name').textContent = data.discord_username || 'Unknown User';
+                    document.getElementById('profile-id').textContent = data.discord_id;
+                    
+                    document.getElementById('profile-downloads').textContent = data.total_downloads || 0;
+                    document.getElementById('profile-size').textContent = formatBytes(data.total_size || 0);
+
+                    const historyList = document.getElementById('profile-history');
+                    historyList.innerHTML = '';
+                    if (data.history && data.history.length > 0) {
+                        data.history.forEach(item => {
+                            const date = new Date(item.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                            const sizeStr = formatBytes(item.size || 0);
+                            const el = document.createElement('div');
+                            el.style = "display:flex; justify-content:space-between; align-items:center; padding: 12px; background: rgba(255,255,255,0.03); border-radius: 8px;";
+                            el.innerHTML = `
+                                <div style="flex:1; min-width:0; margin-right:12px;">
+                                    <div style="font-weight:500; color:var(--text-primary); font-size:14px; margin-bottom:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(item.name)}</div>
+                                    <div style="font-size:12px; color:var(--text-secondary); display:flex; gap:12px;">
+                                        <span style="color:${item.type==='torrent'?'var(--accent-blue)':'var(--accent-emerald)'}; font-weight:600;">${item.type==='torrent'?'Torrent':'Web DL'}</span>
+                                        <span>${date}</span>
+                                    </div>
+                                </div>
+                                <div style="font-size:13px; font-weight:600; color:var(--text-secondary);">${sizeStr}</div>
+                            `;
+                            historyList.appendChild(el);
+                        });
+                    } else {
+                        historyList.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-muted); font-size:13px;">No downloads yet</div>';
+                    }
+
+                    // Setup Actions
+                    const btnWhitelist = document.getElementById('btn-profile-whitelist');
+                    const btnBlacklist = document.getElementById('btn-profile-blacklist');
+                    const btnRemove = document.getElementById('btn-profile-remove');
+
+                    const resetButtons = () => {
+                        btnWhitelist.style.opacity = '1';
+                        btnBlacklist.style.opacity = '1';
+                        btnRemove.style.display = 'none';
+                        btnWhitelist.textContent = 'Add to Whitelist';
+                        btnBlacklist.textContent = 'Add to Blacklist';
+                        btnWhitelist.style.background = 'rgba(52, 211, 153, 0.1)';
+                        btnWhitelist.style.color = 'var(--accent-emerald)';
+                        btnWhitelist.style.border = '1px solid rgba(52, 211, 153, 0.2)';
+                        btnBlacklist.style.background = 'rgba(251, 113, 133, 0.1)';
+                        btnBlacklist.style.color = 'var(--accent-rose)';
+                        btnBlacklist.style.border = '1px solid rgba(251, 113, 133, 0.2)';
+                    };
+
+                    resetButtons();
+                    if (data.access_type === 'whitelist') {
+                        btnWhitelist.textContent = 'In Whitelist';
+                        btnWhitelist.style.background = 'var(--accent-emerald)';
+                        btnWhitelist.style.color = '#000';
+                        btnBlacklist.style.opacity = '0.5';
+                        btnRemove.style.display = 'flex';
+                    } else if (data.access_type === 'blacklist') {
+                        btnBlacklist.textContent = 'In Blacklist';
+                        btnBlacklist.style.background = 'var(--accent-rose)';
+                        btnBlacklist.style.color = '#fff';
+                        btnWhitelist.style.opacity = '0.5';
+                        btnRemove.style.display = 'flex';
+                    }
+
+                    const setAccess = (type) => {
+                        fetch('/api/admin/access/add', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ discord_id: data.discord_id, type: type })
+                        }).then(() => openUserProfile(data.discord_id));
+                    };
+
+                    btnWhitelist.onclick = () => setAccess('whitelist');
+                    btnBlacklist.onclick = () => setAccess('blacklist');
+                    btnRemove.onclick = () => {
+                        fetch('/api/admin/access/remove', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ discord_id: data.discord_id })
+                        }).then(() => openUserProfile(data.discord_id));
+                    };
+                })
+                .catch(() => {
+                    modal.style.display = 'none';
+                    alert('Error loading user profile');
+                });
+        };
+
     })();
     </script>
+
+    <!-- User Profile Modal -->
+    <div id="user-profile-modal" class="modal" style="display: none; align-items: center; justify-content: center; z-index: 1000; padding: 20px;">
+        <div class="modal-content" style="max-height: 90vh; display: flex; flex-direction: column;">
+            <button class="btn-close" onclick="document.getElementById('user-profile-modal').style.display='none'">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+            
+            <div id="profile-loading" style="padding: 60px 20px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 12px; color: var(--text-muted);">
+                <div class="spinner"></div>
+                <div>Loading profile...</div>
+            </div>
+
+            <div id="profile-content" style="display: none;">
+                <div class="profile-header">
+                    <img id="profile-avatar" src="" alt="Avatar" class="profile-avatar">
+                    <div class="profile-info">
+                        <div id="profile-name" class="profile-name"></div>
+                        <div id="profile-id" class="profile-id"></div>
+                    </div>
+                </div>
+
+                <div class="profile-metrics">
+                    <div class="metric-card">
+                        <div id="profile-downloads" class="metric-value">0</div>
+                        <div class="metric-label">Total Downloads</div>
+                    </div>
+                    <div class="metric-card">
+                        <div id="profile-size" class="metric-value">0 B</div>
+                        <div class="metric-label">Data Downloaded</div>
+                    </div>
+                </div>
+
+                <div class="profile-actions">
+                    <button id="btn-profile-whitelist" class="btn" style="background: rgba(52, 211, 153, 0.1); color: var(--accent-emerald); border: 1px solid rgba(52, 211, 153, 0.2);">
+                        Add to Whitelist
+                    </button>
+                    <button id="btn-profile-blacklist" class="btn" style="background: rgba(251, 113, 133, 0.1); color: var(--accent-rose); border: 1px solid rgba(251, 113, 133, 0.2);">
+                        Add to Blacklist
+                    </button>
+                    <button id="btn-profile-remove" class="btn" style="display: none; flex: 0.5; background: rgba(255,255,255,0.05); color: var(--text-secondary); border: 1px solid var(--border-subtle);">
+                        Remove
+                    </button>
+                </div>
+
+                <h3 style="font-size: 14px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px;">Download History</h3>
+                <div id="profile-history" class="profile-history-list">
+                    <!-- History inserted dynamically -->
+                </div>
+            </div>
+        </div>
+    </div>
 </body>
 </html>

@@ -33,6 +33,8 @@ A Discord bot that integrates with the TorBox API, allowing you to manage torren
   - Add torrents and web downloads from a browser
   - Browse download history
   - Links open a built-in file browser with media viewer
+  - **Admin Dashboard**: Moderation tools, global download history, and interactive user profiles
+  - **Access Control**: Built-in Whitelist/Blacklist toggle system to restrict bot access to specific users
 
 - **Proxy & File Browser**
   - Persistent download links that survive server restarts
@@ -135,6 +137,9 @@ The optional web dashboard lets you manage downloads from a browser with Discord
 ```env
 DISCORD_CLIENT_ID="your_client_id"
 DISCORD_CLIENT_SECRET="your_client_secret"
+
+# To enable the Admin Dashboard (optional)
+ADMIN_USERS="your_discord_id_here"
 ```
 
 4. Access the dashboard at `http://localhost:8080/dashboard` (or your configured `PROXY_BASE_URL`)
