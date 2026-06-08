@@ -3,6 +3,7 @@ package torbox
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 )
 
@@ -107,16 +108,28 @@ func (c *Client) SearchTorrents(query string, checkCache bool) (*TorrentSearchRe
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute request: %w", err)
 	}
-	defer resp.Body.Close()
+	bodyBytes, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	
+	fmt.Println("RAW RESPONSE:", string(bodyBytes))
 
 	var apiResp struct {
 		Success bool                   `json:"success"`
 		Message string                 `json:"message"`
+		Error   string                 `json:"error"`
+		Detail  string                 `json:"detail"`
 		Data    *TorrentSearchResponse `json:"data"`
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
+	if err := json.Unmarshal(bodyBytes, &apiResp); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	if apiResp.Error != "" {
+		return nil, fmt.Errorf("%s", apiResp.Error)
+	}
+	if apiResp.Detail != "" {
+		return nil, fmt.Errorf("%s", apiResp.Detail)
 	}
 
 	if !apiResp.Success {
@@ -146,14 +159,28 @@ func (c *Client) SearchTorrentsByIMDB(imdbID string, checkCache bool) (*TorrentS
 	}
 	defer resp.Body.Close()
 
+	bodyBytes, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	
+	fmt.Println("RAW RESPONSE:", string(bodyBytes))
+
 	var apiResp struct {
 		Success bool                   `json:"success"`
 		Message string                 `json:"message"`
+		Error   string                 `json:"error"`
+		Detail  string                 `json:"detail"`
 		Data    *TorrentSearchResponse `json:"data"`
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
+	if err := json.Unmarshal(bodyBytes, &apiResp); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	if apiResp.Error != "" {
+		return nil, fmt.Errorf("%s", apiResp.Error)
+	}
+	if apiResp.Detail != "" {
+		return nil, fmt.Errorf("%s", apiResp.Detail)
 	}
 
 	if !apiResp.Success {

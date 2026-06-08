@@ -69,6 +69,20 @@ func (s *Server) initDefaultSettings(clientPool *torbox.ClientPool, cacheOnly bo
 	if err == sql.ErrNoRows {
 		s.SetSetting("public_api_delay_ms", "0")
 	}
+
+	// Initialize aiostreams settings
+	err = s.db.QueryRow("SELECT value FROM access_settings WHERE key = 'aiostreams_url'").Scan(&dummy)
+	if err == sql.ErrNoRows {
+		s.SetSetting("aiostreams_url", "https://aiostreamsfortheweebs.midnightignite.me")
+	}
+	err = s.db.QueryRow("SELECT value FROM access_settings WHERE key = 'aiostreams_uuid'").Scan(&dummy)
+	if err == sql.ErrNoRows {
+		s.SetSetting("aiostreams_uuid", "")
+	}
+	err = s.db.QueryRow("SELECT value FROM access_settings WHERE key = 'aiostreams_password'").Scan(&dummy)
+	if err == sql.ErrNoRows {
+		s.SetSetting("aiostreams_password", "")
+	}
 }
 
 func (s *Server) CheckRateLimit(discordID string) bool {

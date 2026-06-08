@@ -33,6 +33,9 @@ func (s *Server) handleApiAdminSettingsGet(w http.ResponseWriter, r *http.Reques
 		"public_api_enabled":  s.GetSetting("public_api_enabled", "true") == "true",
 		"public_api_delay_ms": s.GetSetting("public_api_delay_ms", "0"),
 		"torbox_keys":         maskedKeys,
+		"aiostreams_url":      s.GetSetting("aiostreams_url", "https://aiostreamsfortheweebs.midnightignite.me"),
+		"aiostreams_uuid":     s.GetSetting("aiostreams_uuid", ""),
+		"aiostreams_password": s.GetSetting("aiostreams_password", ""),
 	})
 }
 
@@ -62,6 +65,9 @@ func (s *Server) handleApiAdminSettingsUpdate(w http.ResponseWriter, r *http.Req
 		"cache_only":          true,
 		"public_api_enabled":  true,
 		"public_api_delay_ms": true,
+		"aiostreams_url":      true,
+		"aiostreams_uuid":     true,
+		"aiostreams_password": true,
 	}
 
 	if !allowedKeys[req.Key] {

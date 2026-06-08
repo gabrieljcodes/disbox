@@ -597,6 +597,57 @@
             padding: 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); word-break: break-all; margin-bottom: 12px;
         }
 
+        /* ─── Search Cards ─── */
+        .search-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 16px;
+            margin-top: 24px;
+        }
+        .search-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius);
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            transition: var(--transition);
+        }
+        .search-card:hover {
+            border-color: rgba(99, 102, 241, 0.5);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+        }
+        .search-card-title {
+            font-weight: 600;
+            font-size: 15px;
+            color: var(--text-primary);
+            word-break: break-word;
+            line-height: 1.4;
+        }
+        .search-card-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            font-size: 12px;
+        }
+        .badge {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border-subtle);
+            padding: 4px 8px;
+            border-radius: 6px;
+            color: var(--text-secondary);
+            font-weight: 500;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .badge.quality { background: rgba(99, 102, 241, 0.1); color: var(--accent-indigo); border-color: rgba(99, 102, 241, 0.2); }
+        .badge.cached { background: rgba(52, 211, 153, 0.1); color: var(--accent-emerald); border-color: rgba(52, 211, 153, 0.2); }
+        .badge.seeds { background: rgba(46, 204, 113, 0.1); color: #2ecc71; border-color: rgba(46, 204, 113, 0.2); }
+        .badge.peers { background: rgba(231, 76, 60, 0.1); color: #e74c3c; border-color: rgba(231, 76, 60, 0.2); }
+        
         /* ─── Responsive ─── */
         @media (max-width: 640px) {
             .topbar { padding: 12px 16px; }
@@ -703,6 +754,10 @@
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
                     Add New
                 </button>
+                <button class="tab-btn" data-tab="search" id="tab-search">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    Search Torrents
+                </button>
                 <button class="tab-btn" data-tab="api" id="tab-api">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
                     API Keys
@@ -724,6 +779,38 @@
                     <div class="empty-state-icon">📭</div>
                     <p>No downloads yet</p>
                     <p class="hint">Add a torrent or web download to get started!</p>
+                </div>
+            </div>
+
+            <!-- Search Tab -->
+            <div class="tab-panel" id="panel-search">
+                <div class="add-form" style="max-width: 100%;">
+                    <h2>Search Streams</h2>
+                    <p class="add-form-subtitle">Search by IMDB or TMDB ID (e.g. tt0080684, tmdb:12345)</p>
+
+                    <div class="form-group" style="display:flex; gap:12px; max-width: 600px;">
+                        <select id="search-type-select" class="form-input custom-select" style="width: 120px;">
+                            <option value="movie">Movie</option>
+                            <option value="series">Series</option>
+                        </select>
+                        <input type="text" class="form-input" id="input-search" placeholder="Type IMDB/TMDB ID here..." autocomplete="off" spellcheck="false" style="flex:1;">
+                        <button class="btn-submit" id="btn-search" style="width: auto; padding: 13px 24px;">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px; height:18px; margin-right:8px;"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                            Search
+                        </button>
+                    </div>
+
+                    <div class="loading-state" id="search-loading" style="display:none; padding: 40px;">
+                        <div class="spinner"></div>
+                        <span>Searching AIOStreams...</span>
+                    </div>
+
+                    <div class="empty-state" id="search-empty" style="display:none; padding: 40px;">
+                        <div class="empty-state-icon">🔍</div>
+                        <p id="search-empty-msg">No results found.</p>
+                    </div>
+
+                    <div class="search-grid" id="search-results"></div>
                 </div>
             </div>
 
@@ -890,6 +977,29 @@
 
                     <h3 style="font-size: 14px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 8px; margin-bottom: 16px;">Active Keys</h3>
                     <div class="token-list" id="torbox-keys-list"></div>
+                </div>
+
+                <div class="add-form" style="margin-top: 24px;">
+                    <h2>AIOStreams Config</h2>
+                    <p class="add-form-subtitle">Configure your AIOStreams search integration.</p>
+                    
+                    <div style="display: flex; flex-direction: column; gap: 16px;">
+                        <div class="form-group">
+                            <label class="form-label" for="aiostreams-url-input">AIOStreams URL</label>
+                            <input type="text" id="aiostreams-url-input" placeholder="https://aiostreamsfortheweebs..." class="form-input">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="aiostreams-uuid-input">AIOStreams UUID (Optional)</label>
+                            <input type="text" id="aiostreams-uuid-input" placeholder="UUID or Username" class="form-input">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="aiostreams-password-input">AIOStreams Password (Optional)</label>
+                            <div style="display:flex; gap:12px; align-items: center;">
+                                <input type="password" id="aiostreams-password-input" placeholder="Password" class="form-input" style="flex:1;">
+                                <button id="aiostreams-save-btn" class="btn-submit" style="width: auto; padding: 13px 24px;">Save Config</button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="add-form" style="margin-top: 24px;">
@@ -1138,6 +1248,9 @@
                       document.getElementById('cache-toggle').checked = data.cache_only;
                       document.getElementById('public-api-toggle').checked = data.public_api_enabled;
                       document.getElementById('api-delay-input').value = data.public_api_delay_ms;
+                      document.getElementById('aiostreams-url-input').value = data.aiostreams_url || '';
+                      document.getElementById('aiostreams-uuid-input').value = data.aiostreams_uuid || '';
+                      document.getElementById('aiostreams-password-input').value = data.aiostreams_password || '';
                       
                       const container = document.getElementById('torbox-keys-list');
                       container.innerHTML = '';
@@ -1178,6 +1291,15 @@
           document.getElementById('public-api-toggle')?.addEventListener('change', (e) => setAdminSetting('public_api_enabled', e.target.checked));
           document.getElementById('api-delay-btn')?.addEventListener('click', () => {
               setAdminSetting('public_api_delay_ms', document.getElementById('api-delay-input').value);
+          });
+          
+          document.getElementById('aiostreams-save-btn')?.addEventListener('click', () => {
+              const url = document.getElementById('aiostreams-url-input').value.trim();
+              const uuid = document.getElementById('aiostreams-uuid-input').value.trim();
+              const pwd = document.getElementById('aiostreams-password-input').value;
+              setAdminSetting('aiostreams_url', url);
+              setAdminSetting('aiostreams_uuid', uuid);
+              setAdminSetting('aiostreams_password', pwd);
           });
 
           document.getElementById('torbox-key-add-btn')?.addEventListener('click', () => {
@@ -1296,24 +1418,165 @@
             const val = inputLink.value.trim();
             typeIndicator.className = 'type-indicator';
             if (val.startsWith('magnet:')) {
-                typeIndicator.className = 'type-indicator torrent';
-                typeIndicator.innerHTML = '🌊 Detected: <strong>Torrent (Magnet)</strong>';
+                typeIndicator.classList.add('torrent');
+                typeIndicator.innerHTML = '<span>🌊 Magnet Link Detected</span>';
                 btnSubmit.disabled = false;
-            } else if (val.match(/^https?:\/\//)) {
-                typeIndicator.className = 'type-indicator webdl';
-                typeIndicator.innerHTML = '🌐 Detected: <strong>Web Download</strong>';
+            } else if (val.startsWith('http://') || val.startsWith('https://')) {
+                typeIndicator.classList.add('webdl');
+                typeIndicator.innerHTML = '<span>🌐 Web Download Link Detected</span>';
                 btnSubmit.disabled = false;
-            } else if (val.length > 0) {
-                typeIndicator.className = 'type-indicator unknown';
-                typeIndicator.innerHTML = '⚠️ Unrecognized link format';
-                btnSubmit.disabled = true;
             } else {
-                typeIndicator.className = 'type-indicator unknown';
-                typeIndicator.innerHTML = 'Paste a link to detect type';
+                typeIndicator.classList.add('unknown');
+                typeIndicator.innerHTML = '<span>Paste a link to detect type</span>';
                 btnSubmit.disabled = true;
             }
         });
 
+        // ─── Search Torrents ───
+        const btnSearch = document.getElementById('btn-search');
+        const inputSearch = document.getElementById('input-search');
+        const searchLoading = document.getElementById('search-loading');
+        const searchResults = document.getElementById('search-results');
+        const searchEmpty = document.getElementById('search-empty');
+        const searchEmptyMsg = document.getElementById('search-empty-msg');
+
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024, sizes = ['B', 'KB', 'MB', 'GB', 'TB'], i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        btnSearch.addEventListener('click', () => {
+            const query = inputSearch.value.trim();
+            const searchType = document.getElementById('search-type-select').value;
+            if (!query) return;
+
+            btnSearch.disabled = true;
+            searchLoading.style.display = 'flex';
+            searchResults.style.display = 'none';
+            searchEmpty.style.display = 'none';
+            searchResults.innerHTML = '';
+
+            fetch('/api/search?type=' + encodeURIComponent(searchType) + '&query=' + encodeURIComponent(query), {
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(r => r.json())
+            .then(res => {
+                btnSearch.disabled = false;
+                searchLoading.style.display = 'none';
+
+                if (!res.success) {
+                    searchEmpty.style.display = 'block';
+                    searchEmptyMsg.textContent = res.error || 'Search failed.';
+                    return;
+                }
+
+                const data = res.data;
+                let torrents = [];
+                if (data && data.results) torrents = data.results;
+                else if (Array.isArray(data)) torrents = data; 
+
+                if (!torrents || torrents.length === 0) {
+                    searchEmpty.style.display = 'block';
+                    searchEmptyMsg.textContent = 'No streams found for your query.';
+                    return;
+                }
+
+                searchResults.style.display = 'grid';
+                torrents.forEach(t => {
+                    const card = document.createElement('div');
+                    card.className = 'search-card';
+
+                    let titleStr = t.filename || 'Unknown Title';
+                    let qualityStr = '';
+                    
+                    if (t.parsedFile) {
+                        titleStr = t.parsedFile.title || titleStr;
+                        if (t.parsedFile.year) titleStr += ' (' + t.parsedFile.year + ')';
+                        
+                        const r = t.parsedFile.resolution;
+                        const q = t.parsedFile.quality;
+                        const c = t.parsedFile.encode;
+                        if (r) qualityStr += r + ' ';
+                        if (q) qualityStr += q;
+                        if (c) qualityStr += ' • ' + c;
+                    }
+                    if (!qualityStr) qualityStr = 'Unknown Quality';
+
+                    const isCached = t.cached === true;
+                    const cachedBadge = isCached ? '<span class="badge cached">⚡ Cached</span>' : '<span class="badge">⏳ Not Cached</span>';
+                    const addonBadge = t.addon ? `<span class="badge quality" style="background: rgba(99, 102, 241, 0.15); color: var(--accent-indigo);">🔌 ${escapeHtml(t.addon)}</span>` : '';
+
+                    card.innerHTML = `
+                        <div class="search-card-title" title="${escapeHtml(t.filename || titleStr)}">${escapeHtml(titleStr)}</div>
+                        <div class="search-card-meta">
+                            ${addonBadge}
+                            <span class="badge quality">${escapeHtml(qualityStr)}</span>
+                            ${cachedBadge}
+                            <span class="badge">📦 ${formatBytes(t.size || 0)}</span>
+                            <span class="badge seeds">🌱 ${t.seeders || 0}</span>
+                        </div>
+                        <div style="flex:1;"></div>
+                        <button class="btn-submit" style="width: 100%; padding: 10px; margin-top: 8px;" onclick="addTorrentFromSearch('', '${escapeHtml(t.infoHash || '')}', this)">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px; height:16px; margin-right:8px;"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>
+                            Add to Disbox
+                        </button>
+                    `;
+                    searchResults.appendChild(card);
+                });
+            })
+            .catch(() => {
+                btnSearch.disabled = false;
+                searchLoading.style.display = 'none';
+                searchEmpty.style.display = 'block';
+                searchEmptyMsg.textContent = 'Network error occurred during search.';
+            });
+        });
+
+        inputSearch.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') btnSearch.click();
+        });
+
+        window.addTorrentFromSearch = function(magnet, hash, btn) {
+            const link = magnet || ('magnet:?xt=urn:btih:' + hash);
+            if (!link || link === 'magnet:?xt=urn:btih:') {
+                showToast('Invalid magnet link', 'error');
+                return;
+            }
+
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<div class="spinner-inline"></div> Adding...';
+            btn.disabled = true;
+
+            fetch('/api/add-torrent', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ link: link })
+            })
+            .then(r => r.json())
+            .then(res => {
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+                
+                if (res.success) {
+                    showToast('Torrent added successfully!', 'success');
+                    // Refresh history and switch tab
+                    loadHistory();
+                    document.getElementById('tab-history').click();
+                } else {
+                    showToast(res.error || 'Failed to add torrent', 'error');
+                }
+            })
+            .catch(() => {
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+                showToast('Network error', 'error');
+            });
+        };
+
+        // ─── Add Link Manually ───
         // ─── Submit ───
         btnSubmit.addEventListener('click', () => {
             const link = inputLink.value.trim();
