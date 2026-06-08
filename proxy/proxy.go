@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 	"torbox-discord-bot/torbox"
 
 	_ "modernc.org/sqlite"
@@ -54,9 +55,12 @@ type Server struct {
 	discordClientID     string
 	discordClientSecret string
 	adminUsers          []string
+	
+	apiRateLimits       map[string]time.Time
+	apiRateLimitsMu     sync.Mutex
 }
 
-func NewServer(baseURL, port string, clientPool *torbox.ClientPool, discordClientID, discordClientSecret string, adminUsers []string) (*Server, error) {
+func NewServer(baseURL, port string, clientPool *torbox.ClientPool, discordClientID, discordClientSecret string, adminUsers []string, cacheOnly bool) (*Server, error) {
 	db, err := sql.Open("sqlite", "proxy_links.db")
 	if err != nil {
 		return nil, fmt.Errorf("failed to open SQLite database: %w", err)
@@ -133,7 +137,11 @@ func NewServer(baseURL, port string, clientPool *torbox.ClientPool, discordClien
 		discordClientID:     discordClientID,
 		discordClientSecret: discordClientSecret,
 		adminUsers:          adminUsers,
+		apiRateLimits:       make(map[string]time.Time),
 	}
+
+	// Initialize default settings if missing
+	s.initDefaultSettings(clientPool, cacheOnly)
 
 	// Load existing links from database into memory
 	if err := s.loadFromDB(); err != nil {
@@ -165,6 +173,11 @@ func NewServer(baseURL, port string, clientPool *torbox.ClientPool, discordClien
 		mux.HandleFunc("/api/admin/access/remove", s.handleApiAdminAccessRemove)
 		mux.HandleFunc("/api/admin/user", s.handleApiAdminUserProfile)
 		mux.HandleFunc("/api/remove-download", s.handleApiRemoveDownload)
+		
+		// Admin Settings
+		mux.HandleFunc("/api/admin/settings", s.handleApiAdminSettingsGet)
+		mux.HandleFunc("/api/admin/settings/update", s.handleApiAdminSettingsUpdate)
+		mux.HandleFunc("/api/admin/torbox/keys", s.handleApiAdminTorboxKeys)
 	}
 
 	// Public API (token-authenticated, always registered)

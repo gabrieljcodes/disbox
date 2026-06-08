@@ -19,7 +19,6 @@ type Bot struct {
 	monitor         *Monitor
 	commands        []*discordgo.ApplicationCommand
 	handlers        map[string]func(s *discordgo.Session, i *discordgo.InteractionCreate)
-	cacheOnly       bool
 }
 
 func NewBot(token string, clientPool *torbox.ClientPool, proxyServer *proxy.Server, cacheOnly bool) (*Bot, error) {
@@ -33,7 +32,6 @@ func NewBot(token string, clientPool *torbox.ClientPool, proxyServer *proxy.Serv
 		torboxClientPool: clientPool,
 		proxyServer:     proxyServer,
 		handlers:        make(map[string]func(s *discordgo.Session, i *discordgo.InteractionCreate)),
-		cacheOnly:       cacheOnly,
 	}
 
 	bot.monitor = NewMonitor(s, clientPool, proxyServer)
@@ -271,9 +269,9 @@ func (b *Bot) handleAddTorrent(s *discordgo.Session, i *discordgo.InteractionCre
 	var err error
 	
 	if len(torrentFile) > 0 {
-		resp, clientIndex, err = b.torboxClientPool.AddTorrentFileWithFallback(torrentFile, fileName, b.cacheOnly)
+		resp, clientIndex, err = b.torboxClientPool.AddTorrentFileWithFallback(torrentFile, fileName, b.proxyServer.GetSetting("cache_only", "false") == "true")
 	} else {
-		resp, clientIndex, err = b.torboxClientPool.AddTorrentWithFallback(magnetLink, b.cacheOnly)
+		resp, clientIndex, err = b.torboxClientPool.AddTorrentWithFallback(magnetLink, b.proxyServer.GetSetting("cache_only", "false") == "true")
 	}
 	
 	if err != nil {
@@ -288,7 +286,7 @@ func (b *Bot) handleAddTorrent(s *discordgo.Session, i *discordgo.InteractionCre
 	if !resp.Success {
 		// Verifica se é erro de cache
 		if b.isDownloadNotCachedError(resp) {
-			err = fmt.Errorf("⚡ **Torrent Not Cached**\n\nThis torrent is not available in Torbox's cache.\n\n💡 To download this file, disable cache-only mode in your `.env` configuration and restart the bot:\n\n```\nCACHE_ONLY=false\n```")
+			err = fmt.Errorf("⚡ **Torrent Not Cached**\n\nThis torrent is not available in Torbox's cache.\n\n💡 To download this file, ask an admin to disable cache-only mode in the dashboard.")
 			b.sendAPIResponseAsEmbed(s, i, "Add Torrent", sourceDescription, nil, "", i.Member.User.ID, err, clientIndex)
 		} else if b.isDownloadTooLargeError(resp) {
 			err = fmt.Errorf("📦 File Too Large\n\n%s\n\n💡 Try with a smaller file.", resp.Detail)
@@ -353,8 +351,8 @@ func (b *Bot) handleAddWebDownload(s *discordgo.Session, i *discordgo.Interactio
 	})
 
 	// Check if cache-only mode is enabled
-	if b.cacheOnly {
-		err := fmt.Errorf("🚫 **Web Downloads Disabled**\n\nWeb downloads are not available in **CACHE_ONLY** mode.\n\n💡 To enable web downloads, disable cache-only mode in your `.env` configuration and restart the bot:\n\n```\nCACHE_ONLY=false\n```")
+	if b.proxyServer.GetSetting("cache_only", "false") == "true" {
+		err := fmt.Errorf("🚫 **Web Downloads Disabled**\n\nWeb downloads are not available in **CACHE_ONLY** mode.\n\n💡 To enable web downloads, ask an admin to disable cache-only mode in the dashboard.")
 		b.sendAPIResponseAsEmbed(s, i, "Add Web Download", "", nil, "", i.Member.User.ID, err, -1)
 		return
 	}

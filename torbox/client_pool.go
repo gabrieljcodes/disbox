@@ -70,6 +70,34 @@ func (p *ClientPool) GetClientCount() int {
 	return len(p.clients)
 }
 
+func (p *ClientPool) GetKeys() []string {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	keys := make([]string, len(p.clients))
+	for i, c := range p.clients {
+		keys[i] = c.apiKey
+	}
+	return keys
+}
+
+func (p *ClientPool) UpdateKeys(apiKeys []string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	var validClients []*Client
+	for _, key := range apiKeys {
+		if key != "" {
+			validClients = append(validClients, NewClient(key))
+		}
+	}
+
+	if len(validClients) > 0 {
+		p.clients = validClients
+		p.currentIndex = 0
+		log.Printf("ClientPool updated with %d API key(s)", len(p.clients))
+	}
+}
+
 func (p *ClientPool) AddTorrentWithFallback(magnetLink string, cacheOnly bool) (*APIResponse, int, error) {
 	p.ResetToFirst()
 	

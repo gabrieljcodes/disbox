@@ -468,7 +468,7 @@ func (b *Bot) handleAddTorrentFromSearch(s *discordgo.Session, i *discordgo.Inte
 	// Get magnet link (simplified - in production you'd store this)
 	magnetLink := fmt.Sprintf("magnet:?xt=urn:btih:%s", hash)
 	
-	resp, clientIndex, err := b.torboxClientPool.AddTorrentWithFallback(magnetLink, b.cacheOnly)
+	resp, clientIndex, err := b.torboxClientPool.AddTorrentWithFallback(magnetLink, b.proxyServer.GetSetting("cache_only", "false") == "true")
 	
 	if err != nil {
 		if strings.Contains(err.Error(), "all API keys reached active limit") {

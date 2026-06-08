@@ -220,15 +220,38 @@ func (s *Server) handleApiTokenRevoke(w http.ResponseWriter, r *http.Request) {
 
 // ─── Public API v1 (token-authenticated) ───
 
+func (s *Server) checkV1PublicAccess(w http.ResponseWriter, r *http.Request) (string, bool) {
+	discordID, ok := s.getAPIUser(r)
+	if !ok {
+		jsonError(w, http.StatusUnauthorized, "Invalid or missing API token. Use Authorization: Bearer <token>")
+		return "", false
+	}
+
+	if s.IsAdmin(discordID) {
+		return discordID, true
+	}
+
+	if s.GetSetting("public_api_enabled", "true") != "true" {
+		jsonError(w, http.StatusForbidden, "Public API is currently disabled by administrators")
+		return "", false
+	}
+
+	if !s.CheckRateLimit(discordID) {
+		jsonError(w, http.StatusTooManyRequests, "Rate limit exceeded. Please wait before making another request.")
+		return "", false
+	}
+
+	return discordID, true
+}
+
 func (s *Server) handleV1Me(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
 
-	discordID, ok := s.getAPIUser(r)
+	discordID, ok := s.checkV1PublicAccess(w, r)
 	if !ok {
-		jsonError(w, http.StatusUnauthorized, "Invalid or missing API token. Use Authorization: Bearer <token>")
 		return
 	}
 
@@ -254,9 +277,8 @@ func (s *Server) handleV1AddTorrent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	discordID, ok := s.getAPIUser(r)
+	discordID, ok := s.checkV1PublicAccess(w, r)
 	if !ok {
-		jsonError(w, http.StatusUnauthorized, "Invalid or missing API token")
 		return
 	}
 
@@ -329,9 +351,8 @@ func (s *Server) handleV1AddWebdl(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	discordID, ok := s.getAPIUser(r)
+	discordID, ok := s.checkV1PublicAccess(w, r)
 	if !ok {
-		jsonError(w, http.StatusUnauthorized, "Invalid or missing API token")
 		return
 	}
 
@@ -404,9 +425,8 @@ func (s *Server) handleV1History(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	discordID, ok := s.getAPIUser(r)
+	discordID, ok := s.checkV1PublicAccess(w, r)
 	if !ok {
-		jsonError(w, http.StatusUnauthorized, "Invalid or missing API token")
 		return
 	}
 
@@ -475,9 +495,8 @@ func (s *Server) handleV1RemoveDownload(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	discordID, ok := s.getAPIUser(r)
+	discordID, ok := s.checkV1PublicAccess(w, r)
 	if !ok {
-		jsonError(w, http.StatusUnauthorized, "Invalid or missing API token")
 		return
 	}
 

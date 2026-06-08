@@ -833,6 +833,66 @@
                 </div>
 
                 <div class="add-form" style="margin-top: 24px;">
+                    <h2>Global Settings</h2>
+                    <p class="add-form-subtitle">Configure bot behavior and public API settings.</p>
+                    
+                    <div style="display: flex; flex-direction: column; gap: 16px; margin-bottom: 24px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; background: var(--bg-input); padding: 16px; border-radius: var(--radius); border: 1px solid var(--border-subtle);">
+                            <div>
+                                <div style="font-weight: 600; margin-bottom: 4px;">Cache Only Mode</div>
+                                <div style="font-size: 13px; color: var(--text-secondary);">If enabled, only cached torrents are downloaded. Web downloads are disabled.</div>
+                            </div>
+                            <label class="toggle-label">
+                                <span class="toggle-switch">
+                                    <input type="checkbox" id="cache-toggle">
+                                    <span class="toggle-slider"></span>
+                                </span>
+                            </label>
+                        </div>
+                        
+                        <div style="display: flex; justify-content: space-between; align-items: center; background: var(--bg-input); padding: 16px; border-radius: var(--radius); border: 1px solid var(--border-subtle);">
+                            <div>
+                                <div style="font-weight: 600; margin-bottom: 4px;">Public API Access</div>
+                                <div style="font-size: 13px; color: var(--text-secondary);">Allow regular users to use the public REST API endpoints.</div>
+                            </div>
+                            <label class="toggle-label">
+                                <span class="toggle-switch">
+                                    <input type="checkbox" id="public-api-toggle">
+                                    <span class="toggle-slider"></span>
+                                </span>
+                            </label>
+                        </div>
+
+                        <div class="form-group" style="margin-top: 8px;">
+                            <label class="form-label" for="api-delay-input">Public API Rate Limit Delay (ms)</label>
+                            <div style="display:flex; gap:12px; align-items: center;">
+                                <input type="number" id="api-delay-input" placeholder="e.g. 5000" class="form-input" style="flex:1;">
+                                <button id="api-delay-btn" class="btn-submit" style="width: auto; padding: 13px 24px;">Save</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="add-form" style="margin-top: 24px;">
+                    <h2>Torbox API Keys</h2>
+                    <p class="add-form-subtitle">Manage Torbox accounts used for downloading.</p>
+                    
+                    <div class="form-group" style="margin-bottom: 24px;">
+                        <label class="form-label" for="torbox-key-input">Add New Torbox Key</label>
+                        <div style="display:flex; gap:12px; align-items: center;">
+                            <input type="text" id="torbox-key-input" placeholder="Paste API Key here" class="form-input" style="flex:1;">
+                            <button id="torbox-key-add-btn" class="btn-submit" style="width: auto; padding: 13px 24px;">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px; height:16px;"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                                Add
+                            </button>
+                        </div>
+                    </div>
+
+                    <h3 style="font-size: 14px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 8px; margin-bottom: 16px;">Active Keys</h3>
+                    <div class="token-list" id="torbox-keys-list"></div>
+                </div>
+
+                <div class="add-form" style="margin-top: 24px;">
                     <h2>Global History</h2>
                     <p class="add-form-subtitle">Recent downloads across all users.</p>
                     
@@ -889,6 +949,7 @@
                     document.getElementById('tab-admin').style.display = '';
                     loadAdminHistory();
                     loadAccessList();
+                    loadAdminSettings();
                 }
                 loadHistory();
             })
@@ -1065,6 +1126,93 @@
                   if (wlToggle) wlToggle.checked = false;
               }
           });
+
+          // ─── Load Admin Settings ───
+          function loadAdminSettings() {
+              fetch('/api/admin/settings')
+                  .then(r => r.json())
+                  .then(res => {
+                      if (!res.success) return;
+                      const data = res.data;
+                      
+                      document.getElementById('cache-toggle').checked = data.cache_only;
+                      document.getElementById('public-api-toggle').checked = data.public_api_enabled;
+                      document.getElementById('api-delay-input').value = data.public_api_delay_ms;
+                      
+                      const container = document.getElementById('torbox-keys-list');
+                      container.innerHTML = '';
+                      if (data.torbox_keys && data.torbox_keys.length > 0) {
+                          data.torbox_keys.forEach((k, index) => {
+                              const el = document.createElement('div');
+                              el.className = 'token-card';
+                              el.innerHTML = `
+                                  <div class="token-info">
+                                      <div class="token-name">Key #${index + 1}</div>
+                                      <div class="token-value">${escapeHtml(k)}</div>
+                                  </div>
+                                  <div class="token-actions">
+                                      <button class="btn-revoke" onclick="removeTorboxKey(${index})">Remove</button>
+                                  </div>
+                              `;
+                              container.appendChild(el);
+                          });
+                      } else {
+                          container.innerHTML = '<div style="color:var(--accent-rose); font-size:13px; font-weight:600;">No API keys configured!</div>';
+                      }
+                  })
+                  .catch(console.error);
+          }
+
+          function setAdminSetting(key, value) {
+              fetch('/api/admin/settings/update', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ key, value: String(value) })
+              }).then(r => r.json()).then(res => {
+                  if (res.success) showToast('Setting updated', 'success');
+                  else showToast(res.error || 'Failed to update setting', 'error');
+              });
+          }
+
+          document.getElementById('cache-toggle')?.addEventListener('change', (e) => setAdminSetting('cache_only', e.target.checked));
+          document.getElementById('public-api-toggle')?.addEventListener('change', (e) => setAdminSetting('public_api_enabled', e.target.checked));
+          document.getElementById('api-delay-btn')?.addEventListener('click', () => {
+              setAdminSetting('public_api_delay_ms', document.getElementById('api-delay-input').value);
+          });
+
+          document.getElementById('torbox-key-add-btn')?.addEventListener('click', () => {
+              const key = document.getElementById('torbox-key-input').value.trim();
+              if (!key) return;
+              fetch('/api/admin/torbox/keys', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ action: 'add', key: key })
+              }).then(r => r.json()).then(res => {
+                  if (res.success) {
+                      document.getElementById('torbox-key-input').value = '';
+                      showToast('Torbox key added', 'success');
+                      loadAdminSettings();
+                  } else {
+                      showToast(res.error || 'Failed to add key', 'error');
+                  }
+              });
+          });
+
+          window.removeTorboxKey = function(index) {
+              if (!confirm('Are you sure you want to remove this Torbox API key?')) return;
+              fetch('/api/admin/torbox/keys', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ action: 'remove', index: index })
+              }).then(r => r.json()).then(res => {
+                  if (res.success) {
+                      showToast('Torbox key removed', 'success');
+                      loadAdminSettings();
+                  } else {
+                      showToast(res.error || 'Failed to remove key', 'error');
+                  }
+              });
+          };
 
 
         // ─── Load Admin History ───
