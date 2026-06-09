@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.FileName}} - Disbox Download</title>
+    
+    <!-- Open Graph Meta Tags -->
+    <meta property="og:title" content="{{.FileName}}">
+    <meta property="og:description" content="Type: {{.FileType}} • Size: {{.FileSize}}">
+    <meta property="og:image" content="{{.BaseURL}}/favicon.ico">
+    <meta property="og:url" content="{{.DownloadURL}}">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Disbox">
+    
+    <!-- Twitter Card Meta Tags -->
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="{{.FileName}}">
+    <meta name="twitter:description" content="Type: {{.FileType}} • Size: {{.FileSize}}">
+    <meta name="twitter:image" content="{{.BaseURL}}/favicon.ico">
+    
+    <!-- Theme Color for Discord Embeds -->
+    <meta name="theme-color" content="#5865F2">
+    
+    <!-- Fallback Content / Redirect -->
+    <style>
+        body {
+            font-family: 'Inter', system-ui, sans-serif;
+            background-color: #1a1b1e;
+            color: #ffffff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            text-align: center;
+        }
+        .container {
+            max-width: 500px;
+            padding: 2rem;
+            background-color: #25262b;
+            border-radius: 12px;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.2);
+        }
+        .title {
+            font-size: 1.25rem;
+            font-weight: bold;
+            margin-bottom: 1rem;
+            word-break: break-word;
+        }
+        .meta {
+            color: #a6a7ab;
+            margin-bottom: 2rem;
+        }
+        .btn {
+            display: inline-block;
+            background-color: #5865F2;
+            color: white;
+            text-decoration: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            font-weight: 600;
+            transition: background-color 0.2s;
+        }
+        .btn:hover {
+            background-color: #4752C4;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="title">{{.FileName}}</div>
+        <div class="meta">Type: {{.FileType}} | Size: {{.FileSize}}</div>
+        <a href="{{.DownloadURL}}" class="btn">Download File</a>
+    </div>
+</body>
+</html>

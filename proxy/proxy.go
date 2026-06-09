@@ -33,6 +33,9 @@ var readerFS embed.FS
 //go:embed dashboard.html
 var dashboardFS embed.FS
 
+//go:embed preview.html
+var previewFS embed.FS
+
 //go:embed favicon.ico
 var faviconBytes []byte
 
@@ -40,6 +43,7 @@ var viewerTemplate = template.Must(template.ParseFS(viewerFS, "viewer.html"))
 var browserTemplate = template.Must(template.ParseFS(browserFS, "browser.html"))
 var readerTemplate = template.Must(template.ParseFS(readerFS, "reader.html"))
 var dashboardTemplate = template.Must(template.ParseFS(dashboardFS, "dashboard.html"))
+var previewTemplate = template.Must(template.ParseFS(previewFS, "preview.html"))
 
 type DownloadEntry struct {
 	Type        string // "torrent" or "webdl"
@@ -328,6 +332,11 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if isSocialCrawler(r.UserAgent()) {
+		s.handlePreview(w, r, entry, token, fileID)
+		return
+	}
+
 	// Request a fresh download URL from TorBox
 	client := s.clientPool.GetClient(entry.ClientIndex)
 	var downloadURL string
@@ -384,6 +393,94 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Printf("Successfully streamed %d bytes for %s #%d", written, entry.Type, entry.ID)
+}
+
+func isSocialCrawler(userAgent string) bool {
+	userAgent = strings.ToLower(userAgent)
+	bots := []string{
+		"discordbot",
+		"slackbot",
+		"twitterbot",
+		"facebookexternalhit",
+		"telegrambot",
+		"whatsapp",
+		"vkshare",
+		"skypeuripreview",
+		"linkedinbot",
+		"embedly",
+		"pinterest",
+	}
+	for _, bot := range bots {
+		if strings.Contains(userAgent, bot) {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Server) handlePreview(w http.ResponseWriter, r *http.Request, entry *DownloadEntry, token string, fileID int) {
+	client := s.clientPool.GetClient(entry.ClientIndex)
+
+	var fileName string
+	var fileSize int64
+	var fileType string = "File"
+
+	if entry.Type == "torrent" {
+		info, err := client.GetTorrentInfo(entry.ID)
+		if err == nil && info != nil {
+			if fileID >= 0 {
+				for _, f := range info.Files {
+					if f.ID == fileID {
+						fileName = f.Name
+						fileSize = f.Size
+						break
+					}
+				}
+			}
+			if fileName == "" {
+				fileName = info.Name
+				fileSize = info.Size
+				fileType = "Torrent Archive"
+			}
+		}
+	} else if entry.Type == "webdl" {
+		info, err := client.GetWebDownloadInfo(entry.ID)
+		if err == nil && info != nil {
+			if fileID >= 0 {
+				for _, f := range info.Files {
+					if f.ID == fileID {
+						fileName = f.Name
+						fileSize = f.Size
+						break
+					}
+				}
+			}
+			if fileName == "" {
+				fileName = info.Name
+				fileSize = info.Size
+				fileType = "Web Download"
+			}
+		}
+	}
+
+	if fileName == "" {
+		fileName = "Disbox File"
+		fileSize = 0
+	}
+
+	previewData := PreviewData{
+		FileName:    fileName,
+		FileType:    fileType,
+		FileSize:    formatBytes(fileSize),
+		BaseURL:     s.baseURL,
+		DownloadURL: fmt.Sprintf("%s/dl/%s", s.baseURL, token),
+	}
+	if fileID >= 0 {
+		previewData.DownloadURL += fmt.Sprintf("?file_id=%d", fileID)
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	previewTemplate.Execute(w, previewData)
 }
 
 // ─── Viewer (existing media player) ───
@@ -555,6 +652,14 @@ type BrowseData struct {
 	DownloadURL  string
 	Files        []BrowseFile
 	ErrorMessage string
+}
+
+type PreviewData struct {
+	FileName    string
+	FileType    string
+	FileSize    string
+	BaseURL     string
+	DownloadURL string
 }
 
 func (s *Server) handleBrowse(w http.ResponseWriter, r *http.Request) {
