@@ -71,6 +71,12 @@ func (s *Server) initDefaultSettings(clientPool *torbox.ClientPool, cacheOnly bo
 	}
 
 	// Initialize aiostreams settings
+	// Initialize search settings
+	err = s.db.QueryRow("SELECT value FROM access_settings WHERE key = 'search_enabled'").Scan(&dummy)
+	if err == sql.ErrNoRows {
+		s.SetSetting("search_enabled", "true")
+	}
+
 	err = s.db.QueryRow("SELECT value FROM access_settings WHERE key = 'aiostreams_url'").Scan(&dummy)
 	if err == sql.ErrNoRows {
 		s.SetSetting("aiostreams_url", "https://aiostreamsfortheweebs.midnightignite.me")
@@ -82,6 +88,12 @@ func (s *Server) initDefaultSettings(clientPool *torbox.ClientPool, cacheOnly bo
 	err = s.db.QueryRow("SELECT value FROM access_settings WHERE key = 'aiostreams_password'").Scan(&dummy)
 	if err == sql.ErrNoRows {
 		s.SetSetting("aiostreams_password", "")
+	}
+
+	// Initialize tmdb settings
+	err = s.db.QueryRow("SELECT value FROM access_settings WHERE key = 'tmdb_api_key'").Scan(&dummy)
+	if err == sql.ErrNoRows {
+		s.SetSetting("tmdb_api_key", "")
 	}
 }
 

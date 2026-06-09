@@ -59,6 +59,21 @@ Removes a download from the Disbox proxy and deletes it from TorBox.
 `GET /v1/history`
 Returns the user's download history and active proxy links.
 
+#### Search TMDB
+`GET /v1/tmdb/search?query=Matrix&type=movie`
+Searches TMDB for movies or series. Returns standard metadata. 
+*Note: This endpoint may return HTTP 403 if the administrator has disabled the Search Torrents feature.*
+
+#### Search AniList (Anime)
+`GET /v1/anilist/search?query=Naruto`
+Searches AniList for anime by title. Returns standard metadata. 
+*Note: This endpoint may return HTTP 403 if the administrator has disabled the Search Torrents feature.*
+
+#### Search AIOStreams
+`GET /v1/search?query=tmdb:27205&type=movie`
+Searches for torrents on AIOStreams. For series, the query format must include season and episode (e.g. `tmdb:2131:1:3`). TMDB IDs are automatically resolved to IMDB IDs in the background.
+*Note: This endpoint may return HTTP 403 if the administrator has disabled the Search Torrents feature.*
+
 ---
 
 ### Admin Endpoints (Access Control)

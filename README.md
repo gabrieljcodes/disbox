@@ -33,8 +33,9 @@ A Discord bot that integrates with the TorBox API, allowing you to manage torren
   - Add torrents and web downloads from a browser
   - Browse download history
   - Links open a built-in file browser with media viewer
-  - **Admin Dashboard**: Moderation tools, global download history, and interactive user profiles
+  - **Admin Dashboard**: Moderation tools, global download history, feature toggles (e.g. enable/disable Search Torrents), and interactive user profiles
   - **Access Control**: Built-in Whitelist/Blacklist toggle system to restrict bot access to specific users
+  - **Settings**: Toggle public API access, set rate limits, and configure AIOStreams search
 
 - **Proxy & File Browser**
   - Persistent download links that survive server restarts
@@ -102,6 +103,26 @@ go run main.go
 | `/search-hoster` | Search for information about a specific hoster |
 | `/search-media` | Search for movies, TV shows, or anime |
 | `/search-torrents` | Search for torrents by name |
+
+## 🐳 Docker Deployment
+
+The easiest way to run Disbox is using Docker and Docker Compose. This ensures a consistent environment and easy updates.
+
+1. Ensure you have Docker and Docker Compose installed.
+2. Clone this repository or download the source files.
+3. Rename `.env.example` to `.env` and fill in your configuration values.
+4. Run the following command in the terminal to start the bot in the background:
+
+```bash
+docker-compose up -d
+```
+
+The bot will automatically build the image on the first run. The SQLite database will be persisted in the `data/` folder created in the root directory.
+
+To stop the bot, run:
+```bash
+docker-compose down
+```
 
 ## ⚙️ Advanced Features
 

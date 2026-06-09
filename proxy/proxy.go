@@ -33,6 +33,9 @@ var readerFS embed.FS
 //go:embed dashboard.html
 var dashboardFS embed.FS
 
+//go:embed favicon.ico
+var faviconBytes []byte
+
 var viewerTemplate = template.Must(template.ParseFS(viewerFS, "viewer.html"))
 var browserTemplate = template.Must(template.ParseFS(browserFS, "browser.html"))
 var readerTemplate = template.Must(template.ParseFS(readerFS, "reader.html"))
@@ -154,6 +157,10 @@ func NewServer(baseURL, port string, clientPool *torbox.ClientPool, discordClien
 	mux.HandleFunc("/view/", s.handleView)
 	mux.HandleFunc("/browse/", s.handleBrowse)
 	mux.HandleFunc("/read/", s.handleRead)
+	mux.HandleFunc("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/x-icon")
+		w.Write(faviconBytes)
+	})
 
 	if discordClientID != "" && discordClientSecret != "" {
 		mux.HandleFunc("/dashboard", s.handleDashboard)
@@ -165,6 +172,8 @@ func NewServer(baseURL, port string, clientPool *torbox.ClientPool, discordClien
 		mux.HandleFunc("/api/add-torrent", s.handleApiAddTorrent)
 		mux.HandleFunc("/api/add-webdl", s.handleApiAddWebdl)
 		mux.HandleFunc("/api/search", s.handleApiSearch)
+		mux.HandleFunc("/api/tmdb/search", s.handleApiTMDBSearch)
+		mux.HandleFunc("/api/anilist/search", s.handleApiAniListSearch)
 		mux.HandleFunc("/api/tokens", s.handleApiTokens)
 		mux.HandleFunc("/api/tokens/revoke", s.handleApiTokenRevoke)
 		mux.HandleFunc("/api/admin/history", s.handleApiAdminHistory)
@@ -187,6 +196,9 @@ func NewServer(baseURL, port string, clientPool *torbox.ClientPool, discordClien
 	mux.HandleFunc("/v1/add-webdl", s.handleV1AddWebdl)
 	mux.HandleFunc("/v1/remove-download", s.handleV1RemoveDownload)
 	mux.HandleFunc("/v1/history", s.handleV1History)
+	mux.HandleFunc("/v1/search", s.handleV1Search)
+	mux.HandleFunc("/v1/tmdb/search", s.handleV1TMDBSearch)
+	mux.HandleFunc("/v1/anilist/search", s.handleV1AniListSearch)
 	
 	// Public API Admin Routes
 	mux.HandleFunc("/v1/admin/access", s.handleV1AdminAccessGet)

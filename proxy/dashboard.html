@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Disbox — Dashboard</title>
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
     <meta name="description" content="Manage your downloads with Disbox Dashboard">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
@@ -598,6 +599,61 @@
         }
 
         /* ─── Search Cards ─── */
+        .tmdb-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+            gap: 20px;
+            margin-top: 24px;
+        }
+        .tmdb-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            cursor: pointer;
+            transition: var(--transition);
+        }
+        .tmdb-card:hover {
+            border-color: var(--accent-indigo);
+            transform: translateY(-4px);
+            box-shadow: 0 12px 30px rgba(99, 102, 241, 0.2);
+        }
+        .tmdb-poster {
+            width: 100%;
+            aspect-ratio: 2/3;
+            object-fit: cover;
+            background: rgba(0,0,0,0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-muted);
+            font-size: 12px;
+        }
+        .tmdb-info {
+            padding: 12px;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        .tmdb-title {
+            font-weight: 700;
+            font-size: 14px;
+            color: var(--text-primary);
+            line-height: 1.3;
+            margin-bottom: 4px;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+        .tmdb-year {
+            font-size: 12px;
+            color: var(--text-secondary);
+            font-weight: 600;
+        }
+
         .search-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
@@ -785,15 +841,16 @@
             <!-- Search Tab -->
             <div class="tab-panel" id="panel-search">
                 <div class="add-form" style="max-width: 100%;">
-                    <h2>Search Streams</h2>
-                    <p class="add-form-subtitle">Search by IMDB or TMDB ID (e.g. tt0080684, tmdb:12345)</p>
+                    <h2>Search Torrents</h2>
+                    <p class="add-form-subtitle">Search by Movie, Series, or Anime name</p>
 
                     <div class="form-group" style="display:flex; gap:12px; max-width: 600px;">
                         <select id="search-type-select" class="form-input custom-select" style="width: 120px;">
                             <option value="movie">Movie</option>
                             <option value="series">Series</option>
+                            <option value="anime">Anime</option>
                         </select>
-                        <input type="text" class="form-input" id="input-search" placeholder="Type IMDB/TMDB ID here..." autocomplete="off" spellcheck="false" style="flex:1;">
+                        <input type="text" class="form-input" id="input-search" placeholder="Type movie, series, or anime name here..." autocomplete="off" spellcheck="false" style="flex:1;">
                         <button class="btn-submit" id="btn-search" style="width: auto; padding: 13px 24px;">
                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px; height:18px; margin-right:8px;"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                             Search
@@ -802,7 +859,7 @@
 
                     <div class="loading-state" id="search-loading" style="display:none; padding: 40px;">
                         <div class="spinner"></div>
-                        <span>Searching AIOStreams...</span>
+                        <span>Searching...</span>
                     </div>
 
                     <div class="empty-state" id="search-empty" style="display:none; padding: 40px;">
@@ -810,7 +867,44 @@
                         <p id="search-empty-msg">No results found.</p>
                     </div>
 
-                    <div class="search-grid" id="search-results"></div>
+                    <div class="tmdb-grid" id="tmdb-results"></div>
+                </div>
+            </div>
+
+            <!-- Torrent Modal -->
+            <div class="modal" id="torrent-modal">
+                <div class="modal-content" style="max-width: 800px; max-height: 90vh; display: flex; flex-direction: column;">
+                    <button class="btn-close" onclick="document.getElementById('torrent-modal').style.display='none'">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                    </button>
+                    <div style="padding: 24px; border-bottom: 1px solid var(--border-subtle);">
+                        <h2 id="torrent-modal-title" style="font-size: 20px; font-weight: 700;">Streams</h2>
+                    </div>
+                    <div style="padding: 24px; overflow-y: auto; flex: 1;">
+                        <div id="series-form-container" style="display:none; flex-direction:column; gap:16px; margin-bottom:24px; background:var(--bg-input); padding:20px; border-radius:var(--radius); border:1px solid var(--border-subtle);">
+                            <div style="font-weight:600; font-size:15px;">Select Season & Episode</div>
+                            <div style="display:flex; gap:16px;">
+                                <div style="flex:1;">
+                                    <label class="form-label" for="input-season">Season</label>
+                                    <input type="number" id="input-season" class="form-input" placeholder="e.g. 1" min="1" value="1">
+                                </div>
+                                <div style="flex:1;">
+                                    <label class="form-label" for="input-episode">Episode</label>
+                                    <input type="number" id="input-episode" class="form-input" placeholder="e.g. 1" min="1" value="1">
+                                </div>
+                            </div>
+                            <button class="btn-submit" id="btn-series-search" style="width:100%; padding:12px;">Search Streams</button>
+                        </div>
+                        <div class="loading-state" id="torrent-loading" style="display:none;">
+                            <div class="spinner"></div>
+                            <span>Searching AIOStreams...</span>
+                        </div>
+                        <div class="empty-state" id="torrent-empty" style="display:none;">
+                            <div class="empty-state-icon">🔍</div>
+                            <p id="torrent-empty-msg">No streams found.</p>
+                        </div>
+                        <div class="search-grid" id="search-results" style="margin-top:0;"></div>
+                    </div>
                 </div>
             </div>
 
@@ -937,14 +1031,27 @@
                             </label>
                         </div>
                         
-                        <div style="display: flex; justify-content: space-between; align-items: center; background: var(--bg-input); padding: 16px; border-radius: var(--radius); border: 1px solid var(--border-subtle);">
-                            <div>
-                                <div style="font-weight: 600; margin-bottom: 4px;">Public API Access</div>
-                                <div style="font-size: 13px; color: var(--text-secondary);">Allow regular users to use the public REST API endpoints.</div>
-                            </div>
-                            <label class="toggle-label">
+                        <div class="form-group" style="margin-top: 16px;">
+                            <label class="toggle-container">
+                                <div class="toggle-text">
+                                    <div class="toggle-title">Enable Public API</div>
+                                    <div class="toggle-desc">Allow public use of API without session</div>
+                                </div>
                                 <span class="toggle-switch">
                                     <input type="checkbox" id="public-api-toggle">
+                                    <span class="toggle-slider"></span>
+                                </span>
+                            </label>
+                        </div>
+
+                        <div class="form-group" style="margin-top: 16px;">
+                            <label class="toggle-container">
+                                <div class="toggle-text">
+                                    <div class="toggle-title">Enable Search Torrents</div>
+                                    <div class="toggle-desc">Allow users to search TMDB and AIOStreams</div>
+                                </div>
+                                <span class="toggle-switch">
+                                    <input type="checkbox" id="search-enabled-toggle">
                                     <span class="toggle-slider"></span>
                                 </span>
                             </label>
@@ -994,8 +1101,12 @@
                         </div>
                         <div class="form-group">
                             <label class="form-label" for="aiostreams-password-input">AIOStreams Password (Optional)</label>
+                            <input type="password" id="aiostreams-password-input" placeholder="Password" class="form-input">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="tmdb-api-key-input">TMDB API Read Access Token</label>
                             <div style="display:flex; gap:12px; align-items: center;">
-                                <input type="password" id="aiostreams-password-input" placeholder="Password" class="form-input" style="flex:1;">
+                                <input type="password" id="tmdb-api-key-input" placeholder="TMDB Token" class="form-input" style="flex:1;">
                                 <button id="aiostreams-save-btn" class="btn-submit" style="width: auto; padding: 13px 24px;">Save Config</button>
                             </div>
                         </div>
@@ -1060,6 +1171,12 @@
                     loadAdminHistory();
                     loadAccessList();
                     loadAdminSettings();
+                }
+                if (!user.search_enabled) {
+                    document.getElementById('tab-search').style.display = 'none';
+                    if (document.getElementById('tab-search').classList.contains('active')) {
+                        document.getElementById('tab-history').click();
+                    }
                 }
                 loadHistory();
             })
@@ -1247,10 +1364,12 @@
                       
                       document.getElementById('cache-toggle').checked = data.cache_only;
                       document.getElementById('public-api-toggle').checked = data.public_api_enabled;
+                      document.getElementById('search-enabled-toggle').checked = data.search_enabled;
                       document.getElementById('api-delay-input').value = data.public_api_delay_ms;
                       document.getElementById('aiostreams-url-input').value = data.aiostreams_url || '';
                       document.getElementById('aiostreams-uuid-input').value = data.aiostreams_uuid || '';
                       document.getElementById('aiostreams-password-input').value = data.aiostreams_password || '';
+                      document.getElementById('tmdb-api-key-input').value = data.tmdb_api_key || '';
                       
                       const container = document.getElementById('torbox-keys-list');
                       container.innerHTML = '';
@@ -1289,6 +1408,14 @@
 
           document.getElementById('cache-toggle')?.addEventListener('change', (e) => setAdminSetting('cache_only', e.target.checked));
           document.getElementById('public-api-toggle')?.addEventListener('change', (e) => setAdminSetting('public_api_enabled', e.target.checked));
+          document.getElementById('search-enabled-toggle')?.addEventListener('change', (e) => {
+              setAdminSetting('search_enabled', e.target.checked);
+              // Optimistically hide/show tab
+              document.getElementById('tab-search').style.display = e.target.checked ? '' : 'none';
+              if (!e.target.checked && document.getElementById('tab-search').classList.contains('active')) {
+                  document.getElementById('tab-history').click();
+              }
+          });
           document.getElementById('api-delay-btn')?.addEventListener('click', () => {
               setAdminSetting('public_api_delay_ms', document.getElementById('api-delay-input').value);
           });
@@ -1297,9 +1424,11 @@
               const url = document.getElementById('aiostreams-url-input').value.trim();
               const uuid = document.getElementById('aiostreams-uuid-input').value.trim();
               const pwd = document.getElementById('aiostreams-password-input').value;
+              const tmdb = document.getElementById('tmdb-api-key-input').value.trim();
               setAdminSetting('aiostreams_url', url);
               setAdminSetting('aiostreams_uuid', uuid);
               setAdminSetting('aiostreams_password', pwd);
+              setAdminSetting('tmdb_api_key', tmdb);
           });
 
           document.getElementById('torbox-key-add-btn')?.addEventListener('click', () => {
@@ -1453,15 +1582,12 @@
 
             btnSearch.disabled = true;
             searchLoading.style.display = 'flex';
-            searchResults.style.display = 'none';
+            document.getElementById('tmdb-results').style.display = 'none';
             searchEmpty.style.display = 'none';
-            searchResults.innerHTML = '';
+            document.getElementById('tmdb-results').innerHTML = '';
 
-            fetch('/api/search?type=' + encodeURIComponent(searchType) + '&query=' + encodeURIComponent(query), {
-                headers: {
-                    'Content-Type': 'application/json'
-                }
-            })
+            const endpoint = searchType === 'anime' ? '/api/anilist/search' : '/api/tmdb/search';
+            fetch(endpoint + '?type=' + encodeURIComponent(searchType) + '&query=' + encodeURIComponent(query))
             .then(r => r.json())
             .then(res => {
                 btnSearch.disabled = false;
@@ -1473,18 +1599,108 @@
                     return;
                 }
 
+                const results = res.data;
+                if (!results || results.length === 0) {
+                    searchEmpty.style.display = 'block';
+                    searchEmptyMsg.textContent = 'No movies or series found.';
+                    return;
+                }
+
+                document.getElementById('tmdb-results').style.display = 'grid';
+                results.forEach(item => {
+                    const card = document.createElement('div');
+                    card.className = 'tmdb-card';
+                    const prefix = item.type === 'anime' ? 'anilist:' : 'tmdb:';
+                    card.onclick = () => searchStreams(prefix + item.id, searchType, item.title);
+
+                    const posterHtml = item.poster_path
+                        ? (item.type === 'anime' ? `<img src="${item.poster_path}" class="tmdb-poster" alt="Poster">` : `<img src="https://image.tmdb.org/t/p/w500${item.poster_path}" class="tmdb-poster" alt="Poster">`)
+                        : `<div class="tmdb-poster">No Poster</div>`;
+
+                    card.innerHTML = `
+                        ${posterHtml}
+                        <div class="tmdb-info">
+                            <div class="tmdb-title" title="${escapeHtml(item.title)}">${escapeHtml(item.title)}</div>
+                            ${item.year ? `<div class="tmdb-year">${item.year}</div>` : ''}
+                        </div>
+                    `;
+                    document.getElementById('tmdb-results').appendChild(card);
+                });
+            })
+            .catch(() => {
+                btnSearch.disabled = false;
+                searchLoading.style.display = 'none';
+                searchEmpty.style.display = 'block';
+                searchEmptyMsg.textContent = 'Network error occurred during search.';
+            });
+        });
+
+        window.searchStreams = function(id, searchType, title) {
+            const modal = document.getElementById('torrent-modal');
+            const torrentLoading = document.getElementById('torrent-loading');
+            const torrentEmpty = document.getElementById('torrent-empty');
+            const torrentResults = document.getElementById('search-results');
+            const titleEl = document.getElementById('torrent-modal-title');
+            const formContainer = document.getElementById('series-form-container');
+
+            modal.style.display = 'flex';
+            titleEl.textContent = 'Streams for ' + title;
+            torrentLoading.style.display = 'none';
+            torrentResults.style.display = 'none';
+            torrentEmpty.style.display = 'none';
+            torrentResults.innerHTML = '';
+
+            if (searchType === 'series' || searchType === 'tv' || searchType === 'anime') {
+                formContainer.style.display = 'flex';
+                document.getElementById('btn-series-search').onclick = () => {
+                    const season = document.getElementById('input-season').value;
+                    const episode = document.getElementById('input-episode').value;
+                    if (!season || !episode) {
+                        showToast('Please enter both Season and Episode', 'error');
+                        return;
+                    }
+                    formContainer.style.display = 'none';
+                    executeAioStreamsSearch(id + ':' + season + ':' + episode, searchType, title);
+                };
+            } else {
+                formContainer.style.display = 'none';
+                executeAioStreamsSearch(id, searchType, title);
+            }
+        };
+
+        function executeAioStreamsSearch(fullId, searchType, title) {
+            const torrentLoading = document.getElementById('torrent-loading');
+            const torrentEmpty = document.getElementById('torrent-empty');
+            const torrentEmptyMsg = document.getElementById('torrent-empty-msg');
+            const torrentResults = document.getElementById('search-results');
+
+            torrentLoading.style.display = 'flex';
+
+            fetch('/api/search?type=' + encodeURIComponent(searchType) + '&query=' + encodeURIComponent(fullId), {
+                headers: { 'Content-Type': 'application/json' }
+            })
+            .then(r => r.json())
+            .then(res => {
+                torrentLoading.style.display = 'none';
+
+                if (!res.success) {
+                    torrentEmpty.style.display = 'block';
+                    torrentEmptyMsg.textContent = res.error || 'Search failed.';
+                    return;
+                }
+
                 const data = res.data;
                 let torrents = [];
                 if (data && data.results) torrents = data.results;
                 else if (Array.isArray(data)) torrents = data; 
 
                 if (!torrents || torrents.length === 0) {
-                    searchEmpty.style.display = 'block';
-                    searchEmptyMsg.textContent = 'No streams found for your query.';
+                    torrentEmpty.style.display = 'block';
+                    torrentEmptyMsg.textContent = 'No streams found.';
                     return;
                 }
 
-                searchResults.style.display = 'grid';
+                torrentResults.style.display = 'grid';
                 torrents.forEach(t => {
                     const card = document.createElement('div');
                     card.className = 'search-card';
@@ -1524,16 +1740,15 @@
                             Add to Disbox
                         </button>
                     `;
-                    searchResults.appendChild(card);
+                    torrentResults.appendChild(card);
                 });
             })
             .catch(() => {
-                btnSearch.disabled = false;
-                searchLoading.style.display = 'none';
-                searchEmpty.style.display = 'block';
-                searchEmptyMsg.textContent = 'Network error occurred during search.';
+                torrentLoading.style.display = 'none';
+                torrentEmpty.style.display = 'block';
+                torrentEmptyMsg.textContent = 'Network error occurred during stream search.';
             });
-        });
+        };
 
         inputSearch.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') btnSearch.click();

@@ -31,11 +31,13 @@ func (s *Server) handleApiAdminSettingsGet(w http.ResponseWriter, r *http.Reques
 	jsonOK(w, map[string]interface{}{
 		"cache_only":          s.GetSetting("cache_only", "false") == "true",
 		"public_api_enabled":  s.GetSetting("public_api_enabled", "true") == "true",
+		"search_enabled":      s.GetSetting("search_enabled", "true") == "true",
 		"public_api_delay_ms": s.GetSetting("public_api_delay_ms", "0"),
 		"torbox_keys":         maskedKeys,
 		"aiostreams_url":      s.GetSetting("aiostreams_url", "https://aiostreamsfortheweebs.midnightignite.me"),
 		"aiostreams_uuid":     s.GetSetting("aiostreams_uuid", ""),
 		"aiostreams_password": s.GetSetting("aiostreams_password", ""),
+		"tmdb_api_key":        s.GetSetting("tmdb_api_key", ""),
 	})
 }
 
@@ -64,10 +66,12 @@ func (s *Server) handleApiAdminSettingsUpdate(w http.ResponseWriter, r *http.Req
 	allowedKeys := map[string]bool{
 		"cache_only":          true,
 		"public_api_enabled":  true,
+		"search_enabled":      true,
 		"public_api_delay_ms": true,
 		"aiostreams_url":      true,
 		"aiostreams_uuid":     true,
 		"aiostreams_password": true,
+		"tmdb_api_key":        true,
 	}
 
 	if !allowedKeys[req.Key] {

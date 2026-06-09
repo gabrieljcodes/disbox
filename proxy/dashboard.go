@@ -255,10 +255,11 @@ func (s *Server) handleApiMe(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"id":          id,
-		"username":    username,
-		"avatar_url":  avatar,
-		"is_admin":    isAdmin,
+		"id":             id,
+		"username":       username,
+		"avatar_url":     avatar,
+		"is_admin":       isAdmin,
+		"search_enabled": s.GetSetting("search_enabled", "true") == "true",
 	})
 }
 
