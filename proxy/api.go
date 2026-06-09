@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 	"torbox-discord-bot/torbox"
@@ -271,6 +272,31 @@ func (s *Server) handleV1Me(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (s *Server) checkGBLimit(discordID string) error {
+	limitStr := s.GetSetting("user_gb_limit", "0")
+	if limitStr == "0" || limitStr == "" {
+		return nil
+	}
+	
+	if s.IsAdmin(discordID) {
+		return nil
+	}
+	
+	limitGB, err := strconv.ParseInt(limitStr, 10, 64)
+	if err != nil || limitGB <= 0 {
+		return nil
+	}
+	
+	limitBytes := limitGB * 1024 * 1024 * 1024
+	totalBytes := s.GetUserTotalSize(discordID)
+	
+	if totalBytes >= limitBytes {
+		return fmt.Errorf("You have exceeded the maximum storage limit of %d GB set by the admin.", limitGB)
+	}
+	
+	return nil
+}
+
 func (s *Server) handleV1AddTorrent(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
@@ -279,6 +305,11 @@ func (s *Server) handleV1AddTorrent(w http.ResponseWriter, r *http.Request) {
 
 	discordID, ok := s.checkV1PublicAccess(w, r)
 	if !ok {
+		return
+	}
+
+	if err := s.checkGBLimit(discordID); err != nil {
+		jsonError(w, http.StatusForbidden, err.Error())
 		return
 	}
 
@@ -328,10 +359,15 @@ func (s *Server) handleV1AddTorrent(w http.ResponseWriter, r *http.Request) {
 		discordAvatar = ""
 	}
 
-	proxyLink := s.RegisterDownloadWithUser("torrent", int(torrentID), clientIndex, discordID, discordUsername, discordAvatar, name, size)
+	proxyLink, status := s.RegisterDownloadWithUser("torrent", int(torrentID), clientIndex, discordID, discordUsername, discordAvatar, name, size)
 
 	result := map[string]string{
 		"name": name,
+	}
+	if status == 1 {
+		result["message"] = "You already added this download. Returning existing link."
+	} else if status == 2 {
+		result["message"] = "Added successfully. (Already cached by another user)"
 	}
 
 	if dlErr != nil {
@@ -353,6 +389,11 @@ func (s *Server) handleV1AddWebdl(w http.ResponseWriter, r *http.Request) {
 
 	discordID, ok := s.checkV1PublicAccess(w, r)
 	if !ok {
+		return
+	}
+
+	if err := s.checkGBLimit(discordID); err != nil {
+		jsonError(w, http.StatusForbidden, err.Error())
 		return
 	}
 
@@ -402,10 +443,15 @@ func (s *Server) handleV1AddWebdl(w http.ResponseWriter, r *http.Request) {
 		discordAvatar = ""
 	}
 
-	proxyLink := s.RegisterDownloadWithUser("webdl", int(webdlID), clientIndex, discordID, discordUsername, discordAvatar, name, size)
+	proxyLink, status := s.RegisterDownloadWithUser("webdl", int(webdlID), clientIndex, discordID, discordUsername, discordAvatar, name, size)
 
 	result := map[string]string{
 		"name": name,
+	}
+	if status == 1 {
+		result["message"] = "You already added this download. Returning existing link."
+	} else if status == 2 {
+		result["message"] = "Added successfully. (Already cached by another user)"
 	}
 
 	if dlErr != nil {
@@ -550,6 +596,10 @@ func (s *Server) removeDownloadInternal(w http.ResponseWriter, token, discordID 
 }
 
 func (s *Server) checkV1Admin(w http.ResponseWriter, r *http.Request) (string, bool) {
+	if !s.adminAPIEnabled {
+		jsonError(w, http.StatusForbidden, "Admin API is currently disabled by configuration")
+		return "", false
+	}
 	discordID, ok := s.getAPIUser(r)
 	if !ok || !s.IsAdmin(discordID) {
 		jsonError(w, http.StatusUnauthorized, "Unauthorized or not an admin")

@@ -62,12 +62,13 @@ type Server struct {
 	discordClientID     string
 	discordClientSecret string
 	adminUsers          []string
+	adminAPIEnabled     bool
 	
 	apiRateLimits       map[string]time.Time
 	apiRateLimitsMu     sync.Mutex
 }
 
-func NewServer(baseURL, port string, clientPool *torbox.ClientPool, discordClientID, discordClientSecret string, adminUsers []string, cacheOnly bool) (*Server, error) {
+func NewServer(baseURL, port string, clientPool *torbox.ClientPool, discordClientID, discordClientSecret string, adminUsers []string, cacheOnly bool, adminAPIEnabled bool) (*Server, error) {
 	db, err := sql.Open("sqlite", "proxy_links.db")
 	if err != nil {
 		return nil, fmt.Errorf("failed to open SQLite database: %w", err)
@@ -144,6 +145,7 @@ func NewServer(baseURL, port string, clientPool *torbox.ClientPool, discordClien
 		discordClientID:     discordClientID,
 		discordClientSecret: discordClientSecret,
 		adminUsers:          adminUsers,
+		adminAPIEnabled:     adminAPIEnabled,
 		apiRateLimits:       make(map[string]time.Time),
 	}
 
@@ -1011,6 +1013,16 @@ func (s *Server) CheckAccess(discordID string) (bool, string) {
 
 	// Allowed by default if not blocked and whitelist is not required
 	return true, ""
+}
+
+// GetUserTotalSize returns the sum of sizes (in bytes) of all historical downloads for a user
+func (s *Server) GetUserTotalSize(discordID string) int64 {
+	var totalSize sql.NullInt64
+	err := s.db.QueryRow("SELECT SUM(size) FROM download_history WHERE discord_id = ?", discordID).Scan(&totalSize)
+	if err != nil || !totalSize.Valid {
+		return 0
+	}
+	return totalSize.Int64
 }
 
 func generateToken() string {

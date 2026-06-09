@@ -58,10 +58,15 @@ func (s *Server) initDefaultSettings(clientPool *torbox.ClientPool, cacheOnly bo
 		}
 	}
 
-	// Initialize public_api_enabled if not exists
 	err = s.db.QueryRow("SELECT value FROM access_settings WHERE key = 'public_api_enabled'").Scan(&dummy)
 	if err == sql.ErrNoRows {
 		s.SetSetting("public_api_enabled", "true")
+	}
+
+	// Initialize user_gb_limit if not exists
+	err = s.db.QueryRow("SELECT value FROM access_settings WHERE key = 'user_gb_limit'").Scan(&dummy)
+	if err == sql.ErrNoRows {
+		s.SetSetting("user_gb_limit", "0")
 	}
 
 	// Initialize public_api_delay_ms if not exists

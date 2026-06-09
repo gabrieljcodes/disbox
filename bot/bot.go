@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"strconv"
 	"strings"
 	"time"
 	"torbox-discord-bot/proxy"
@@ -222,6 +223,12 @@ func (b *Bot) handleAddTorrent(s *discordgo.Session, i *discordgo.InteractionCre
 
 	options := i.ApplicationCommandData().Options
 	
+	// Check GB limit
+	if err := b.checkGBLimit(i.Member.User.ID); err != nil {
+		b.sendError(s, i, "Storage Limit Reached", err)
+		return
+	}
+	
 	var magnetLink string
 	var torrentFile []byte
 	var fileName string
@@ -340,7 +347,15 @@ func (b *Bot) handleAddTorrent(s *discordgo.Session, i *discordgo.InteractionCre
 	}
 
 	// Register a proxy link instead of using the direct TorBox URL
-	proxyLink := b.proxyServer.RegisterDownloadWithUser("torrent", int(torrentID), clientIndex, i.Member.User.ID, i.Member.User.Username, i.Member.User.AvatarURL(""), name, size)
+	proxyLink, status := b.proxyServer.RegisterDownloadWithUser("torrent", int(torrentID), clientIndex, i.Member.User.ID, i.Member.User.Username, i.Member.User.AvatarURL(""), name, size)
+	
+	if status == 1 {
+		err = fmt.Errorf("⚠️ **Already Added**\n\nYou have already added this torrent.\n\n💡 Use the link below or check `/list-downloads`.")
+		b.sendAPIResponseAsEmbed(s, i, "Add Torrent", sourceDescription, resp, proxyLink, i.Member.User.ID, err, clientIndex)
+		return
+	} else if status == 2 {
+		resp.Detail = fmt.Sprintf("%s\n\n*(Already cached by another user)*", resp.Detail)
+	}
 	
 	b.sendAPIResponseAsEmbed(s, i, "Add Torrent", sourceDescription, resp, proxyLink, i.Member.User.ID, nil, clientIndex)
 }
@@ -358,7 +373,14 @@ func (b *Bot) handleAddWebDownload(s *discordgo.Session, i *discordgo.Interactio
 	}
 
 	options := i.ApplicationCommandData().Options
-	downloadLink := options[0].StringValue()
+	
+	// Check GB limit
+	if err := b.checkGBLimit(i.Member.User.ID); err != nil {
+		b.sendError(s, i, "Storage Limit Reached", err)
+		return
+	}
+
+	var downloadLink = options[0].StringValue()
 
 	resp, clientIndex, err := b.torboxClientPool.AddWebDownloadWithFallback(downloadLink)
 	
@@ -424,6 +446,31 @@ func (b *Bot) isDownloadNotCachedError(resp *torbox.APIResponse) bool {
 	}
 	
 	return resp.Error == "DOWNLOAD_NOT_CACHED"
+}
+
+func (b *Bot) checkGBLimit(discordID string) error {
+	limitStr := b.proxyServer.GetSetting("user_gb_limit", "0")
+	if limitStr == "0" || limitStr == "" {
+		return nil
+	}
+	
+	if b.proxyServer.IsAdmin(discordID) {
+		return nil
+	}
+	
+	limitGB, err := strconv.ParseInt(limitStr, 10, 64)
+	if err != nil || limitGB <= 0 {
+		return nil
+	}
+	
+	limitBytes := limitGB * 1024 * 1024 * 1024
+	totalBytes := b.proxyServer.GetUserTotalSize(discordID)
+	
+	if totalBytes >= limitBytes {
+		return fmt.Errorf("🚫 **Storage Limit Reached**\n\nYou have exceeded the maximum storage limit of %d GB set by the admin.\n\n💡 Current usage: %s", limitGB, formatBytes(totalBytes))
+	}
+	
+	return nil
 }
 
 func (b *Bot) isDownloadTooLargeError(resp *torbox.APIResponse) bool {
@@ -622,7 +669,7 @@ func (b *Bot) handleTorrentStatus(s *discordgo.Session, i *discordgo.Interaction
 
 	if info.DownloadFinished && info.DownloadPresent {
 		// Register a proxy link (permanent, no expiration)
-		proxyLink := b.proxyServer.RegisterDownloadWithUser("torrent", torrentID, foundClientIndex, i.Member.User.ID, i.Member.User.Username, i.Member.User.AvatarURL(""), info.Name, info.Size)
+		proxyLink, _ := b.proxyServer.RegisterDownloadWithUser("torrent", torrentID, foundClientIndex, i.Member.User.ID, i.Member.User.Username, i.Member.User.AvatarURL(""), info.Name, info.Size)
 		
 		embed.Description = fmt.Sprintf("**%s**\n\n🔒 Permanent link via proxy", info.Name)
 		
@@ -722,7 +769,7 @@ func (b *Bot) handleWebDLStatus(s *discordgo.Session, i *discordgo.InteractionCr
 
 	if info.DownloadFinished && info.DownloadPresent {
 		// Register a proxy link (permanent, no expiration)
-		proxyLink := b.proxyServer.RegisterDownloadWithUser("webdl", webdlID, foundClientIndex, i.Member.User.ID, i.Member.User.Username, i.Member.User.AvatarURL(""), info.Name, info.Size)
+		proxyLink, _ := b.proxyServer.RegisterDownloadWithUser("webdl", webdlID, foundClientIndex, i.Member.User.ID, i.Member.User.Username, i.Member.User.AvatarURL(""), info.Name, info.Size)
 		
 		embed.Description = fmt.Sprintf("**%s**\n\n🔒 Permanent link via proxy", info.Name)
 		

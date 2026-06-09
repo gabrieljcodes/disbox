@@ -31,6 +31,8 @@ func (s *Server) handleApiAdminSettingsGet(w http.ResponseWriter, r *http.Reques
 	jsonOK(w, map[string]interface{}{
 		"cache_only":          s.GetSetting("cache_only", "false") == "true",
 		"public_api_enabled":  s.GetSetting("public_api_enabled", "true") == "true",
+		"user_gb_limit":       s.GetSetting("user_gb_limit", "0"),
+		"admin_api_enabled":   s.adminAPIEnabled,
 		"search_enabled":      s.GetSetting("search_enabled", "true") == "true",
 		"public_api_delay_ms": s.GetSetting("public_api_delay_ms", "0"),
 		"torbox_keys":         maskedKeys,
@@ -66,6 +68,7 @@ func (s *Server) handleApiAdminSettingsUpdate(w http.ResponseWriter, r *http.Req
 	allowedKeys := map[string]bool{
 		"cache_only":          true,
 		"public_api_enabled":  true,
+		"user_gb_limit":       true,
 		"search_enabled":      true,
 		"public_api_delay_ms": true,
 		"aiostreams_url":      true,

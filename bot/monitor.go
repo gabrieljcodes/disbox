@@ -219,7 +219,7 @@ func (m *Monitor) notifyCompletion(download *TrackedDownload, downloadLink strin
 	log.Printf("Download %d completed using API Key #%d", download.ID, download.ClientIndex+1)
 	
 	// Register a proxy link instead of using the direct TorBox URL
-	proxyLink := m.proxyServer.RegisterDownloadWithUser(download.Type, download.ID, download.ClientIndex, download.UserID, download.Username, download.AvatarURL, download.Name, size)
+	proxyLink, _ := m.proxyServer.RegisterDownloadWithUser(download.Type, download.ID, download.ClientIndex, download.UserID, download.Username, download.AvatarURL, download.Name, size)
 	
 	description := fmt.Sprintf("Your download **%s** is ready!\n\n🔒 Permanent link via proxy", download.Name)
 	

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Disbox — Dashboard</title>
+    <title>📦 Dashboard | Disbox</title>
     <link rel="icon" type="image/x-icon" href="/favicon.ico">
     <meta name="description" content="Manage your downloads with Disbox Dashboard">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
@@ -1008,6 +1008,31 @@
                             </button>
                         </div>
                     </div>
+                                        <div class="form-group">
+                            <label class="form-label">
+                                User Storage Limit (GB)
+                                <span class="badge" style="background: rgba(99, 102, 241, 0.1); color: var(--accent-indigo); border: none; font-size: 10px; margin-left: 8px;">0 = Unlimited</span>
+                            </label>
+                            <div style="display: flex; gap: 8px;">
+                                <input type="number" id="user-gb-limit-input" class="form-input" min="0" placeholder="0">
+                                <button id="user-gb-limit-btn" class="btn" style="background: var(--bg-input); border: 1px solid var(--border-subtle); color: var(--text-primary);">Save</button>
+                            </div>
+                            <div class="form-hint">Limit how many GBs normal users can add via bot and API. Admins bypass this limit.</div>
+                        </div>
+
+                        <div class="form-group" style="margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--border-subtle);">
+                            <label class="toggle-label" style="opacity: 0.8; cursor: not-allowed;">
+                                <div class="toggle-switch">
+                                    <input type="checkbox" id="admin-api-toggle" disabled>
+                                    <span class="toggle-slider"></span>
+                                </div>
+                                Enable Admin API
+                                <span class="badge" style="background: rgba(251, 113, 133, 0.1); color: var(--accent-rose); border: none; font-size: 10px; margin-left: 8px;">ENV ONLY</span>
+                            </label>
+                            <div class="form-hint" style="margin-left: 56px;">Must be changed via <code>ADMIN_API_ENABLED</code> in the <code>.env</code> file.</div>
+                        </div>
+
+                        <div class="form-group" style="margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--border-subtle);">
                     
                     <h3 style="font-size: 14px; margin-top: 32px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 8px; margin-bottom: 16px;">Access List</h3>
                     <div id="access-list-container" class="history-list" style="max-height:400px; overflow-y:auto; padding-right: 8px;"></div>
@@ -1366,6 +1391,11 @@
                       document.getElementById('public-api-toggle').checked = data.public_api_enabled;
                       document.getElementById('search-enabled-toggle').checked = data.search_enabled;
                       document.getElementById('api-delay-input').value = data.public_api_delay_ms;
+                      document.getElementById('user-gb-limit-input').value = data.user_gb_limit || '0';
+                      
+                      const adminApiToggle = document.getElementById('admin-api-toggle');
+                      if (adminApiToggle) adminApiToggle.checked = data.admin_api_enabled;
+                      
                       document.getElementById('aiostreams-url-input').value = data.aiostreams_url || '';
                       document.getElementById('aiostreams-uuid-input').value = data.aiostreams_uuid || '';
                       document.getElementById('aiostreams-password-input').value = data.aiostreams_password || '';
@@ -1418,6 +1448,9 @@
           });
           document.getElementById('api-delay-btn')?.addEventListener('click', () => {
               setAdminSetting('public_api_delay_ms', document.getElementById('api-delay-input').value);
+          });
+          document.getElementById('user-gb-limit-btn')?.addEventListener('click', () => {
+              setAdminSetting('user_gb_limit', document.getElementById('user-gb-limit-input').value);
           });
           
           document.getElementById('aiostreams-save-btn')?.addEventListener('click', () => {

@@ -17,6 +17,7 @@ type Config struct {
 	CacheOnly            bool
 	ProxyBaseURL         string
 	ProxyPort            string
+	AdminAPIEnabled      bool
 }
 
 func LoadConfig() (*Config, error) {
@@ -43,6 +44,7 @@ func LoadConfig() (*Config, error) {
 		CacheOnly:           strings.ToLower(os.Getenv("CACHE_ONLY")) == "true",
 		ProxyBaseURL:        proxyBaseURL,
 		ProxyPort:           proxyPort,
+		AdminAPIEnabled:     strings.ToLower(os.Getenv("ADMIN_API_ENABLED")) != "false",
 	}
 
 	if cfg.DiscordBotToken == "" {

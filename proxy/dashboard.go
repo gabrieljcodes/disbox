@@ -19,8 +19,27 @@ func (s *Server) GetBaseURL() string {
 }
 
 // RegisterDownloadWithUser registers a proxy token and also saves it to the user's history
-func (s *Server) RegisterDownloadWithUser(downloadType string, id int, clientIndex int, discordID, discordUsername, discordAvatar, name string, size int64) string {
+// Returns (proxyURL, status) where status: 0=new, 1=already added by same user, 2=already added by another user
+func (s *Server) RegisterDownloadWithUser(downloadType string, id int, clientIndex int, discordID, discordUsername, discordAvatar, name string, size int64) (string, int) {
+	status := 0
 	token := generateToken()
+
+	if discordID != "" {
+		var existingDiscordID string
+		err := s.db.QueryRow("SELECT discord_id FROM download_history WHERE type = ? AND download_id = ? ORDER BY id ASC LIMIT 1", downloadType, id).Scan(&existingDiscordID)
+		if err == nil {
+			var userExistingToken string
+			err2 := s.db.QueryRow("SELECT token FROM download_history WHERE type = ? AND download_id = ? AND discord_id = ? LIMIT 1", downloadType, id, discordID).Scan(&userExistingToken)
+			if err2 == nil {
+				status = 1
+				proxyURL := fmt.Sprintf("%s/dl/%s", s.baseURL, userExistingToken)
+				return proxyURL, status
+			} else {
+				status = 2
+				size = 0
+			}
+		}
+	}
 
 	// Save to database first
 	_, err := s.db.Exec(
@@ -39,7 +58,7 @@ func (s *Server) RegisterDownloadWithUser(downloadType string, id int, clientInd
 		)
 		if err != nil {
 			log.Printf("Warning: failed to save download history: %v", err)
-		} else if size == 0 {
+		} else if size == 0 && status == 0 {
 			// Background routine to fetch the file size if it wasn't immediately available
 			go func() {
 				for i := 0; i < 12; i++ { // Poll for up to 60 seconds
@@ -84,7 +103,7 @@ func (s *Server) RegisterDownloadWithUser(downloadType string, id int, clientInd
 
 	proxyURL := fmt.Sprintf("%s/dl/%s", s.baseURL, token)
 	log.Printf("Registered proxy link for %s #%d (client #%d): %s (User: %s)", downloadType, id, clientIndex+1, proxyURL, discordID)
-	return proxyURL
+	return proxyURL, status
 }
 
 func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
@@ -395,10 +414,15 @@ func (s *Server) handleApiAddTorrent(w http.ResponseWriter, r *http.Request) {
 	client := s.clientPool.GetClient(clientIndex)
 	_, dlErr := client.RequestDownloadURL(int(torrentID), -1)
 
-	proxyLink := s.RegisterDownloadWithUser("torrent", int(torrentID), clientIndex, discordID, discordUsername, discordAvatar, name, size)
+	proxyLink, status := s.RegisterDownloadWithUser("torrent", int(torrentID), clientIndex, discordID, discordUsername, discordAvatar, name, size)
 
 	res := map[string]string{
 		"success": "true",
+	}
+	if status == 1 {
+		res["message"] = "You already added this download. Returning existing link."
+	} else if status == 2 {
+		res["message"] = "Added successfully. (Already cached by another user)"
 	}
 
 	if dlErr != nil {
@@ -463,10 +487,15 @@ func (s *Server) handleApiAddWebdl(w http.ResponseWriter, r *http.Request) {
 	client := s.clientPool.GetClient(clientIndex)
 	_, dlErr := client.RequestWebDownloadURL(int(webdlID), -1)
 
-	proxyLink := s.RegisterDownloadWithUser("webdl", int(webdlID), clientIndex, discordID, discordUsername, discordAvatar, name, size)
+	proxyLink, status := s.RegisterDownloadWithUser("webdl", int(webdlID), clientIndex, discordID, discordUsername, discordAvatar, name, size)
 
 	res := map[string]string{
 		"success": "true",
+	}
+	if status == 1 {
+		res["message"] = "You already added this download. Returning existing link."
+	} else if status == 2 {
+		res["message"] = "Added successfully. (Already cached by another user)"
 	}
 
 	if dlErr != nil {
