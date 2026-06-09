@@ -162,6 +162,14 @@ func NewServer(baseURL, port string, clientPool *torbox.ClientPool, discordClien
 		w.Write(faviconBytes)
 	})
 
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/" {
+			http.Redirect(w, r, "/dashboard", http.StatusTemporaryRedirect)
+			return
+		}
+		http.NotFound(w, r)
+	})
+
 	if discordClientID != "" && discordClientSecret != "" {
 		mux.HandleFunc("/dashboard", s.handleDashboard)
 		mux.HandleFunc("/auth/login", s.handleAuthLogin)
