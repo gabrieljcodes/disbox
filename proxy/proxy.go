@@ -163,6 +163,7 @@ func NewServer(baseURL, port string, clientPool *torbox.ClientPool, discordClien
 	mux.HandleFunc("/view/", s.handleView)
 	mux.HandleFunc("/browse/", s.handleBrowse)
 	mux.HandleFunc("/read/", s.handleRead)
+	mux.HandleFunc("/og-image", s.handleOgImage)
 	mux.HandleFunc("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "image/x-icon")
 		w.Write(faviconBytes)
@@ -468,6 +469,8 @@ func (s *Server) handlePreview(w http.ResponseWriter, r *http.Request, entry *Do
 	if fileName == "" {
 		fileName = "Disbox File"
 		fileSize = 0
+	} else if ext := filepath.Ext(fileName); len(ext) > 1 {
+		fileType = strings.ToUpper(ext[1:2]) + strings.ToLower(ext[2:])
 	}
 
 	previewData := PreviewData{
@@ -476,6 +479,7 @@ func (s *Server) handlePreview(w http.ResponseWriter, r *http.Request, entry *Do
 		FileSize:    formatBytes(fileSize),
 		BaseURL:     s.baseURL,
 		DownloadURL: fmt.Sprintf("%s/dl/%s", s.baseURL, token),
+		FileHash:    token,
 	}
 	if fileID >= 0 {
 		previewData.DownloadURL += fmt.Sprintf("?file_id=%d", fileID)
@@ -483,6 +487,24 @@ func (s *Server) handlePreview(w http.ResponseWriter, r *http.Request, entry *Do
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	previewTemplate.Execute(w, previewData)
+}
+
+func (s *Server) handleOgImage(w http.ResponseWriter, r *http.Request) {
+	// Proxies the request to the og-service inside docker network
+	ogServiceURL := "http://og-service:3000/generate?" + r.URL.RawQuery
+	
+	resp, err := http.Get(ogServiceURL)
+	if err != nil {
+		log.Printf("Failed to fetch OG image from og-service: %v", err)
+		http.Error(w, "Failed to generate image", http.StatusInternalServerError)
+		return
+	}
+	defer resp.Body.Close()
+
+	w.Header().Set("Content-Type", "image/png")
+	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	w.WriteHeader(resp.StatusCode)
+	io.Copy(w, resp.Body)
 }
 
 // ─── Viewer (existing media player) ───
@@ -662,6 +684,7 @@ type PreviewData struct {
 	FileSize    string
 	BaseURL     string
 	DownloadURL string
+	FileHash    string
 }
 
 func (s *Server) handleBrowse(w http.ResponseWriter, r *http.Request) {

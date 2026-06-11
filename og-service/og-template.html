@@ -1,0 +1,45 @@
+<div style="display: flex; width: 1200px; height: 630px; background-color: #62CFA8; background-image: linear-gradient(125deg, #5ECBA5 0%, #9ADEA8 55%, #C8EF9A 100%); font-family: Inter; position: relative;">
+    <!-- Left Accent -->
+    <div style="display: flex; position: absolute; left: 0; top: 265px; width: 8px; height: 100px; background-color: #1EBF6A; border-radius: 0 4px 4px 0;"></div>
+    
+    <!-- Top Right Deco -->
+    <div style="display: flex; position: absolute; top: 40px; right: 60px; width: 80px; height: 4px; background-color: #18C965; border-radius: 2px;"></div>
+    
+    <!-- Bottom Deco -->
+    <div style="display: flex; position: absolute; bottom: 45px; right: 300px; width: 80px; height: 4px; background-color: #18C965; border-radius: 2px;"></div>
+    
+    <!-- Divider -->
+    <div style="display: flex; position: absolute; left: 360px; top: 0; width: 2px; height: 630px; background-image: linear-gradient(to bottom, rgba(20,100,55,0) 0%, rgba(20,100,55,0.25) 20%, rgba(20,100,55,0.30) 50%, rgba(20,100,55,0.25) 80%, rgba(20,100,55,0) 100%);"></div>
+
+    <!-- Left Panel -->
+    <div style="display: flex; flex-direction: column; justify-content: center; width: 360px; padding-left: 50px;">
+        <img src="data:image/png;base64,{{LOGO_B64}}" style="width: 80px; height: 80px; margin-bottom: 25px; filter: drop-shadow(0 4px 12px rgba(0,0,0,0.18)); border-radius: 16px; object-fit: contain;" />
+        <div style="display: flex; font-size: 42px; font-weight: 800; color: #0F3320; letter-spacing: -1px; margin-bottom: 12px;">Disbox</div>
+        <div style="display: flex; font-size: 14px; font-weight: 700; color: #2D6B44; letter-spacing: 2px; text-transform: uppercase;">File Sharing</div>
+    </div>
+
+    <!-- Right Panel -->
+    <div style="display: flex; flex-direction: column; justify-content: center; flex: 1; padding: 0 60px;">
+        <div style="display: flex; font-size: 56px; font-weight: 800; color: #0F3320; letter-spacing: -1.5px; line-height: 1.1; margin-bottom: 20px;">
+            {{NAME}}
+        </div>
+        <div style="display: flex; width: 45px; height: 3px; background-color: rgba(15,80,40,0.3); border-radius: 2px; margin-bottom: 30px;"></div>
+        
+        <div style="display: flex; flex-direction: column; gap: 15px;">
+            <div style="display: flex; align-items: center; font-size: 18px;">
+                <span style="font-weight: 700; color: #0D3320; margin-right: 8px;">TYPE:</span>
+                <span style="font-family: monospace; color: #1F5535;">{{TYPE}}</span>
+            </div>
+            
+            <div style="display: flex; align-items: center; font-size: 18px;">
+                <span style="font-weight: 700; color: #0D3320; margin-right: 8px;">SIZE:</span>
+                <span style="font-family: monospace; color: #1F5535;">{{SIZE}}</span>
+            </div>
+            
+            <div style="display: flex; align-items: center; font-size: 18px;">
+                <span style="font-weight: 700; color: #0D3320; margin-right: 8px;">HASH:</span>
+                <span style="font-family: monospace; color: #1F5535;">{{HASH}}</span>
+            </div>
+        </div>
+    </div>
+</div>

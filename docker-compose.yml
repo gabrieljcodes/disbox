@@ -9,9 +9,16 @@ services:
       - "8080:8080" # Map to the PROXY_PORT defined in your .env
     volumes:
       - ./data:/app/data
-    # We set the working directory to /app/data so the SQLite database (proxy_links.db) is created in the mounted volume
     working_dir: /app/data
     env_file:
       - .env
-    # The binary is located at /app/disbox
     command: ["/app/disbox"]
+    depends_on:
+      - og-service
+
+  og-service:
+    build: ./og-service
+    container_name: og-service
+    restart: unless-stopped
+    ports:
+      - "3000:3000"

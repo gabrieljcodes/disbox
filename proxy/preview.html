@@ -8,16 +8,16 @@
     <!-- Open Graph Meta Tags -->
     <meta property="og:title" content="{{.FileName}}">
     <meta property="og:description" content="Type: {{.FileType}} • Size: {{.FileSize}}">
-    <meta property="og:image" content="{{.BaseURL}}/favicon.ico">
+    <meta property="og:image" content="{{.BaseURL}}/og-image?name={{.FileName}}&size={{.FileSize}}&hash={{.FileHash}}&type={{.FileType}}">
     <meta property="og:url" content="{{.DownloadURL}}">
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="Disbox">
     
     <!-- Twitter Card Meta Tags -->
-    <meta name="twitter:card" content="summary">
+    <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="{{.FileName}}">
     <meta name="twitter:description" content="Type: {{.FileType}} • Size: {{.FileSize}}">
-    <meta name="twitter:image" content="{{.BaseURL}}/favicon.ico">
+    <meta name="twitter:image" content="{{.BaseURL}}/og-image?name={{.FileName}}&size={{.FileSize}}&hash={{.FileHash}}&type={{.FileType}}">
     
     <!-- Theme Color for Discord Embeds -->
     <meta name="theme-color" content="#5865F2">
