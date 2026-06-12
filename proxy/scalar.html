@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Disbox API Reference</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <style>
+      :root {
+        --scalar-color-1: #e8f0ec;
+        --scalar-color-2: #8ba396;
+        --scalar-color-3: #5a7264;
+        --scalar-color-accent: #1EBF6A;
+        --scalar-background-1: #0a0f0d;
+        --scalar-background-2: #0f1a15;
+        --scalar-background-3: rgba(16, 30, 24, 0.8);
+        --scalar-background-accent: #1EBF6A;
+        --scalar-border-color: rgba(30, 191, 106, 0.3);
+      }
+      body {
+        margin: 0;
+        padding: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- 
+      You can define the configuration for Scalar here.
+      The data-url points to our OpenAPI specification file.
+    -->
+    <script
+      id="api-reference"
+      data-url="/openapi.yaml"
+      data-theme="purple"
+    ></script>
+    
+    <!-- We override the theme with CSS variables above, but we also can pass config -->
+    <script>
+      document.getElementById('api-reference').dataset.configuration = JSON.stringify({
+        theme: 'custom',
+        layout: 'modern',
+        showSidebar: true,
+        metaData: {
+          title: 'Disbox API Reference',
+        }
+      })
+    </script>
+
+    <!-- Load the Scalar API Reference library -->
+    <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"></script>
+  </body>
+</html>

@@ -39,6 +39,12 @@ var previewFS embed.FS
 //go:embed favicon.ico
 var faviconBytes []byte
 
+//go:embed scalar.html
+var scalarBytes []byte
+
+//go:embed openapi.yaml
+var openapiBytes []byte
+
 var viewerTemplate = template.Must(template.ParseFS(viewerFS, "viewer.html"))
 var browserTemplate = template.Must(template.ParseFS(browserFS, "browser.html"))
 var readerTemplate = template.Must(template.ParseFS(readerFS, "reader.html"))
@@ -167,6 +173,14 @@ func NewServer(baseURL, port string, clientPool *torbox.ClientPool, discordClien
 	mux.HandleFunc("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "image/x-icon")
 		w.Write(faviconBytes)
+	})
+	mux.HandleFunc("/api/docs", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Write(scalarBytes)
+	})
+	mux.HandleFunc("/openapi.yaml", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/yaml; charset=utf-8")
+		w.Write(openapiBytes)
 	})
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {

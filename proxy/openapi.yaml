@@ -1,0 +1,352 @@
+openapi: 3.0.3
+info:
+  title: Disbox API
+  description: Public API for managing Disbox downloads, history, and search.
+  version: "1.0.0"
+servers:
+  - url: /
+    description: Current Server
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: Disbox Token
+  schemas:
+    ApiResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+        error:
+          type: string
+    HistoryItem:
+      type: object
+      properties:
+        token:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+        created_at:
+          type: string
+        browse_url:
+          type: string
+        download_url:
+          type: string
+security:
+  - bearerAuth: []
+
+tags:
+  - name: User
+    description: User information and limits
+  - name: Downloads
+    description: Add and manage downloads
+  - name: Search
+    description: Search for media content
+  - name: Admin
+    description: Administrative endpoints for access control
+
+paths:
+  /v1/me:
+    get:
+      summary: Get current user info
+      tags: [User]
+      responses:
+        '200':
+          description: User profile information
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                      username:
+                        type: string
+                      avatar_url:
+                        type: string
+
+  /v1/history:
+    get:
+      summary: Get download history
+      tags: [User]
+      responses:
+        '200':
+          description: List of user's past downloads
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/HistoryItem'
+
+  /v1/add-torrent:
+    post:
+      summary: Add a Torrent
+      description: Adds a magnet link or torrent to your Disbox.
+      tags: [Downloads]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [link]
+              properties:
+                link:
+                  type: string
+                  description: Magnet URI
+      responses:
+        '200':
+          description: Download added successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                      status:
+                        type: string
+                        enum: [ready, monitoring]
+                      download_url:
+                        type: string
+                      browse_url:
+                        type: string
+                      message:
+                        type: string
+
+  /v1/add-webdl:
+    post:
+      summary: Add a Web Download
+      description: Adds a direct URL (HTTP/HTTPS) to your Disbox.
+      tags: [Downloads]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [link]
+              properties:
+                link:
+                  type: string
+                  description: Direct download URL
+      responses:
+        '200':
+          description: Web download added successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                      status:
+                        type: string
+                        enum: [ready, monitoring]
+                      download_url:
+                        type: string
+                      browse_url:
+                        type: string
+                      message:
+                        type: string
+
+  /v1/remove-download:
+    post:
+      summary: Remove a download
+      description: Deletes a download from your history and cancels it if active.
+      tags: [Downloads]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token:
+                  type: string
+                  description: The proxy link token
+      responses:
+        '200':
+          description: Download removed successfully
+
+  /v1/search:
+    get:
+      summary: Search AIOStreams
+      tags: [Search]
+      parameters:
+        - name: query
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: type
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [movie, series, anime]
+            default: movie
+      responses:
+        '200':
+          description: Search results
+
+  /v1/tmdb/search:
+    get:
+      summary: Search TMDB
+      tags: [Search]
+      parameters:
+        - name: query
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 1
+      responses:
+        '200':
+          description: TMDB Search results
+
+  /v1/anilist/search:
+    get:
+      summary: Search AniList
+      tags: [Search]
+      parameters:
+        - name: query
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: AniList Search results
+
+  /v1/admin/access:
+    get:
+      summary: Get access control list
+      tags: [Admin]
+      responses:
+        '200':
+          description: The whitelist/blacklist settings and users
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      whitelist_enabled:
+                        type: boolean
+                      blacklist_enabled:
+                        type: boolean
+                      users:
+                        type: array
+                        items:
+                          type: object
+
+  /v1/admin/access/check:
+    get:
+      summary: Check user access status
+      tags: [Admin]
+      parameters:
+        - name: discord_id
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: User status
+
+  /v1/admin/access/add:
+    post:
+      summary: Add user to access list
+      tags: [Admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [discord_id, type]
+              properties:
+                discord_id:
+                  type: string
+                type:
+                  type: string
+                  enum: [whitelist, blacklist]
+      responses:
+        '200':
+          description: User added
+
+  /v1/admin/access/remove:
+    post:
+      summary: Remove user from access list
+      tags: [Admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [discord_id]
+              properties:
+                discord_id:
+                  type: string
+      responses:
+        '200':
+          description: User removed
+
+  /v1/admin/access/toggle:
+    post:
+      summary: Toggle access lists
+      tags: [Admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [list_type, enabled]
+              properties:
+                list_type:
+                  type: string
+                  enum: [whitelist, blacklist]
+                enabled:
+                  type: boolean
+      responses:
+        '200':
+          description: List toggled
