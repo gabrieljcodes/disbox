@@ -17,7 +17,6 @@ let interBold;
 let templateCache = '';
 let logoBase64 = '';
 
-
 async function init() {
     console.log("Downloading fonts...");
     const regRes = await fetch('https://og-playground.vercel.app/inter-latin-ext-400-normal.woff');

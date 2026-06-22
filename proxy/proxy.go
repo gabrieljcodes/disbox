@@ -11,6 +11,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -199,6 +200,7 @@ func NewServer(baseURL, port string, clientPool *torbox.ClientPool, discordClien
 		mux.HandleFunc("/api/me", s.handleApiMe)
 		mux.HandleFunc("/api/history", s.handleApiHistory)
 		mux.HandleFunc("/api/add-torrent", s.handleApiAddTorrent)
+		mux.HandleFunc("/api/add-torrent-file", s.handleApiAddTorrentFile)
 		mux.HandleFunc("/api/add-webdl", s.handleApiAddWebdl)
 		mux.HandleFunc("/api/search", s.handleApiSearch)
 		mux.HandleFunc("/api/tmdb/search", s.handleApiTMDBSearch)
@@ -487,16 +489,27 @@ func (s *Server) handlePreview(w http.ResponseWriter, r *http.Request, entry *Do
 		fileType = strings.ToUpper(ext[1:2]) + strings.ToLower(ext[2:])
 	}
 
+	downloadURL := fmt.Sprintf("%s/dl/%s", s.baseURL, token)
+	if fileID >= 0 {
+		downloadURL += fmt.Sprintf("?file_id=%d", fileID)
+	}
+
+	// Build OG image URL with properly encoded query parameters
+	ogParams := url.Values{}
+	ogParams.Set("name", fileName)
+	ogParams.Set("size", formatBytes(fileSize))
+	ogParams.Set("hash", token)
+	ogParams.Set("type", fileType)
+	ogImageURL := fmt.Sprintf("%s/og-image?%s", s.baseURL, ogParams.Encode())
+
 	previewData := PreviewData{
 		FileName:    fileName,
 		FileType:    fileType,
 		FileSize:    formatBytes(fileSize),
 		BaseURL:     s.baseURL,
-		DownloadURL: fmt.Sprintf("%s/dl/%s", s.baseURL, token),
+		DownloadURL: downloadURL,
 		FileHash:    token,
-	}
-	if fileID >= 0 {
-		previewData.DownloadURL += fmt.Sprintf("?file_id=%d", fileID)
+		OgImageURL:  ogImageURL,
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -699,6 +712,7 @@ type PreviewData struct {
 	BaseURL     string
 	DownloadURL string
 	FileHash    string
+	OgImageURL  string
 }
 
 func (s *Server) handleBrowse(w http.ResponseWriter, r *http.Request) {

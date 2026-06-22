@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -509,6 +510,116 @@ func (s *Server) handleApiAddWebdl(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(res)
 }
+
+func (s *Server) handleApiAddTorrentFile(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"error": "Method not allowed"})
+		return
+	}
+
+	discordID, discordUsername, discordAvatar, ok := s.getSessionUser(r)
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	// Parse multipart form (max 10MB)
+	if err := r.ParseMultipartForm(10 << 20); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"error": "Failed to parse upload. Max file size is 10MB."})
+		return
+	}
+
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"error": "No file uploaded"})
+		return
+	}
+	defer file.Close()
+
+	// Validate file extension
+	fileName := header.Filename
+	if !strings.HasSuffix(strings.ToLower(fileName), ".torrent") {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"error": "Only .torrent files are accepted"})
+		return
+	}
+
+	// Read file data
+	fileData, err := io.ReadAll(file)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"error": "Failed to read file"})
+		return
+	}
+
+	// Check cache_only setting
+	cacheOnly := s.GetSetting("cache_only", "false") == "true"
+
+	resp, clientIndex, err := s.clientPool.AddTorrentFileWithFallback(fileData, fileName, cacheOnly)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	if !resp.Success {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"error": resp.Detail})
+		return
+	}
+
+	data, _ := resp.Data.(map[string]interface{})
+	torrentID, _ := data["torrent_id"].(float64)
+	name, _ := data["name"].(string)
+
+	var size int64 = 0
+	if name == "" {
+		time.Sleep(1 * time.Second)
+		client := s.clientPool.GetClient(clientIndex)
+		if info, err := client.GetTorrentInfo(int(torrentID)); err == nil {
+			name = info.Name
+			size = info.Size
+		}
+	}
+
+	if name == "" {
+		// Use filename without .torrent extension as fallback
+		name = strings.TrimSuffix(fileName, ".torrent")
+		if name == "" {
+			name = "Torrent"
+		}
+	}
+
+	// Check if it's ready immediately
+	client := s.clientPool.GetClient(clientIndex)
+	_, dlErr := client.RequestDownloadURL(int(torrentID), -1)
+
+	proxyLink, status := s.RegisterDownloadWithUser("torrent", int(torrentID), clientIndex, discordID, discordUsername, discordAvatar, name, size)
+
+	res := map[string]string{
+		"success": "true",
+	}
+	if status == 1 {
+		res["message"] = "You already added this download. Returning existing link."
+	} else if status == 2 {
+		res["message"] = "Added successfully. (Already cached by another user)"
+	}
+
+	if dlErr != nil {
+		res["status"] = "monitoring"
+	} else {
+		res["status"] = "ready"
+		res["download_url"] = proxyLink
+		res["browse_url"] = strings.Replace(proxyLink, "/dl/", "/browse/", 1)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(res)
+}
+
 
 func (s *Server) handleApiAdminAccessGet(w http.ResponseWriter, r *http.Request) {
 	id, _, _, ok := s.getSessionUser(r)

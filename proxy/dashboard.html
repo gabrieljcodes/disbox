@@ -959,13 +959,75 @@
             <div class="tab-panel" id="panel-add">
                 <div class="add-form">
                     <h2>Add a Download</h2>
-                    <p class="add-form-subtitle">Paste a magnet link or a direct download URL</p>
+                    <p class="add-form-subtitle">Paste a magnet link, a direct download URL, or upload a .torrent file</p>
 
                     <div class="form-group">
                         <label class="form-label" for="input-link">Link</label>
                         <input type="text" class="form-input" id="input-link" placeholder="magnet:?xt=urn:btih:... or https://..." autocomplete="off" spellcheck="false">
                         <div class="type-indicator unknown" id="type-indicator">
                             <span>Paste a link to detect type</span>
+                        </div>
+                    </div>
+
+                    <!-- OR Separator -->
+                    <div style="display: flex; align-items: center; gap: 16px; margin: 20px 0;">
+                        <div style="flex: 1; height: 1px; background: var(--border-subtle);"></div>
+                        <span style="font-size: 12px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px;">or</span>
+                        <div style="flex: 1; height: 1px; background: var(--border-subtle);"></div>
+                    </div>
+
+                    <!-- Torrent File Upload -->
+                    <div class="form-group">
+                        <label class="form-label">Upload .torrent File</label>
+                        <div id="torrent-drop-zone" style="
+                            border: 2px dashed var(--border-subtle);
+                            border-radius: var(--radius);
+                            padding: 32px 20px;
+                            text-align: center;
+                            cursor: pointer;
+                            transition: var(--transition);
+                            background: var(--bg-input);
+                            position: relative;
+                        ">
+                            <input type="file" id="torrent-file-input" accept=".torrent" style="position: absolute; inset: 0; opacity: 0; cursor: pointer; z-index: 2;">
+                            <div id="drop-zone-content">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 36px; height: 36px; color: var(--text-muted); margin-bottom: 12px;">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                    <polyline points="17 8 12 3 7 8"/>
+                                    <line x1="12" y1="3" x2="12" y2="15"/>
+                                </svg>
+                                <div style="font-size: 14px; font-weight: 600; color: var(--text-primary); margin-bottom: 4px;">
+                                    Drag & drop a .torrent file here
+                                </div>
+                                <div style="font-size: 12px; color: var(--text-muted);">
+                                    or click to browse your files
+                                </div>
+                            </div>
+                            <div id="drop-zone-selected" style="display: none;">
+                                <div style="display: flex; align-items: center; justify-content: center; gap: 12px;">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 24px; height: 24px; color: var(--accent-blue);">
+                                        <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/>
+                                        <polyline points="13 2 13 9 20 9"/>
+                                    </svg>
+                                    <div style="text-align: left;">
+                                        <div id="selected-file-name" style="font-size: 14px; font-weight: 600; color: var(--text-primary);"></div>
+                                        <div id="selected-file-size" style="font-size: 12px; color: var(--text-secondary);"></div>
+                                    </div>
+                                    <button id="clear-file-btn" type="button" style="
+                                        background: rgba(251, 113, 133, 0.1);
+                                        border: 1px solid rgba(251, 113, 133, 0.2);
+                                        color: var(--accent-rose);
+                                        border-radius: 6px;
+                                        padding: 4px 10px;
+                                        font-size: 11px;
+                                        font-weight: 600;
+                                        cursor: pointer;
+                                        font-family: inherit;
+                                        transition: var(--transition);
+                                        margin-left: 8px;
+                                    ">✕ Remove</button>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
@@ -1690,8 +1752,108 @@
         }
 
         // ─── Type Detection ───
+        let selectedTorrentFile = null;
+        const torrentFileInput = document.getElementById('torrent-file-input');
+        const dropZone = document.getElementById('torrent-drop-zone');
+        const dropZoneContent = document.getElementById('drop-zone-content');
+        const dropZoneSelected = document.getElementById('drop-zone-selected');
+        const selectedFileName = document.getElementById('selected-file-name');
+        const selectedFileSize = document.getElementById('selected-file-size');
+        const clearFileBtn = document.getElementById('clear-file-btn');
+
+        function formatFileSizeSimple(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024, sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+        }
+
+        function handleFileSelect(file) {
+            if (!file) return;
+            if (!file.name.toLowerCase().endsWith('.torrent')) {
+                showToast('Only .torrent files are accepted', 'error');
+                return;
+            }
+            selectedTorrentFile = file;
+            dropZoneContent.style.display = 'none';
+            dropZoneSelected.style.display = 'block';
+            selectedFileName.textContent = file.name;
+            selectedFileSize.textContent = formatFileSizeSimple(file.size);
+            dropZone.style.borderColor = 'var(--accent-blue)';
+            dropZone.style.background = 'rgba(96, 165, 250, 0.05)';
+
+            // Clear the link input since file takes priority
+            inputLink.value = '';
+            typeIndicator.className = 'type-indicator torrent';
+            typeIndicator.innerHTML = '<span>📄 .torrent File Selected</span>';
+            btnSubmit.disabled = false;
+        }
+
+        function clearFileSelection() {
+            selectedTorrentFile = null;
+            torrentFileInput.value = '';
+            dropZoneContent.style.display = '';
+            dropZoneSelected.style.display = 'none';
+            dropZone.style.borderColor = '';
+            dropZone.style.background = '';
+
+            // Re-evaluate button state based on link input
+            const val = inputLink.value.trim();
+            if (!val) {
+                typeIndicator.className = 'type-indicator unknown';
+                typeIndicator.innerHTML = '<span>Paste a link to detect type</span>';
+                btnSubmit.disabled = true;
+            }
+        }
+
+        torrentFileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFileSelect(e.target.files[0]);
+            }
+        });
+
+        clearFileBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            clearFileSelection();
+        });
+
+        // Drag and drop visual feedback
+        ['dragenter', 'dragover'].forEach(evt => {
+            dropZone.addEventListener(evt, (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                dropZone.style.borderColor = 'var(--accent-indigo)';
+                dropZone.style.background = 'rgba(30, 191, 106, 0.08)';
+            });
+        });
+
+        ['dragleave', 'drop'].forEach(evt => {
+            dropZone.addEventListener(evt, (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (!selectedTorrentFile) {
+                    dropZone.style.borderColor = '';
+                    dropZone.style.background = '';
+                }
+            });
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFileSelect(files[0]);
+            }
+        });
+
         inputLink.addEventListener('input', () => {
             const val = inputLink.value.trim();
+            // Clear file selection if user types a link
+            if (val && selectedTorrentFile) {
+                clearFileSelection();
+            }
+
             typeIndicator.className = 'type-indicator';
             if (val.startsWith('magnet:')) {
                 typeIndicator.classList.add('torrent');
@@ -1704,7 +1866,7 @@
             } else {
                 typeIndicator.classList.add('unknown');
                 typeIndicator.innerHTML = '<span>Paste a link to detect type</span>';
-                btnSubmit.disabled = true;
+                btnSubmit.disabled = !selectedTorrentFile;
             }
         });
 
@@ -1721,6 +1883,7 @@
             const k = 1024, sizes = ['B', 'KB', 'MB', 'GB', 'TB'], i = Math.floor(Math.log(bytes) / Math.log(k));
             return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
         }
+
 
         btnSearch.addEventListener('click', () => {
             const query = inputSearch.value.trim();
@@ -1938,25 +2101,43 @@
             });
         };
 
-        // ─── Add Link Manually ───
+        // ─── Add Link or File ───
         // ─── Submit ───
         btnSubmit.addEventListener('click', () => {
             const link = inputLink.value.trim();
-            if (!link) return;
+            const hasFile = selectedTorrentFile !== null;
 
-            const isTorrent = link.startsWith('magnet:');
-            const endpoint = isTorrent ? '/api/add-torrent' : '/api/add-webdl';
+            if (!link && !hasFile) return;
 
             btnSubmit.disabled = true;
             btnSubmit.innerHTML = '<span class="spinner-inline"></span> Adding...';
             toast.className = 'toast';
             toast.style.display = 'none';
 
-            fetch(endpoint, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ link: link })
-            })
+            let fetchPromise;
+
+            if (hasFile) {
+                // Upload .torrent file
+                const formData = new FormData();
+                formData.append('file', selectedTorrentFile);
+
+                fetchPromise = fetch('/api/add-torrent-file', {
+                    method: 'POST',
+                    body: formData
+                });
+            } else {
+                // Submit link (magnet or URL)
+                const isTorrent = link.startsWith('magnet:');
+                const endpoint = isTorrent ? '/api/add-torrent' : '/api/add-webdl';
+
+                fetchPromise = fetch(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ link: link })
+                });
+            }
+
+            fetchPromise
             .then(r => r.json())
             .then(data => {
                 btnSubmit.disabled = false;
@@ -1982,6 +2163,7 @@
                     }
                     toast.innerHTML = html;
                     inputLink.value = '';
+                    clearFileSelection();
                     typeIndicator.className = 'type-indicator unknown';
                     typeIndicator.innerHTML = 'Paste a link to detect type';
                     // Reload history
