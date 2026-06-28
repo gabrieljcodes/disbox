@@ -594,189 +594,128 @@ func (b *Bot) handleListDownloads(s *discordgo.Session, i *discordgo.Interaction
 }
 
 func (b *Bot) handleTorrentStatus(s *discordgo.Session, i *discordgo.InteractionCreate) {
-	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-		Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
-	})
-
-	options := i.ApplicationCommandData().Options
-	torrentID := int(options[0].IntValue())
-
-	var info *torbox.TorrentInfo
-	var foundClientIndex int
-	var err error
-
-	for idx := 0; idx < b.torboxClientPool.GetClientCount(); idx++ {
-		client := b.torboxClientPool.GetClient(idx)
-		info, err = client.GetTorrentInfo(torrentID)
-		if err == nil {
-			foundClientIndex = idx
-			break
-		}
-	}
-
-	if err != nil {
-		b.sendError(s, i, "Error getting torrent info", err)
-		return
-	}
-
-	progressBar := createProgressBar(info.Progress)
-	
-	stateEmoji := "⏸️"
-	if info.Active {
-		stateEmoji = "▶️"
-	}
-	if info.DownloadFinished {
-		stateEmoji = "✅"
-	}
-
-	embed := &discordgo.MessageEmbed{
-		Title:       fmt.Sprintf("%s Torrent #%d", stateEmoji, info.ID),
-		Description: fmt.Sprintf("**%s**", info.Name),
-		Color:       0x3498db,
-		Fields: []*discordgo.MessageEmbedField{
-			{
-				Name:   "Progress",
-				Value:  fmt.Sprintf("%s %.1f%%", progressBar, info.Progress),
-				Inline: false,
-			},
-			{
-				Name:   "Speed",
-				Value:  fmt.Sprintf("↓ %s/s\n↑ %s/s", formatBytes(info.DownloadSpeed), formatBytes(info.UploadSpeed)),
-				Inline: true,
-			},
-			{
-				Name:   "Seeds/Peers",
-				Value:  fmt.Sprintf("🌱 %d\n👥 %d", info.Seeds, info.Peers),
-				Inline: true,
-			},
-			{
-				Name:   "Size",
-				Value:  fmt.Sprintf("%s / %s", formatBytes(info.Downloaded), formatBytes(info.Size)),
-				Inline: true,
-			},
-			{
-				Name:   "Ratio",
-				Value:  fmt.Sprintf("%.2f", info.Ratio),
-				Inline: true,
-			},
-			{
-				Name:   "Status",
-				Value:  info.DownloadState,
-				Inline: true,
-			},
-		},
-	}
-
-	if info.DownloadFinished && info.DownloadPresent {
-		// Register a proxy link (permanent, no expiration)
-		proxyLink, _ := b.proxyServer.RegisterDownloadWithUser("torrent", torrentID, foundClientIndex, i.Member.User.ID, i.Member.User.Username, i.Member.User.AvatarURL(""), info.Name, info.Size)
-		
-		embed.Description = fmt.Sprintf("**%s**\n\n🔒 Permanent link via proxy", info.Name)
-		
-		browseLink := strings.Replace(proxyLink, "/dl/", "/browse/", 1)
-		buttons := []discordgo.MessageComponent{
-			discordgo.Button{
-				Label: "🔗 Download ZIP",
-				Style: discordgo.LinkButton,
-				URL:   proxyLink,
-			},
-			discordgo.Button{
-				Label: "📂 Browse Files",
-				Style: discordgo.LinkButton,
-				URL:   browseLink,
-			},
-		}
-		
-		s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
-			Embeds: &[]*discordgo.MessageEmbed{embed},
-			Components: &[]discordgo.MessageComponent{
-				discordgo.ActionsRow{
-					Components: buttons,
-				},
-			},
-		})
-		return
-	}
-
-	s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
-		Embeds: &[]*discordgo.MessageEmbed{embed},
-	})
+	b.handleDownloadStatus(s, i, "torrent")
 }
 
 func (b *Bot) handleWebDLStatus(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	b.handleDownloadStatus(s, i, "webdl")
+}
+
+func (b *Bot) handleDownloadStatus(s *discordgo.Session, i *discordgo.InteractionCreate, dlType string) {
 	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
 	})
 
 	options := i.ApplicationCommandData().Options
-	webdlID := int(options[0].IntValue())
+	dlID := int(options[0].IntValue())
 
-	var info *torbox.WebDownloadInfo
 	var foundClientIndex int
 	var err error
+	var name, state string
+	var progress, ratio float64
+	var downloaded, size, dlSpeed, upSpeed int64
+	var seeds, peers int
+	var active, finished, present bool
 
-	for idx := 0; idx < b.torboxClientPool.GetClientCount(); idx++ {
-		client := b.torboxClientPool.GetClient(idx)
-		info, err = client.GetWebDownloadInfo(webdlID)
-		if err == nil {
-			foundClientIndex = idx
-			break
+	if dlType == "torrent" {
+		var info *torbox.TorrentInfo
+		for idx := 0; idx < b.torboxClientPool.GetClientCount(); idx++ {
+			if info, err = b.torboxClientPool.GetClient(idx).GetTorrentInfo(dlID); err == nil {
+				foundClientIndex = idx
+				name = info.Name
+				progress = info.Progress
+				dlSpeed = info.DownloadSpeed
+				upSpeed = info.UploadSpeed
+				seeds = info.Seeds
+				peers = info.Peers
+				state = info.DownloadState
+				downloaded = info.Downloaded
+				size = info.Size
+				ratio = info.Ratio
+				present = info.DownloadPresent
+				finished = info.DownloadFinished
+				active = info.Active
+				break
+			}
+		}
+	} else {
+		var info *torbox.WebDownloadInfo
+		for idx := 0; idx < b.torboxClientPool.GetClientCount(); idx++ {
+			if info, err = b.torboxClientPool.GetClient(idx).GetWebDownloadInfo(dlID); err == nil {
+				foundClientIndex = idx
+				name = info.Name
+				progress = info.Progress
+				dlSpeed = info.DownloadSpeed
+				state = info.DownloadState
+				downloaded = info.Downloaded
+				size = info.Size
+				present = info.DownloadPresent
+				finished = info.DownloadFinished
+				active = info.Active
+				break
+			}
 		}
 	}
 
 	if err != nil {
-		b.sendError(s, i, "Error getting web download info", err)
+		b.sendError(s, i, "Error getting "+dlType+" info", err)
 		return
 	}
 
-	progressBar := createProgressBar(info.Progress)
+	progressBar := createProgressBar(progress)
 	
 	stateEmoji := "⏸️"
-	if info.Active {
+	if active {
 		stateEmoji = "▶️"
 	}
-	if info.DownloadFinished {
+	if finished {
 		stateEmoji = "✅"
 	}
 
+	titleType := "Torrent"
+	if dlType != "torrent" {
+		titleType = "Web Download"
+	}
+
 	embed := &discordgo.MessageEmbed{
-		Title:       fmt.Sprintf("%s Web Download #%d", stateEmoji, info.ID),
-		Description: fmt.Sprintf("**%s**", info.Name),
+		Title:       fmt.Sprintf("%s %s #%d", stateEmoji, titleType, dlID),
+		Description: fmt.Sprintf("**%s**", name),
 		Color:       0x3498db,
 		Fields: []*discordgo.MessageEmbedField{
-			{
-				Name:   "Progress",
-				Value:  fmt.Sprintf("%s %.1f%%", progressBar, info.Progress),
-				Inline: false,
-			},
-			{
-				Name:   "Speed",
-				Value:  fmt.Sprintf("↓ %s/s", formatBytes(info.DownloadSpeed)),
-				Inline: true,
-			},
-			{
-				Name:   "Size",
-				Value:  fmt.Sprintf("%s / %s", formatBytes(info.Downloaded), formatBytes(info.Size)),
-				Inline: true,
-			},
-			{
-				Name:   "Status",
-				Value:  info.DownloadState,
-				Inline: true,
-			},
+			{Name: "Progress", Value: fmt.Sprintf("%s %.1f%%", progressBar, progress), Inline: false},
 		},
 	}
 
-	if info.DownloadFinished && info.DownloadPresent {
-		// Register a proxy link (permanent, no expiration)
-		proxyLink, _ := b.proxyServer.RegisterDownloadWithUser("webdl", webdlID, foundClientIndex, i.Member.User.ID, i.Member.User.Username, i.Member.User.AvatarURL(""), info.Name, info.Size)
+	if dlType == "torrent" {
+		embed.Fields = append(embed.Fields, 
+			&discordgo.MessageEmbedField{Name: "Speed", Value: fmt.Sprintf("↓ %s/s\n↑ %s/s", formatBytes(dlSpeed), formatBytes(upSpeed)), Inline: true},
+			&discordgo.MessageEmbedField{Name: "Seeds/Peers", Value: fmt.Sprintf("🌱 %d\n👥 %d", seeds, peers), Inline: true},
+			&discordgo.MessageEmbedField{Name: "Size", Value: fmt.Sprintf("%s / %s", formatBytes(downloaded), formatBytes(size)), Inline: true},
+			&discordgo.MessageEmbedField{Name: "Ratio", Value: fmt.Sprintf("%.2f", ratio), Inline: true},
+			&discordgo.MessageEmbedField{Name: "Status", Value: state, Inline: true},
+		)
+	} else {
+		embed.Fields = append(embed.Fields, 
+			&discordgo.MessageEmbedField{Name: "Speed", Value: fmt.Sprintf("↓ %s/s", formatBytes(dlSpeed)), Inline: true},
+			&discordgo.MessageEmbedField{Name: "Size", Value: fmt.Sprintf("%s / %s", formatBytes(downloaded), formatBytes(size)), Inline: true},
+			&discordgo.MessageEmbedField{Name: "Status", Value: state, Inline: true},
+		)
+	}
+
+	if finished && present {
+		proxyLink, _ := b.proxyServer.RegisterDownloadWithUser(dlType, dlID, foundClientIndex, i.Member.User.ID, i.Member.User.Username, i.Member.User.AvatarURL(""), name, size)
 		
-		embed.Description = fmt.Sprintf("**%s**\n\n🔒 Permanent link via proxy", info.Name)
+		embed.Description = fmt.Sprintf("**%s**\n\n🔒 Permanent link via proxy", name)
+		
+		btnLabel := "🔗 Download File"
+		if dlType == "torrent" {
+			btnLabel = "🔗 Download ZIP"
+		}
 		
 		browseLink := strings.Replace(proxyLink, "/dl/", "/browse/", 1)
 		buttons := []discordgo.MessageComponent{
 			discordgo.Button{
-				Label: "🔗 Download File",
+				Label: btnLabel,
 				Style: discordgo.LinkButton,
 				URL:   proxyLink,
 			},

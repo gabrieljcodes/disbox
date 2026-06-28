@@ -98,12 +98,12 @@ func (p *ClientPool) UpdateKeys(apiKeys []string) {
 	}
 }
 
-func (p *ClientPool) AddTorrentWithFallback(magnetLink string, cacheOnly bool) (*APIResponse, int, error) {
+func (p *ClientPool) doWithFallback(action func(client *Client) (*APIResponse, error)) (*APIResponse, int, error) {
 	p.ResetToFirst()
 	
 	for attempt := 0; attempt < len(p.clients); attempt++ {
 		client := p.GetCurrentClient()
-		resp, err := client.AddTorrent(magnetLink, cacheOnly)
+		resp, err := action(client)
 		
 		if err != nil {
 			log.Printf("Error with API key #%d: %v", p.currentIndex+1, err)
@@ -124,65 +124,25 @@ func (p *ClientPool) AddTorrentWithFallback(magnetLink string, cacheOnly bool) (
 		return resp, p.currentIndex, err
 	}
 
-	return nil, -1, fmt.Errorf("failed to add torrent with all available API keys")
+	return nil, -1, fmt.Errorf("failed to complete action with all available API keys")
+}
+
+func (p *ClientPool) AddTorrentWithFallback(magnetLink string, cacheOnly bool) (*APIResponse, int, error) {
+	return p.doWithFallback(func(c *Client) (*APIResponse, error) {
+		return c.AddTorrent(magnetLink, cacheOnly)
+	})
 }
 
 func (p *ClientPool) AddTorrentFileWithFallback(fileData []byte, fileName string, cacheOnly bool) (*APIResponse, int, error) {
-	p.ResetToFirst()
-	
-	for attempt := 0; attempt < len(p.clients); attempt++ {
-		client := p.GetCurrentClient()
-		resp, err := client.AddTorrentFile(fileData, fileName, cacheOnly)
-		
-		if err != nil {
-			log.Printf("Error with API key #%d: %v", p.currentIndex+1, err)
-			if !p.TryNextClient() {
-				return nil, -1, fmt.Errorf("all API keys failed: %w", err)
-			}
-			continue
-		}
-
-		if !resp.Success && isActiveLimitError(resp) {
-			log.Printf("API key #%d reached active limit, trying next...", p.currentIndex+1)
-			if !p.TryNextClient() {
-				return resp, -1, fmt.Errorf("all API keys reached active limit")
-			}
-			continue
-		}
-
-		return resp, p.currentIndex, err
-	}
-
-	return nil, -1, fmt.Errorf("failed to add torrent file with all available API keys")
+	return p.doWithFallback(func(c *Client) (*APIResponse, error) {
+		return c.AddTorrentFile(fileData, fileName, cacheOnly)
+	})
 }
 
 func (p *ClientPool) AddWebDownloadWithFallback(downloadLink string) (*APIResponse, int, error) {
-	p.ResetToFirst()
-	
-	for attempt := 0; attempt < len(p.clients); attempt++ {
-		client := p.GetCurrentClient()
-		resp, err := client.AddWebDownload(downloadLink)
-		
-		if err != nil {
-			log.Printf("Error with API key #%d: %v", p.currentIndex+1, err)
-			if !p.TryNextClient() {
-				return nil, -1, fmt.Errorf("all API keys failed: %w", err)
-			}
-			continue
-		}
-
-		if !resp.Success && isActiveLimitError(resp) {
-			log.Printf("API key #%d reached active limit, trying next...", p.currentIndex+1)
-			if !p.TryNextClient() {
-				return resp, -1, fmt.Errorf("all API keys reached active limit")
-			}
-			continue
-		}
-
-		return resp, p.currentIndex, err
-	}
-
-	return nil, -1, fmt.Errorf("failed to add web download with all available API keys")
+	return p.doWithFallback(func(c *Client) (*APIResponse, error) {
+		return c.AddWebDownload(downloadLink)
+	})
 }
 
 func (p *ClientPool) GetClient(index int) *Client {

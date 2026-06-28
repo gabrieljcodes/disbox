@@ -217,31 +217,39 @@ func (c *Client) ControlWebDownload(webdlID int, operation string, all bool) (*A
 	return c.doRequest(req)
 }
 
-func (c *Client) GetTorrentInfo(torrentID int) (*TorrentInfo, error) {
-	req, err := http.NewRequest("GET", fmt.Sprintf("%s/torrents/mylist", apiBaseURL), nil)
+func (c *Client) getListData(endpoint string, target interface{}) error {
+	req, err := http.NewRequest("GET", fmt.Sprintf("%s/%s", apiBaseURL, endpoint), nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return fmt.Errorf("failed to create request: %w", err)
 	}
 
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
 
 	apiResp, err := c.doRequest(req)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	if !apiResp.Success {
-		return nil, fmt.Errorf("failed to get torrent info: %s", apiResp.Detail)
+		return fmt.Errorf("request failed: %s", apiResp.Detail)
 	}
 
 	dataBytes, err := json.Marshal(apiResp.Data)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal data: %w", err)
+		return fmt.Errorf("failed to marshal data: %w", err)
 	}
 
-	var torrents []TorrentInfo
-	if err := json.Unmarshal(dataBytes, &torrents); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal torrents: %w", err)
+	if err := json.Unmarshal(dataBytes, target); err != nil {
+		return fmt.Errorf("failed to unmarshal data: %w", err)
+	}
+
+	return nil
+}
+
+func (c *Client) GetTorrentInfo(torrentID int) (*TorrentInfo, error) {
+	torrents, err := c.ListTorrents()
+	if err != nil {
+		return nil, err
 	}
 
 	for _, torrent := range torrents {
@@ -254,30 +262,9 @@ func (c *Client) GetTorrentInfo(torrentID int) (*TorrentInfo, error) {
 }
 
 func (c *Client) GetWebDownloadInfo(webdlID int) (*WebDownloadInfo, error) {
-	req, err := http.NewRequest("GET", fmt.Sprintf("%s/webdl/mylist", apiBaseURL), nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	req.Header.Set("Authorization", "Bearer "+c.apiKey)
-
-	apiResp, err := c.doRequest(req)
+	webdls, err := c.ListWebDownloads()
 	if err != nil {
 		return nil, err
-	}
-
-	if !apiResp.Success {
-		return nil, fmt.Errorf("failed to get web download info: %s", apiResp.Detail)
-	}
-
-	dataBytes, err := json.Marshal(apiResp.Data)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal data: %w", err)
-	}
-
-	var webdls []WebDownloadInfo
-	if err := json.Unmarshal(dataBytes, &webdls); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal web downloads: %w", err)
 	}
 
 	for _, webdl := range webdls {
@@ -290,74 +277,30 @@ func (c *Client) GetWebDownloadInfo(webdlID int) (*WebDownloadInfo, error) {
 }
 
 func (c *Client) ListTorrents() ([]TorrentInfo, error) {
-	req, err := http.NewRequest("GET", fmt.Sprintf("%s/torrents/mylist", apiBaseURL), nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	req.Header.Set("Authorization", "Bearer "+c.apiKey)
-
-	apiResp, err := c.doRequest(req)
-	if err != nil {
+	var torrents []TorrentInfo
+	if err := c.getListData("torrents/mylist", &torrents); err != nil {
 		return nil, err
 	}
-
-	if !apiResp.Success {
-		return nil, fmt.Errorf("failed to list torrents: %s", apiResp.Detail)
-	}
-
-	dataBytes, err := json.Marshal(apiResp.Data)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal data: %w", err)
-	}
-
-	var torrents []TorrentInfo
-	if err := json.Unmarshal(dataBytes, &torrents); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal torrents: %w", err)
-	}
-
 	return torrents, nil
 }
 
 func (c *Client) ListWebDownloads() ([]WebDownloadInfo, error) {
-	req, err := http.NewRequest("GET", fmt.Sprintf("%s/webdl/mylist", apiBaseURL), nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	req.Header.Set("Authorization", "Bearer "+c.apiKey)
-
-	apiResp, err := c.doRequest(req)
-	if err != nil {
+	var webdls []WebDownloadInfo
+	if err := c.getListData("webdl/mylist", &webdls); err != nil {
 		return nil, err
 	}
-
-	if !apiResp.Success {
-		return nil, fmt.Errorf("failed to list web downloads: %s", apiResp.Detail)
-	}
-
-	dataBytes, err := json.Marshal(apiResp.Data)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal data: %w", err)
-	}
-
-	var webdls []WebDownloadInfo
-	if err := json.Unmarshal(dataBytes, &webdls); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal web downloads: %w", err)
-	}
-
 	return webdls, nil
 }
 
-func (c *Client) RequestDownloadURL(torrentID int, fileID int) (string, error) {
-	req, err := http.NewRequest("GET", fmt.Sprintf("%s/torrents/requestdl", apiBaseURL), nil)
+func (c *Client) requestDLURL(endpoint, idParam string, id int, fileID int) (string, error) {
+	req, err := http.NewRequest("GET", fmt.Sprintf("%s/%s", apiBaseURL, endpoint), nil)
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %w", err)
 	}
 
 	q := req.URL.Query()
 	q.Add("token", c.apiKey)
-	q.Add("torrent_id", fmt.Sprintf("%d", torrentID))
+	q.Add(idParam, fmt.Sprintf("%d", id))
 	if fileID >= 0 {
 		q.Add("file_id", fmt.Sprintf("%d", fileID))
 	} else {
@@ -382,37 +325,12 @@ func (c *Client) RequestDownloadURL(torrentID int, fileID int) (string, error) {
 	return downloadLink, nil
 }
 
+func (c *Client) RequestDownloadURL(torrentID int, fileID int) (string, error) {
+	return c.requestDLURL("torrents/requestdl", "torrent_id", torrentID, fileID)
+}
+
 func (c *Client) RequestWebDownloadURL(webdlID int, fileID int) (string, error) {
-	req, err := http.NewRequest("GET", fmt.Sprintf("%s/webdl/requestdl", apiBaseURL), nil)
-	if err != nil {
-		return "", fmt.Errorf("failed to create request: %w", err)
-	}
-
-	q := req.URL.Query()
-	q.Add("token", c.apiKey)
-	q.Add("web_id", fmt.Sprintf("%d", webdlID))
-	if fileID >= 0 {
-		q.Add("file_id", fmt.Sprintf("%d", fileID))
-	} else {
-		q.Add("zip_link", "true")
-	}
-	req.URL.RawQuery = q.Encode()
-
-	apiResp, err := c.doRequest(req)
-	if err != nil {
-		return "", err
-	}
-
-	if !apiResp.Success {
-		return "", fmt.Errorf("failed to request download URL: %s", apiResp.Detail)
-	}
-
-	downloadLink, ok := apiResp.Data.(string)
-	if !ok {
-		return "", fmt.Errorf("failed to parse download link from api response")
-	}
-
-	return downloadLink, nil
+	return c.requestDLURL("webdl/requestdl", "web_id", webdlID, fileID)
 }
 
 func (c *Client) doRequest(req *http.Request) (*APIResponse, error) {

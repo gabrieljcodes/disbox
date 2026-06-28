@@ -3,6 +3,7 @@ package config
 import (
 	"log"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/joho/godotenv"
@@ -39,8 +40,8 @@ func LoadConfig() (*Config, error) {
 		DiscordBotToken:     os.Getenv("DISCORD_BOT_TOKEN"),
 		DiscordClientID:     os.Getenv("DISCORD_CLIENT_ID"),
 		DiscordClientSecret: os.Getenv("DISCORD_CLIENT_SECRET"),
-		TorboxAPIKeys:       parseTorboxAPIKeys(),
-		AdminUsers:          parseAdminUsers(),
+		TorboxAPIKeys:       parseEnvList("TORBOX_API_KEY"),
+		AdminUsers:          parseEnvList("ADMIN_USERS"),
 		CacheOnly:           strings.ToLower(os.Getenv("CACHE_ONLY")) == "true",
 		ProxyBaseURL:        proxyBaseURL,
 		ProxyPort:           proxyPort,
@@ -70,55 +71,21 @@ func LoadConfig() (*Config, error) {
 	return cfg, nil
 }
 
-func parseTorboxAPIKeys() []string {
-	var keys []string
-
-	apiKeyEnv := os.Getenv("TORBOX_API_KEY")
-	if apiKeyEnv == "" {
-		return keys
+func parseEnvList(envKey string) []string {
+	var items []string
+	envVal := os.Getenv(envKey)
+	if envVal == "" {
+		return items
 	}
 
-	apiKeyEnv = strings.Trim(apiKeyEnv, "[]")
+	envVal = strings.Trim(envVal, "[]")
+	rawItems := strings.Split(envVal, ",")
 
-	rawKeys := strings.Split(apiKeyEnv, ",")
-
-	for _, key := range rawKeys {
-		trimmedKey := strings.TrimSpace(key)
-		if trimmedKey != "" && !contains(keys, trimmedKey) {
-			keys = append(keys, trimmedKey)
+	for _, item := range rawItems {
+		trimmed := strings.TrimSpace(item)
+		if trimmed != "" && !slices.Contains(items, trimmed) {
+			items = append(items, trimmed)
 		}
 	}
-
-	return keys
-}
-
-func parseAdminUsers() []string {
-	var users []string
-
-	adminEnv := os.Getenv("ADMIN_USERS")
-	if adminEnv == "" {
-		return users
-	}
-
-	adminEnv = strings.Trim(adminEnv, "[]")
-
-	rawUsers := strings.Split(adminEnv, ",")
-
-	for _, user := range rawUsers {
-		trimmedUser := strings.TrimSpace(user)
-		if trimmedUser != "" && !contains(users, trimmedUser) {
-			users = append(users, trimmedUser)
-		}
-	}
-
-	return users
-}
-
-func contains(slice []string, item string) bool {
-	for _, s := range slice {
-		if s == item {
-			return true
-		}
-	}
-	return false
+	return items
 }

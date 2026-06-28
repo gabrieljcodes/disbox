@@ -90,9 +90,7 @@ func (c *Client) SearchMetadata(query string) ([]MetadataInfo, error) {
 	return apiResp.Data, nil
 }
 
-// SearchTorrents searches for torrents by query with optional cache checking
-func (c *Client) SearchTorrents(query string, checkCache bool) (*TorrentSearchResponse, error) {
-	url := fmt.Sprintf("https://search-api.torbox.app/torrents/search/%s", query)
+func (c *Client) executeSearchRequest(url string, checkCache bool) (*TorrentSearchResponse, error) {
 	if checkCache {
 		url += "?check_cache=true"
 	}
@@ -108,8 +106,9 @@ func (c *Client) SearchTorrents(query string, checkCache bool) (*TorrentSearchRe
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute request: %w", err)
 	}
+	defer resp.Body.Close()
+
 	bodyBytes, _ := io.ReadAll(resp.Body)
-	resp.Body.Close()
 	
 	fmt.Println("RAW RESPONSE:", string(bodyBytes))
 
@@ -139,53 +138,14 @@ func (c *Client) SearchTorrents(query string, checkCache bool) (*TorrentSearchRe
 	return apiResp.Data, nil
 }
 
+// SearchTorrents searches for torrents by query with optional cache checking
+func (c *Client) SearchTorrents(query string, checkCache bool) (*TorrentSearchResponse, error) {
+	url := fmt.Sprintf("https://search-api.torbox.app/torrents/search/%s", query)
+	return c.executeSearchRequest(url, checkCache)
+}
+
 // SearchTorrentsByIMDB searches for torrents by IMDB ID
 func (c *Client) SearchTorrentsByIMDB(imdbID string, checkCache bool) (*TorrentSearchResponse, error) {
 	url := fmt.Sprintf("https://search-api.torbox.app/torrents/imdb:%s", imdbID)
-	if checkCache {
-		url += "?check_cache=true"
-	}
-
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	req.Header.Set("Authorization", "Bearer "+c.apiKey)
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to execute request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	bodyBytes, _ := io.ReadAll(resp.Body)
-	resp.Body.Close()
-	
-	fmt.Println("RAW RESPONSE:", string(bodyBytes))
-
-	var apiResp struct {
-		Success bool                   `json:"success"`
-		Message string                 `json:"message"`
-		Error   string                 `json:"error"`
-		Detail  string                 `json:"detail"`
-		Data    *TorrentSearchResponse `json:"data"`
-	}
-
-	if err := json.Unmarshal(bodyBytes, &apiResp); err != nil {
-		return nil, fmt.Errorf("failed to decode response: %w", err)
-	}
-
-	if apiResp.Error != "" {
-		return nil, fmt.Errorf("%s", apiResp.Error)
-	}
-	if apiResp.Detail != "" {
-		return nil, fmt.Errorf("%s", apiResp.Detail)
-	}
-
-	if !apiResp.Success {
-		return nil, fmt.Errorf("search failed: %s", apiResp.Message)
-	}
-
-	return apiResp.Data, nil
+	return c.executeSearchRequest(url, checkCache)
 }
