@@ -40,6 +40,7 @@ func (s *Server) handleApiAdminSettingsGet(w http.ResponseWriter, r *http.Reques
 		"aiostreams_uuid":     s.GetSetting("aiostreams_uuid", ""),
 		"aiostreams_password": s.GetSetting("aiostreams_password", ""),
 		"tmdb_api_key":        s.GetSetting("tmdb_api_key", ""),
+		"remove_from_torbox_on_delete": s.GetSetting("remove_from_torbox_on_delete", "true") == "true",
 	})
 }
 
@@ -75,6 +76,7 @@ func (s *Server) handleApiAdminSettingsUpdate(w http.ResponseWriter, r *http.Req
 		"aiostreams_uuid":     true,
 		"aiostreams_password": true,
 		"tmdb_api_key":        true,
+		"remove_from_torbox_on_delete": true,
 	}
 
 	if !allowedKeys[req.Key] {

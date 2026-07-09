@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"strconv"
@@ -381,6 +382,109 @@ func (s *Server) handleV1AddTorrent(w http.ResponseWriter, r *http.Request) {
 	jsonOK(w, result)
 }
 
+func (s *Server) handleV1AddTorrentFile(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	discordID, ok := s.checkV1PublicAccess(w, r)
+	if !ok {
+		return
+	}
+
+	if err := s.checkGBLimit(discordID); err != nil {
+		jsonError(w, http.StatusForbidden, err.Error())
+		return
+	}
+
+	// Parse multipart form (max 10MB)
+	if err := r.ParseMultipartForm(10 << 20); err != nil {
+		jsonError(w, http.StatusBadRequest, "Failed to parse upload. Max file size is 10MB.")
+		return
+	}
+
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		jsonError(w, http.StatusBadRequest, "No file uploaded")
+		return
+	}
+	defer file.Close()
+
+	// Validate file extension
+	fileName := header.Filename
+	if !strings.HasSuffix(strings.ToLower(fileName), ".torrent") {
+		jsonError(w, http.StatusBadRequest, "Only .torrent files are accepted")
+		return
+	}
+
+	// Read file data
+	fileData, err := io.ReadAll(file)
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, "Failed to read file")
+		return
+	}
+
+	resp, clientIndex, err := s.clientPool.AddTorrentFileWithFallback(fileData, fileName, false)
+	if err != nil {
+		jsonError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+
+	if !resp.Success {
+		jsonError(w, http.StatusBadGateway, resp.Detail)
+		return
+	}
+
+	data, _ := resp.Data.(map[string]interface{})
+	torrentID, _ := data["torrent_id"].(float64)
+	name, _ := data["name"].(string)
+
+	var size int64 = 0
+	if name == "" {
+		time.Sleep(1 * time.Second)
+		client := s.clientPool.GetClient(clientIndex)
+		if info, err := client.GetTorrentInfo(int(torrentID)); err == nil {
+			name = info.Name
+			size = info.Size
+		}
+	}
+	if name == "" {
+		name = "Torrent File"
+	}
+
+	// Check if ready
+	client := s.clientPool.GetClient(clientIndex)
+	_, dlErr := client.RequestDownloadURL(int(torrentID), -1)
+
+	var discordUsername, discordAvatar string
+	if errUser := s.db.QueryRow("SELECT discord_username, discord_avatar FROM user_sessions WHERE discord_id = ? LIMIT 1", discordID).Scan(&discordUsername, &discordAvatar); errUser != nil {
+		discordUsername = "API User"
+		discordAvatar = ""
+	}
+
+	proxyLink, status := s.RegisterDownloadWithUser("torrent", int(torrentID), clientIndex, discordID, discordUsername, discordAvatar, name, size)
+
+	result := map[string]string{
+		"name": name,
+	}
+	if status == 1 {
+		result["message"] = "You already added this download. Returning existing link."
+	} else if status == 2 {
+		result["message"] = "Added successfully. (Already cached by another user)"
+	}
+
+	if dlErr != nil {
+		result["status"] = "monitoring"
+	} else {
+		result["status"] = "ready"
+		result["download_url"] = proxyLink
+		result["browse_url"] = strings.Replace(proxyLink, "/dl/", "/browse/", 1)
+	}
+
+	jsonOK(w, result)
+}
+
 func (s *Server) handleV1AddWebdl(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
@@ -477,7 +581,7 @@ func (s *Server) handleV1History(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rows, err := s.db.Query(
-		"SELECT token, name, type, created_at FROM download_history WHERE discord_id = ? ORDER BY created_at DESC LIMIT 100",
+		"SELECT token, name, type, created_at FROM download_history WHERE discord_id = ? AND deleted = 0 ORDER BY created_at DESC LIMIT 100",
 		discordID,
 	)
 	if err != nil {
@@ -568,24 +672,26 @@ func (s *Server) removeDownloadInternal(w http.ResponseWriter, token, discordID 
 		return
 	}
 
-	client := s.clientPool.GetClient(clientIndex)
-	var apiErr error
-	var resp *torbox.APIResponse
-	if dlType == "torrent" {
-		resp, apiErr = client.ControlTorrent(downloadID, "delete", false)
-	} else if dlType == "webdl" {
-		resp, apiErr = client.ControlWebDownload(downloadID, "delete", false)
+	if s.GetSetting("remove_from_torbox_on_delete", "true") == "true" {
+		client := s.clientPool.GetClient(clientIndex)
+		var apiErr error
+		var resp *torbox.APIResponse
+		if dlType == "torrent" {
+			resp, apiErr = client.ControlTorrent(downloadID, "delete", false)
+		} else if dlType == "webdl" {
+			resp, apiErr = client.ControlWebDownload(downloadID, "delete", false)
+		}
+
+		if apiErr != nil {
+			log.Printf("Failed to delete %s %d from TorBox: %v", dlType, downloadID, apiErr)
+			// We still proceed to remove it locally even if TorBox deletion fails,
+			// or maybe we shouldn't? Usually, user wants it gone from their list.
+		} else if resp != nil && !resp.Success {
+			log.Printf("Failed to delete %s %d from TorBox: %s", dlType, downloadID, resp.Detail)
+		}
 	}
 
-	if apiErr != nil {
-		log.Printf("Failed to delete %s %d from TorBox: %v", dlType, downloadID, apiErr)
-		// We still proceed to remove it locally even if TorBox deletion fails,
-		// or maybe we shouldn't? Usually, user wants it gone from their list.
-	} else if resp != nil && !resp.Success {
-		log.Printf("Failed to delete %s %d from TorBox: %s", dlType, downloadID, resp.Detail)
-	}
-
-	s.db.Exec("DELETE FROM download_history WHERE token = ?", token)
+	s.db.Exec("UPDATE download_history SET deleted = 1 WHERE token = ?", token)
 	s.db.Exec("DELETE FROM download_links WHERE token = ?", token)
 
 	s.mu.Lock()

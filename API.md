@@ -45,6 +45,11 @@ Retrieves information about the token owner.
 Body: `{"link": "magnet:?xt=urn:btih:..."}`
 Adds a torrent and returns a proxy download link.
 
+#### Add Torrent File
+`POST /v1/add-torrent-file`
+Body: `multipart/form-data` with a `file` field containing the `.torrent` file.
+Adds a torrent from a `.torrent` file and returns a proxy download link.
+
 #### Add Web Download
 `POST /v1/add-webdl`
 Body: `{"link": "https://hoster.com/file..."}`

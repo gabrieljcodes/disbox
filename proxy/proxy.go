@@ -114,6 +114,7 @@ func NewServer(baseURL, port string, clientPool *torbox.ClientPool, discordClien
 			download_id INTEGER NOT NULL,
 			client_index INTEGER NOT NULL,
 			size INTEGER DEFAULT 0,
+			deleted BOOLEAN DEFAULT 0,
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 		);
 		CREATE TABLE IF NOT EXISTS api_tokens (
@@ -142,6 +143,7 @@ func NewServer(baseURL, port string, clientPool *torbox.ClientPool, discordClien
 	db.Exec("ALTER TABLE download_history ADD COLUMN discord_username TEXT DEFAULT ''")
 	db.Exec("ALTER TABLE download_history ADD COLUMN discord_avatar TEXT DEFAULT ''")
 	db.Exec("ALTER TABLE download_history ADD COLUMN size INTEGER DEFAULT 0")
+	db.Exec("ALTER TABLE download_history ADD COLUMN deleted BOOLEAN DEFAULT 0")
 
 	s := &Server{
 		baseURL:             strings.TrimRight(baseURL, "/"),
@@ -224,6 +226,7 @@ func NewServer(baseURL, port string, clientPool *torbox.ClientPool, discordClien
 	// Public API (token-authenticated, always registered)
 	mux.HandleFunc("/v1/me", s.handleV1Me)
 	mux.HandleFunc("/v1/add-torrent", s.handleV1AddTorrent)
+	mux.HandleFunc("/v1/add-torrent-file", s.handleV1AddTorrentFile)
 	mux.HandleFunc("/v1/add-webdl", s.handleV1AddWebdl)
 	mux.HandleFunc("/v1/remove-download", s.handleV1RemoveDownload)
 	mux.HandleFunc("/v1/history", s.handleV1History)

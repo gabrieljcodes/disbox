@@ -100,6 +100,11 @@ func (s *Server) initDefaultSettings(clientPool *torbox.ClientPool, cacheOnly bo
 	if err == sql.ErrNoRows {
 		s.SetSetting("tmdb_api_key", "")
 	}
+
+	err = s.db.QueryRow("SELECT value FROM access_settings WHERE key = 'remove_from_torbox_on_delete'").Scan(&dummy)
+	if err == sql.ErrNoRows {
+		s.SetSetting("remove_from_torbox_on_delete", "true")
+	}
 }
 
 func (s *Server) CheckRateLimit(discordID string) bool {

@@ -1197,6 +1197,16 @@
                                     <span class="toggle-slider"></span>
                                 </span>
                             </label>
+                            <label class="toggle-container">
+                                <div class="toggle-text">
+                                    <div class="toggle-title">Remove from TorBox on Delete</div>
+                                    <div class="toggle-desc">When a user deletes a download, remove it from TorBox as well</div>
+                                </div>
+                                <span class="toggle-switch">
+                                    <input type="checkbox" id="torbox-delete-toggle">
+                                    <span class="toggle-slider"></span>
+                                </span>
+                            </label>
                         </div>
 
                         <div class="form-group">
@@ -1566,6 +1576,7 @@
                       document.getElementById('cache-toggle').checked = data.cache_only;
                       document.getElementById('public-api-toggle').checked = data.public_api_enabled;
                       document.getElementById('search-enabled-toggle').checked = data.search_enabled;
+                      document.getElementById('torbox-delete-toggle').checked = data.remove_from_torbox_on_delete;
                       document.getElementById('api-delay-input').value = data.public_api_delay_ms;
                       document.getElementById('user-gb-limit-input').value = data.user_gb_limit || '0';
                       
@@ -1614,6 +1625,7 @@
 
           document.getElementById('cache-toggle')?.addEventListener('change', (e) => setAdminSetting('cache_only', e.target.checked));
           document.getElementById('public-api-toggle')?.addEventListener('change', (e) => setAdminSetting('public_api_enabled', e.target.checked));
+          document.getElementById('torbox-delete-toggle')?.addEventListener('change', (e) => setAdminSetting('remove_from_torbox_on_delete', e.target.checked));
           document.getElementById('search-enabled-toggle')?.addEventListener('change', (e) => {
               setAdminSetting('search_enabled', e.target.checked);
               // Optimistically hide/show tab

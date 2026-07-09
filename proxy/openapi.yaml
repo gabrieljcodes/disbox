@@ -135,6 +135,48 @@ paths:
                       message:
                         type: string
 
+  /v1/add-torrent-file:
+    post:
+      summary: Add a Torrent File
+      description: Adds a .torrent file to your Disbox.
+      tags: [Downloads]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: The .torrent file
+      responses:
+        '200':
+          description: Download added successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                      status:
+                        type: string
+                        enum: [ready, monitoring]
+                      download_url:
+                        type: string
+                      browse_url:
+                        type: string
+                      message:
+                        type: string
+
   /v1/add-webdl:
     post:
       summary: Add a Web Download
