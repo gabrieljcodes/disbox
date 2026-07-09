@@ -75,6 +75,12 @@ func (s *Server) initDefaultSettings(clientPool *torbox.ClientPool, cacheOnly bo
 		s.SetSetting("public_api_delay_ms", "0")
 	}
 
+	// Initialize max_concurrent_per_user if not exists
+	err = s.db.QueryRow("SELECT value FROM access_settings WHERE key = 'max_concurrent_per_user'").Scan(&dummy)
+	if err == sql.ErrNoRows {
+		s.SetSetting("max_concurrent_per_user", "0") // 0 = unlimited
+	}
+
 	// Initialize aiostreams settings
 	// Initialize search settings
 	err = s.db.QueryRow("SELECT value FROM access_settings WHERE key = 'search_enabled'").Scan(&dummy)

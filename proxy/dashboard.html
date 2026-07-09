@@ -1158,9 +1158,26 @@
                     <div class="add-form">
                         <div class="admin-section-header">
                             <div class="admin-section-icon">⚙️</div>
-                            <div>
+                            <div style="flex: 1;">
                                 <div class="admin-section-title">Global Settings</div>
                                 <div class="admin-section-desc">Configure bot behavior and API settings</div>
+                            </div>
+                            
+                            <div style="display: flex; gap: 16px; background: rgba(0,0,0,0.2); padding: 8px 16px; border-radius: 8px; border: 1px solid var(--border-subtle);">
+                                <div style="text-align: center;">
+                                    <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Active Slots</div>
+                                    <div style="font-size: 16px; font-weight: 700; color: var(--accent-emerald);"><span id="stats-active-slots">0</span> / <span id="stats-total-slots">0</span></div>
+                                </div>
+                                <div style="width: 1px; background: var(--border-subtle);"></div>
+                                <div style="text-align: center;">
+                                    <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Queued</div>
+                                    <div style="font-size: 16px; font-weight: 700; color: var(--accent-indigo);" id="stats-queued-slots">0</div>
+                                </div>
+                                <div style="width: 1px; background: var(--border-subtle);"></div>
+                                <div style="text-align: center;">
+                                    <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Bandwidth (Month)</div>
+                                    <div style="font-size: 16px; font-weight: 700; color: #ffb86c;"><span id="stats-bw-used">0</span> / <span id="stats-bw-limit">0</span> TB</div>
+                                </div>
                             </div>
                         </div>
 
@@ -1227,6 +1244,18 @@
                                 <button id="user-gb-limit-btn" class="btn" style="background: var(--bg-input); border: 1px solid var(--border-subtle); color: var(--text-primary);">Save</button>
                             </div>
                             <div class="form-hint">Limit how many GBs normal users can add via bot and API. Admins bypass this limit.</div>
+                        </div>
+
+                        <div class="form-group" style="margin-top: 16px;">
+                            <label class="form-label">
+                                Max Concurrent Downloads Per User
+                                <span class="badge" style="background: rgba(30, 191, 106, 0.1); color: var(--accent-indigo); border: none; font-size: 10px; margin-left: 8px;">0 = Unlimited</span>
+                            </label>
+                            <div style="display: flex; gap: 8px;">
+                                <input type="number" id="user-concurrent-limit-input" class="form-input" min="0" placeholder="0">
+                                <button id="user-concurrent-limit-btn" class="btn" style="background: var(--bg-input); border: 1px solid var(--border-subtle); color: var(--text-primary);">Save</button>
+                            </div>
+                            <div class="form-hint">Limit how many active downloads normal users can have simultaneously. Queued downloads count towards this limit. Admins bypass this limit.</div>
                         </div>
 
                         <div class="form-group" style="margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--border-subtle);">
@@ -1567,6 +1596,19 @@
 
           // ─── Load Admin Settings ───
           function loadAdminSettings() {
+              fetch('/api/queue-status')
+                  .then(r => r.json())
+                  .then(res => {
+                      if (!res.success) return;
+                      const data = res.data;
+                      document.getElementById('stats-active-slots').textContent = data.active_jobs;
+                      document.getElementById('stats-total-slots').textContent = data.total_capacity;
+                      document.getElementById('stats-queued-slots').textContent = data.queued_jobs;
+                      const tb = 1024*1024*1024*1024;
+                      document.getElementById('stats-bw-used').textContent = data.global_bandwidth_used ? (data.global_bandwidth_used / tb).toFixed(2) : "0";
+                      document.getElementById('stats-bw-limit').textContent = data.global_bandwidth_limit ? (data.global_bandwidth_limit / tb).toFixed(0) : "0";
+                  }).catch(e => console.error("Failed to load queue status:", e));
+
               fetch('/api/admin/settings')
                   .then(r => r.json())
                   .then(res => {
@@ -1579,6 +1621,7 @@
                       document.getElementById('torbox-delete-toggle').checked = data.remove_from_torbox_on_delete;
                       document.getElementById('api-delay-input').value = data.public_api_delay_ms;
                       document.getElementById('user-gb-limit-input').value = data.user_gb_limit || '0';
+                      document.getElementById('user-concurrent-limit-input').value = data.max_concurrent_per_user || '0';
                       
                       const adminApiToggle = document.getElementById('admin-api-toggle');
                       if (adminApiToggle) adminApiToggle.checked = data.admin_api_enabled;
@@ -1639,6 +1682,9 @@
           });
           document.getElementById('user-gb-limit-btn')?.addEventListener('click', () => {
               setAdminSetting('user_gb_limit', document.getElementById('user-gb-limit-input').value);
+          });
+          document.getElementById('user-concurrent-limit-btn')?.addEventListener('click', () => {
+              setAdminSetting('max_concurrent_per_user', document.getElementById('user-concurrent-limit-input').value);
           });
           
           document.getElementById('aiostreams-save-btn')?.addEventListener('click', () => {
@@ -2341,6 +2387,7 @@
                     
                     document.getElementById('profile-downloads').textContent = data.total_downloads || 0;
                     document.getElementById('profile-size').textContent = formatBytes(data.total_size || 0);
+                    document.getElementById('profile-size-monthly').textContent = formatBytes(data.monthly_size || 0);
 
                     const historyList = document.getElementById('profile-history');
                     historyList.innerHTML = '';
@@ -2507,7 +2554,11 @@
                     </div>
                     <div class="metric-card">
                         <div id="profile-size" class="metric-value">0 B</div>
-                        <div class="metric-label">Data Downloaded</div>
+                        <div class="metric-label">Data Downloaded (All Time)</div>
+                    </div>
+                    <div class="metric-card">
+                        <div id="profile-size-monthly" class="metric-value">0 B</div>
+                        <div class="metric-label">Data Downloaded (This Month)</div>
                     </div>
                 </div>
 

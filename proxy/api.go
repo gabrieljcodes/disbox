@@ -289,10 +289,10 @@ func (s *Server) checkGBLimit(discordID string) error {
 	}
 	
 	limitBytes := limitGB * 1024 * 1024 * 1024
-	totalBytes := s.GetUserTotalSize(discordID)
+	monthlyBytes := s.GetUserMonthlySize(discordID)
 	
-	if totalBytes >= limitBytes {
-		return fmt.Errorf("You have exceeded the maximum storage limit of %d GB set by the admin.", limitGB)
+	if monthlyBytes >= limitBytes {
+		return fmt.Errorf("You have exceeded the maximum monthly download limit of %d GB set by the admin.", limitGB)
 	}
 	
 	return nil
@@ -322,64 +322,33 @@ func (s *Server) handleV1AddTorrent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp, clientIndex, err := s.clientPool.AddTorrentWithFallback(req.Link, false)
-	if err != nil {
-		jsonError(w, http.StatusBadGateway, err.Error())
-		return
-	}
-
-	if !resp.Success {
-		jsonError(w, http.StatusBadGateway, resp.Detail)
-		return
-	}
-
-	data, _ := resp.Data.(map[string]interface{})
-	torrentID, _ := data["torrent_id"].(float64)
-	name, _ := data["name"].(string)
-
-	var size int64 = 0
-	if name == "" {
-		time.Sleep(1 * time.Second)
-		client := s.clientPool.GetClient(clientIndex)
-		if info, err := client.GetTorrentInfo(int(torrentID)); err == nil {
-			name = info.Name
-			size = info.Size
-		}
-	}
-	if name == "" {
-		name = "Torrent"
-	}
-
-	// Check if ready
-	client := s.clientPool.GetClient(clientIndex)
-	_, dlErr := client.RequestDownloadURL(int(torrentID), -1)
-
 	var discordUsername, discordAvatar string
 	if errUser := s.db.QueryRow("SELECT discord_username, discord_avatar FROM user_sessions WHERE discord_id = ? LIMIT 1", discordID).Scan(&discordUsername, &discordAvatar); errUser != nil {
 		discordUsername = "API User"
 		discordAvatar = ""
 	}
 
-	proxyLink, status := s.RegisterDownloadWithUser("torrent", int(torrentID), clientIndex, discordID, discordUsername, discordAvatar, name, size)
-
-	result := map[string]string{
-		"name": name,
-	}
-	if status == 1 {
-		result["message"] = "You already added this download. Returning existing link."
-	} else if status == 2 {
-		result["message"] = "Added successfully. (Already cached by another user)"
+	qd := &QueuedDownload{
+		DiscordID: discordID,
+		Username:  discordUsername,
+		Avatar:    discordAvatar,
+		Type:      "torrent",
+		Link:      req.Link,
+		CacheOnly: false,
 	}
 
-	if dlErr != nil {
-		result["status"] = "monitoring"
-	} else {
-		result["status"] = "ready"
-		result["download_url"] = proxyLink
-		result["browse_url"] = strings.Replace(proxyLink, "/dl/", "/browse/", 1)
+	qd, err := s.downloadManager.Submit(qd)
+	if err != nil {
+		jsonError(w, http.StatusBadGateway, err.Error())
+		return
 	}
 
-	jsonOK(w, result)
+	jsonOK(w, map[string]interface{}{
+		"success":  true,
+		"status":   "queued",
+		"queue_id": qd.ID,
+		"message":  "Download added to queue.",
+	})
 }
 
 func (s *Server) handleV1AddTorrentFile(w http.ResponseWriter, r *http.Request) {
@@ -425,64 +394,34 @@ func (s *Server) handleV1AddTorrentFile(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	resp, clientIndex, err := s.clientPool.AddTorrentFileWithFallback(fileData, fileName, false)
-	if err != nil {
-		jsonError(w, http.StatusBadGateway, err.Error())
-		return
-	}
-
-	if !resp.Success {
-		jsonError(w, http.StatusBadGateway, resp.Detail)
-		return
-	}
-
-	data, _ := resp.Data.(map[string]interface{})
-	torrentID, _ := data["torrent_id"].(float64)
-	name, _ := data["name"].(string)
-
-	var size int64 = 0
-	if name == "" {
-		time.Sleep(1 * time.Second)
-		client := s.clientPool.GetClient(clientIndex)
-		if info, err := client.GetTorrentInfo(int(torrentID)); err == nil {
-			name = info.Name
-			size = info.Size
-		}
-	}
-	if name == "" {
-		name = "Torrent File"
-	}
-
-	// Check if ready
-	client := s.clientPool.GetClient(clientIndex)
-	_, dlErr := client.RequestDownloadURL(int(torrentID), -1)
-
 	var discordUsername, discordAvatar string
 	if errUser := s.db.QueryRow("SELECT discord_username, discord_avatar FROM user_sessions WHERE discord_id = ? LIMIT 1", discordID).Scan(&discordUsername, &discordAvatar); errUser != nil {
 		discordUsername = "API User"
 		discordAvatar = ""
 	}
 
-	proxyLink, status := s.RegisterDownloadWithUser("torrent", int(torrentID), clientIndex, discordID, discordUsername, discordAvatar, name, size)
-
-	result := map[string]string{
-		"name": name,
-	}
-	if status == 1 {
-		result["message"] = "You already added this download. Returning existing link."
-	} else if status == 2 {
-		result["message"] = "Added successfully. (Already cached by another user)"
-	}
-
-	if dlErr != nil {
-		result["status"] = "monitoring"
-	} else {
-		result["status"] = "ready"
-		result["download_url"] = proxyLink
-		result["browse_url"] = strings.Replace(proxyLink, "/dl/", "/browse/", 1)
+	qd := &QueuedDownload{
+		DiscordID: discordID,
+		Username:  discordUsername,
+		Avatar:    discordAvatar,
+		Type:      "torrent_file",
+		FileData:  fileData,
+		FileName:  fileName,
+		CacheOnly: false,
 	}
 
-	jsonOK(w, result)
+	qd, err = s.downloadManager.Submit(qd)
+	if err != nil {
+		jsonError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+
+	jsonOK(w, map[string]interface{}{
+		"success":  true,
+		"status":   "queued",
+		"queue_id": qd.ID,
+		"message":  "Download added to queue.",
+	})
 }
 
 func (s *Server) handleV1AddWebdl(w http.ResponseWriter, r *http.Request) {
@@ -509,64 +448,33 @@ func (s *Server) handleV1AddWebdl(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp, clientIndex, err := s.clientPool.AddWebDownloadWithFallback(req.Link)
-	if err != nil {
-		jsonError(w, http.StatusBadGateway, err.Error())
-		return
-	}
-
-	if !resp.Success {
-		jsonError(w, http.StatusBadGateway, resp.Detail)
-		return
-	}
-
-	data, _ := resp.Data.(map[string]interface{})
-	webdlID, _ := data["webdownload_id"].(float64)
-	name, _ := data["name"].(string)
-
-	var size int64 = 0
-	if name == "" || name == "Getting info..." {
-		time.Sleep(1 * time.Second)
-		client := s.clientPool.GetClient(clientIndex)
-		if info, err := client.GetWebDownloadInfo(int(webdlID)); err == nil {
-			name = info.Name
-			size = info.Size
-		}
-	}
-	if name == "" || name == "Getting info..." {
-		name = "Web Download"
-	}
-
-	// Check if ready
-	client := s.clientPool.GetClient(clientIndex)
-	_, dlErr := client.RequestWebDownloadURL(int(webdlID), -1)
-
 	var discordUsername, discordAvatar string
 	if errUser := s.db.QueryRow("SELECT discord_username, discord_avatar FROM user_sessions WHERE discord_id = ? LIMIT 1", discordID).Scan(&discordUsername, &discordAvatar); errUser != nil {
 		discordUsername = "API User"
 		discordAvatar = ""
 	}
 
-	proxyLink, status := s.RegisterDownloadWithUser("webdl", int(webdlID), clientIndex, discordID, discordUsername, discordAvatar, name, size)
-
-	result := map[string]string{
-		"name": name,
-	}
-	if status == 1 {
-		result["message"] = "You already added this download. Returning existing link."
-	} else if status == 2 {
-		result["message"] = "Added successfully. (Already cached by another user)"
+	qd := &QueuedDownload{
+		DiscordID: discordID,
+		Username:  discordUsername,
+		Avatar:    discordAvatar,
+		Type:      "webdl",
+		Link:      req.Link,
+		CacheOnly: false,
 	}
 
-	if dlErr != nil {
-		result["status"] = "monitoring"
-	} else {
-		result["status"] = "ready"
-		result["download_url"] = proxyLink
-		result["browse_url"] = strings.Replace(proxyLink, "/dl/", "/browse/", 1)
+	qd, err := s.downloadManager.Submit(qd)
+	if err != nil {
+		jsonError(w, http.StatusBadGateway, err.Error())
+		return
 	}
 
-	jsonOK(w, result)
+	jsonOK(w, map[string]interface{}{
+		"success":  true,
+		"status":   "queued",
+		"queue_id": qd.ID,
+		"message":  "Download added to queue.",
+	})
 }
 
 func (s *Server) handleV1History(w http.ResponseWriter, r *http.Request) {
@@ -893,4 +801,47 @@ func (s *Server) handleV1AdminAccessToggle(w http.ResponseWriter, r *http.Reques
 	}
 
 	jsonOK(w, map[string]string{"message": req.ListType + " set to " + val})
+}
+
+func (s *Server) handleApiQueueStatus(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	discordID, _, _, ok := s.getSessionUser(r)
+	if !ok {
+		jsonError(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+	
+	s.serveQueueStatus(w, discordID)
+}
+
+func (s *Server) handleV1QueueStatus(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	discordID, ok := s.checkV1PublicAccess(w, r)
+	if !ok {
+		return
+	}
+	
+	s.serveQueueStatus(w, discordID)
+}
+
+func (s *Server) serveQueueStatus(w http.ResponseWriter, discordID string) {
+	status := s.downloadManager.Status()
+	
+	// Format for the frontend/API
+	jsonOK(w, map[string]interface{}{
+		"total_capacity": status.TotalCapacity,
+		"active_jobs":    status.ActiveJobs,
+		"queued_jobs":    status.QueuedJobs,
+		"available_slots": status.TotalCapacity - status.ActiveJobs,
+		"global_bandwidth_limit": status.GlobalBandwidthLimit,
+		"global_bandwidth_used":  status.GlobalBandwidthUsed,
+	})
 }

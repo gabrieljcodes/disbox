@@ -1,0 +1,445 @@
+package proxy
+
+import (
+	"crypto/rand"
+	"encoding/hex"
+	"fmt"
+	"log"
+	"strconv"
+	"sync"
+	"time"
+
+	"torbox-discord-bot/torbox"
+)
+
+type QueuedDownload struct {
+	ID        string
+	DiscordID string
+	Username  string
+	Avatar    string
+	Type      string // "torrent", "torrent_file", "webdl"
+	Link      string // for magnet or webdl
+	FileData  []byte // for .torrent file
+	FileName  string // for .torrent file
+	CacheOnly bool
+	QueuedAt  time.Time
+	Status    string // "queued", "processing"
+
+	// Results once processed
+	ProxyLink   string
+	ResultError error
+}
+
+type QueueStatusItem struct {
+	ID       string    `json:"id"`
+	Type     string    `json:"type"`
+	Name     string    `json:"name"`
+	QueuedAt time.Time `json:"queued_at"`
+	Position int       `json:"position"`
+	Status   string    `json:"status"`
+}
+
+type DownloadManager struct {
+	server      *Server
+	queue       []*QueuedDownload
+	mu          sync.Mutex
+	stopChan    chan struct{}
+
+	globalSlots int
+	activeCount map[int]int    // active downloads per client index
+	userActive  map[string]int // active downloads per discord user
+	
+	globalBandwidthLimit int64
+	globalBandwidthUsed  int64
+}
+
+func NewDownloadManager(server *Server) *DownloadManager {
+	dm := &DownloadManager{
+		server:      server,
+		queue:       make([]*QueuedDownload, 0),
+		stopChan:    make(chan struct{}),
+		activeCount: make(map[int]int),
+		userActive:  make(map[string]int),
+	}
+
+	go dm.processQueue()
+	go dm.periodicRefresh()
+
+	return dm
+}
+
+func (dm *DownloadManager) Stop() {
+	close(dm.stopChan)
+}
+
+func (dm *DownloadManager) RefreshSlotCapacity() {
+	pool := dm.server.clientPool
+	totalSlots := 0
+
+	for i := 0; i < pool.GetClientCount(); i++ {
+		client := pool.GetClient(i)
+		info, err := client.GetUserInfo()
+		if err != nil {
+			log.Printf("Warning: failed to get user info for TorBox client #%d: %v", i+1, err)
+			totalSlots += 1 // fallback
+			continue
+		}
+
+		slots := info.TotalSlots()
+		log.Printf("TorBox client #%d has %d slots (Plan: %d, Addons: %d)", i+1, slots, info.Plan, info.AdditionalConcurrentSlots)
+		totalSlots += slots
+	}
+
+	dm.mu.Lock()
+	dm.globalSlots = totalSlots
+	dm.mu.Unlock()
+}
+
+func (dm *DownloadManager) RefreshBandwidthUsage() {
+	pool := dm.server.clientPool
+	var totalLimit int64 = 0
+	var totalUsed int64 = 0
+
+	now := time.Now().UTC()
+	currentMonth := now.Format("2006-01") // e.g. "2026-07"
+
+	clientUsage := make([]int64, pool.GetClientCount())
+
+	for i := 0; i < pool.GetClientCount(); i++ {
+		client := pool.GetClient(i)
+		info, err := client.GetUserInfo()
+		if err != nil {
+			log.Printf("Warning: failed to get user info for TorBox client #%d: %v", i+1, err)
+			continue
+		}
+
+		limitBytes := torbox.PlanBandwidthLimitBytes(info.Plan)
+		totalLimit += limitBytes
+
+		stats, err := client.GetUserStats()
+		if err != nil {
+			log.Printf("Warning: failed to get user stats for TorBox client #%d: %v", i+1, err)
+			continue
+		}
+
+		var used int64 = 0
+		for _, b := range stats.Bandwidth {
+			if len(b.Date) >= 7 && b.Date[:7] == currentMonth {
+				used += b.BytesDownloaded
+			}
+		}
+		
+		clientUsage[i] = used
+		totalUsed += used
+	}
+
+	pool.UpdateBandwidthUsage(clientUsage)
+
+	dm.mu.Lock()
+	dm.globalBandwidthLimit = totalLimit
+	dm.globalBandwidthUsed = totalUsed
+	dm.mu.Unlock()
+}
+
+func (dm *DownloadManager) GetSlotCapacity() int {
+	dm.mu.Lock()
+	defer dm.mu.Unlock()
+	return dm.globalSlots
+}
+
+func (dm *DownloadManager) RefreshActiveCount() {
+	pool := dm.server.clientPool
+	newActiveCount := make(map[int]int)
+
+	for i := 0; i < pool.GetClientCount(); i++ {
+		client := pool.GetClient(i)
+		active := 0
+
+		// Torrents
+		torrents, err := client.ListTorrents()
+		if err == nil {
+			for _, t := range torrents {
+				if t.Active && !t.DownloadFinished {
+					active++
+				}
+			}
+		}
+
+		// Web downloads
+		webdls, err := client.ListWebDownloads()
+		if err == nil {
+			for _, w := range webdls {
+				if w.Active && !w.DownloadFinished {
+					active++
+				}
+			}
+		}
+
+		newActiveCount[i] = active
+	}
+
+	dm.mu.Lock()
+	dm.activeCount = newActiveCount
+	dm.mu.Unlock()
+}
+
+func (dm *DownloadManager) periodicRefresh() {
+	// Initial refresh
+	dm.RefreshSlotCapacity()
+	dm.RefreshActiveCount()
+	dm.RefreshBandwidthUsage()
+
+	// Refresh slots every hour, active count every minute
+	slotTicker := time.NewTicker(1 * time.Hour)
+	activeTicker := time.NewTicker(1 * time.Minute)
+	defer slotTicker.Stop()
+	defer activeTicker.Stop()
+
+	for {
+		select {
+		case <-slotTicker.C:
+			dm.RefreshSlotCapacity()
+			dm.RefreshBandwidthUsage()
+		case <-activeTicker.C:
+			dm.RefreshActiveCount()
+		case <-dm.stopChan:
+			return
+		}
+	}
+}
+
+func (dm *DownloadManager) checkUserLimit(discordID string) error {
+	limitStr := dm.server.GetSetting("max_concurrent_per_user", "0")
+	if limitStr == "0" || limitStr == "" {
+		return nil
+	}
+
+	if dm.server.IsAdmin(discordID) {
+		return nil
+	}
+
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil || limit <= 0 {
+		return nil
+	}
+
+	dm.mu.Lock()
+	userActive := dm.userActive[discordID]
+
+	userQueued := 0
+	for _, qd := range dm.queue {
+		if qd.DiscordID == discordID {
+			userQueued++
+		}
+	}
+	dm.mu.Unlock()
+
+	if userActive+userQueued >= limit {
+		return fmt.Errorf("you have reached the maximum of %d concurrent downloads set by the admin", limit)
+	}
+
+	return nil
+}
+
+func (dm *DownloadManager) Submit(qd *QueuedDownload) (*QueuedDownload, error) {
+	if err := dm.checkUserLimit(qd.DiscordID); err != nil {
+		return nil, err
+	}
+
+	dm.mu.Lock()
+	limit := dm.globalBandwidthLimit
+	used := dm.globalBandwidthUsed
+	dm.mu.Unlock()
+
+	if limit > 0 && used >= limit {
+		return nil, fmt.Errorf("Global TorBox bandwidth limit exhausted for this month (%d TB used). Please try again next month.", used/(1024*1024*1024*1024))
+	}
+
+	b := make([]byte, 8)
+	rand.Read(b)
+	qd.ID = hex.EncodeToString(b)
+	qd.QueuedAt = time.Now()
+	qd.Status = "queued"
+
+	dm.mu.Lock()
+	dm.queue = append(dm.queue, qd)
+	dm.mu.Unlock()
+	
+	// Force a dispatch attempt immediately
+	go dm.tryDispatch()
+
+	return qd, nil
+}
+
+func (dm *DownloadManager) processQueue() {
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			dm.tryDispatch()
+		case <-dm.stopChan:
+			return
+		}
+	}
+}
+
+func (dm *DownloadManager) tryDispatch() {
+	dm.mu.Lock()
+	if len(dm.queue) == 0 {
+		dm.mu.Unlock()
+		return
+	}
+
+	totalActive := 0
+	for _, count := range dm.activeCount {
+		totalActive += count
+	}
+
+	availableSlots := dm.globalSlots - totalActive
+	if availableSlots <= 0 {
+		dm.mu.Unlock()
+		return
+	}
+
+	qd := dm.queue[0]
+	dm.queue = dm.queue[1:]
+	qd.Status = "processing"
+
+	if len(dm.activeCount) > 0 {
+		dm.activeCount[0]++
+	}
+	dm.userActive[qd.DiscordID]++
+	dm.mu.Unlock()
+
+	go dm.executeDownload(qd)
+}
+
+func (dm *DownloadManager) executeDownload(qd *QueuedDownload) {
+	var err error
+	var clientIndex int
+	var proxyLink string
+	
+	if qd.Type == "torrent" {
+		apiResp, cIdx, e := dm.server.clientPool.AddTorrentWithFallback(qd.Link, qd.CacheOnly)
+		err = e
+		clientIndex = cIdx
+		if err == nil && !apiResp.Success {
+			err = fmt.Errorf(apiResp.Detail)
+		} else if err == nil {
+			data, _ := apiResp.Data.(map[string]interface{})
+			id, _ := data["torrent_id"].(float64)
+			name, _ := data["name"].(string)
+			if name == "" {
+				name = "Torrent"
+			}
+			proxyLink, _ = dm.server.RegisterDownloadWithUser("torrent", int(id), clientIndex, qd.DiscordID, qd.Username, qd.Avatar, name, 0)
+		}
+	} else if qd.Type == "torrent_file" {
+		apiResp, cIdx, e := dm.server.clientPool.AddTorrentFileWithFallback(qd.FileData, qd.FileName, qd.CacheOnly)
+		err = e
+		clientIndex = cIdx
+		if err == nil && !apiResp.Success {
+			err = fmt.Errorf(apiResp.Detail)
+		} else if err == nil {
+			data, _ := apiResp.Data.(map[string]interface{})
+			id, _ := data["torrent_id"].(float64)
+			name, _ := data["name"].(string)
+			if name == "" {
+				name = qd.FileName
+			}
+			proxyLink, _ = dm.server.RegisterDownloadWithUser("torrent", int(id), clientIndex, qd.DiscordID, qd.Username, qd.Avatar, name, 0)
+		}
+	} else if qd.Type == "webdl" {
+		apiResp, cIdx, e := dm.server.clientPool.AddWebDownloadWithFallback(qd.Link)
+		err = e
+		clientIndex = cIdx
+		if err == nil && !apiResp.Success {
+			err = fmt.Errorf(apiResp.Detail)
+		} else if err == nil {
+			data, _ := apiResp.Data.(map[string]interface{})
+			id, _ := data["webdownload_id"].(float64)
+			name, _ := data["name"].(string)
+			if name == "" {
+				name = "Web Download"
+			}
+			proxyLink, _ = dm.server.RegisterDownloadWithUser("webdl", int(id), clientIndex, qd.DiscordID, qd.Username, qd.Avatar, name, 0)
+		}
+	}
+
+	if err != nil {
+		qd.ResultError = err
+		log.Printf("Queued download %s failed: %v", qd.ID, err)
+		dm.mu.Lock()
+		dm.userActive[qd.DiscordID]--
+		dm.mu.Unlock()
+	} else {
+		log.Printf("Queued download %s started successfully: %s", qd.ID, proxyLink)
+		qd.ProxyLink = proxyLink
+	}
+}
+
+func (dm *DownloadManager) GetQueueStatus(discordID string) []QueueStatusItem {
+	dm.mu.Lock()
+	defer dm.mu.Unlock()
+
+	var items []QueueStatusItem
+	for i, qd := range dm.queue {
+		if qd.DiscordID == discordID || dm.server.IsAdmin(discordID) {
+			name := qd.FileName
+			if name == "" {
+				name = qd.Link
+			}
+			if len(name) > 50 {
+				name = name[:47] + "..."
+			}
+			items = append(items, QueueStatusItem{
+				ID:       qd.ID,
+				Type:     qd.Type,
+				Name:     name,
+				QueuedAt: qd.QueuedAt,
+				Position: i + 1,
+				Status:   qd.Status,
+			})
+		}
+	}
+	return items
+}
+
+func (dm *DownloadManager) OnDownloadComplete(discordID string) {
+	dm.mu.Lock()
+	defer dm.mu.Unlock()
+
+	if dm.userActive[discordID] > 0 {
+		dm.userActive[discordID]--
+	}
+
+	go dm.RefreshActiveCount()
+}
+
+type GlobalQueueStatus struct {
+	TotalCapacity        int
+	ActiveJobs           int
+	QueuedJobs           int
+	GlobalBandwidthLimit int64
+	GlobalBandwidthUsed  int64
+}
+
+func (dm *DownloadManager) Status() GlobalQueueStatus {
+	dm.mu.Lock()
+	defer dm.mu.Unlock()
+
+	activeJobs := 0
+	for _, active := range dm.activeCount {
+		activeJobs += active
+	}
+
+	return GlobalQueueStatus{
+		TotalCapacity:        dm.globalSlots,
+		ActiveJobs:           activeJobs,
+		QueuedJobs:           len(dm.queue),
+		GlobalBandwidthLimit: dm.globalBandwidthLimit,
+		GlobalBandwidthUsed:  dm.globalBandwidthUsed,
+	}
+}

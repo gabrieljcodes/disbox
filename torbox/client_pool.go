@@ -3,13 +3,15 @@ package torbox
 import (
 	"fmt"
 	"log"
+	"sort"
 	"sync"
 )
 
 type ClientPool struct {
-	clients      []*Client
-	currentIndex int
-	mu           sync.RWMutex
+	clients        []*Client
+	currentIndex   int
+	bandwidthUsage []int64
+	mu             sync.RWMutex
 }
 
 func NewClientPool(apiKeys []string) (*ClientPool, error) {
@@ -93,35 +95,59 @@ func (p *ClientPool) UpdateKeys(apiKeys []string) {
 
 	if len(validClients) > 0 {
 		p.clients = validClients
+		p.bandwidthUsage = make([]int64, len(validClients))
 		p.currentIndex = 0
 		log.Printf("ClientPool updated with %d API key(s)", len(p.clients))
 	}
 }
 
+func (p *ClientPool) UpdateBandwidthUsage(usage []int64) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.bandwidthUsage = make([]int64, len(usage))
+	copy(p.bandwidthUsage, usage)
+}
+
+func (p *ClientPool) getPrioritizedIndices() []int {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
+	indices := make([]int, len(p.clients))
+	for i := range indices {
+		indices[i] = i
+	}
+
+	if len(p.bandwidthUsage) == len(p.clients) {
+		sort.SliceStable(indices, func(i, j int) bool {
+			return p.bandwidthUsage[indices[i]] < p.bandwidthUsage[indices[j]]
+		})
+	}
+	return indices
+}
+
 func (p *ClientPool) doWithFallback(action func(client *Client) (*APIResponse, error)) (*APIResponse, int, error) {
-	p.ResetToFirst()
-	
-	for attempt := 0; attempt < len(p.clients); attempt++ {
-		client := p.GetCurrentClient()
+	indices := p.getPrioritizedIndices()
+
+	for _, idx := range indices {
+		p.mu.Lock()
+		p.currentIndex = idx
+		client := p.clients[idx]
+		p.mu.Unlock()
+
+		log.Printf("Trying Torbox API key #%d", idx+1)
 		resp, err := action(client)
-		
+
 		if err != nil {
-			log.Printf("Error with API key #%d: %v", p.currentIndex+1, err)
-			if !p.TryNextClient() {
-				return nil, -1, fmt.Errorf("all API keys failed: %w", err)
-			}
+			log.Printf("Error with API key #%d: %v", idx+1, err)
 			continue
 		}
 
 		if !resp.Success && isActiveLimitError(resp) {
-			log.Printf("API key #%d reached active limit, trying next...", p.currentIndex+1)
-			if !p.TryNextClient() {
-				return resp, -1, fmt.Errorf("all API keys reached active limit")
-			}
+			log.Printf("API key #%d reached active limit, trying next...", idx+1)
 			continue
 		}
 
-		return resp, p.currentIndex, err
+		return resp, idx, err
 	}
 
 	return nil, -1, fmt.Errorf("failed to complete action with all available API keys")

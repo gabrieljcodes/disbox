@@ -81,6 +81,45 @@ type WebDownloadInfo struct {
 	Files            []TorrentFile `json:"files"`
 }
 
+type UserInfo struct {
+	Plan                     int `json:"plan"`
+	AdditionalConcurrentSlots int `json:"additional_concurrent_slots"`
+}
+
+func PlanActiveLimit(plan int) int {
+	switch plan {
+	case 1:
+		return 3 // Essential
+	case 2:
+		return 10 // Pro
+	case 3:
+		return 5 // Standard
+	default:
+		return 1 // Free/fallback
+	}
+}
+
+// PlanBandwidthLimitBytes returns the monthly limit in bytes for a given plan
+func PlanBandwidthLimitBytes(plan int) int64 {
+	tb := int64(1024 * 1024 * 1024 * 1024)
+	switch plan {
+	case 1:
+		return 10 * tb // Essential
+	case 2:
+		return 30 * tb // Pro
+	case 3:
+		return 20 * tb // Standard
+	default:
+		return 0 // Free or unknown
+	}
+}
+
+// TotalSlots returns plan base + addon slots
+func (u *UserInfo) TotalSlots() int {
+	return PlanActiveLimit(u.Plan) + u.AdditionalConcurrentSlots
+}
+
+
 // AddTorrent adds a torrent via magnet link with seed parameter set to 3 (no seeding)
 func (c *Client) AddTorrent(magnetLink string, cacheOnly bool) (*APIResponse, error) {
 	body := &bytes.Buffer{}
@@ -244,6 +283,75 @@ func (c *Client) getListData(endpoint string, target interface{}) error {
 	}
 
 	return nil
+}
+
+func (c *Client) GetUserInfo() (*UserInfo, error) {
+	req, err := http.NewRequest("GET", fmt.Sprintf("%s/user/me?settings=false", apiBaseURL), nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+c.apiKey)
+
+	apiResp, err := c.doRequest(req)
+	if err != nil {
+		return nil, err
+	}
+
+	if !apiResp.Success {
+		return nil, fmt.Errorf("failed to get user info: %s", apiResp.Detail)
+	}
+
+	dataBytes, err := json.Marshal(apiResp.Data)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal data: %w", err)
+	}
+
+	var userInfo UserInfo
+	if err := json.Unmarshal(dataBytes, &userInfo); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal data: %w", err)
+	}
+
+	return &userInfo, nil
+}
+
+type BandwidthEntry struct {
+	Date            string `json:"date"`
+	BytesDownloaded int64  `json:"bytes_downloaded"`
+}
+
+type UserStats struct {
+	Bandwidth []BandwidthEntry `json:"bandwidth"`
+}
+
+func (c *Client) GetUserStats() (*UserStats, error) {
+	req, err := http.NewRequest("GET", fmt.Sprintf("%s/user/stats?bandwidth=true", apiBaseURL), nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+c.apiKey)
+
+	apiResp, err := c.doRequest(req)
+	if err != nil {
+		return nil, err
+	}
+
+	if !apiResp.Success {
+		return nil, fmt.Errorf("failed to get user stats: %s", apiResp.Detail)
+	}
+
+	dataBytes, err := json.Marshal(apiResp.Data)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal data: %w", err)
+	}
+
+	var stats UserStats
+	if err := json.Unmarshal(dataBytes, &stats); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal data: %w", err)
+	}
+
+	return &stats, nil
 }
 
 func (c *Client) GetTorrentInfo(torrentID int) (*TorrentInfo, error) {

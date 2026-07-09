@@ -221,6 +221,9 @@ func (m *Monitor) notifyCompletion(download *TrackedDownload, downloadLink strin
 	// Register a proxy link instead of using the direct TorBox URL
 	proxyLink, _ := m.proxyServer.RegisterDownloadWithUser(download.Type, download.ID, download.ClientIndex, download.UserID, download.Username, download.AvatarURL, download.Name, size)
 	
+	// Notify the download manager that a slot might be free for this user
+	m.proxyServer.GetDownloadManager().OnDownloadComplete(download.UserID)
+	
 	description := fmt.Sprintf("Your download **%s** is ready!\n\n🔒 Permanent link via proxy", download.Name)
 	
 	embed := &discordgo.MessageEmbed{
@@ -354,6 +357,9 @@ func (m *Monitor) notifyProgress(download *TrackedDownload, torrentInfo *torbox.
 
 func (m *Monitor) notifyError(download *TrackedDownload, errorMsg string) {
 	log.Printf("Error for download %d using API Key #%d: %s", download.ID, download.ClientIndex+1, errorMsg)
+	
+	// Notify the download manager that a slot might be free for this user
+	m.proxyServer.GetDownloadManager().OnDownloadComplete(download.UserID)
 	
 	embed := &discordgo.MessageEmbed{
 		Title:       "⚠️ Download Error",

@@ -41,6 +41,7 @@ func (s *Server) handleApiAdminSettingsGet(w http.ResponseWriter, r *http.Reques
 		"aiostreams_password": s.GetSetting("aiostreams_password", ""),
 		"tmdb_api_key":        s.GetSetting("tmdb_api_key", ""),
 		"remove_from_torbox_on_delete": s.GetSetting("remove_from_torbox_on_delete", "true") == "true",
+		"max_concurrent_per_user": s.GetSetting("max_concurrent_per_user", "0"),
 	})
 }
 
@@ -77,6 +78,7 @@ func (s *Server) handleApiAdminSettingsUpdate(w http.ResponseWriter, r *http.Req
 		"aiostreams_password": true,
 		"tmdb_api_key":        true,
 		"remove_from_torbox_on_delete": true,
+		"max_concurrent_per_user": true,
 	}
 
 	if !allowedKeys[req.Key] {

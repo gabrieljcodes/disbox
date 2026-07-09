@@ -64,6 +64,10 @@ Removes a download from the Disbox proxy and deletes it from TorBox.
 `GET /v1/history`
 Returns the user's download history and active proxy links.
 
+#### Get Queue Status
+`GET /v1/queue-status`
+Returns the global slots capacity, active jobs, and queued jobs. This helps identify if a new download will be queued or start immediately.
+
 #### Search TMDB
 `GET /v1/tmdb/search?query=Matrix&type=movie`
 Searches TMDB for movies or series. Returns standard metadata. 

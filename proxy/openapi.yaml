@@ -94,6 +94,34 @@ paths:
                     items:
                       $ref: '#/components/schemas/HistoryItem'
 
+  /v1/queue-status:
+    get:
+      summary: Get Queue Status
+      description: Returns the global slots capacity, active jobs, and queued jobs. This helps identify if a new download will be queued or start immediately.
+      tags: [Downloads]
+      responses:
+        '200':
+          description: Queue status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      total_capacity:
+                        type: integer
+                      active_jobs:
+                        type: integer
+                      queued_jobs:
+                        type: integer
+                      available_slots:
+                        type: integer
+
+
   /v1/add-torrent:
     post:
       summary: Add a Torrent

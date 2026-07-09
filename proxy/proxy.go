@@ -22,6 +22,11 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+// GetDownloadManager returns the server's download manager instance
+func (s *Server) GetDownloadManager() *DownloadManager {
+	return s.downloadManager
+}
+
 //go:embed viewer.html
 var viewerFS embed.FS
 
@@ -73,6 +78,8 @@ type Server struct {
 	
 	apiRateLimits       map[string]time.Time
 	apiRateLimitsMu     sync.Mutex
+	
+	downloadManager     *DownloadManager
 }
 
 func NewServer(baseURL, port string, clientPool *torbox.ClientPool, discordClientID, discordClientSecret string, adminUsers []string, cacheOnly bool, adminAPIEnabled bool) (*Server, error) {
@@ -161,6 +168,9 @@ func NewServer(baseURL, port string, clientPool *torbox.ClientPool, discordClien
 	// Initialize default settings if missing
 	s.initDefaultSettings(clientPool, cacheOnly)
 
+	// Initialize DownloadManager
+	s.downloadManager = NewDownloadManager(s)
+
 	// Load existing links from database into memory
 	if err := s.loadFromDB(); err != nil {
 		db.Close()
@@ -216,6 +226,7 @@ func NewServer(baseURL, port string, clientPool *torbox.ClientPool, discordClien
 		mux.HandleFunc("/api/admin/access/remove", s.handleApiAdminAccessRemove)
 		mux.HandleFunc("/api/admin/user", s.handleApiAdminUserProfile)
 		mux.HandleFunc("/api/remove-download", s.handleApiRemoveDownload)
+		mux.HandleFunc("/api/queue-status", s.handleApiQueueStatus)
 		
 		// Admin Settings
 		mux.HandleFunc("/api/admin/settings", s.handleApiAdminSettingsGet)
@@ -230,6 +241,7 @@ func NewServer(baseURL, port string, clientPool *torbox.ClientPool, discordClien
 	mux.HandleFunc("/v1/add-webdl", s.handleV1AddWebdl)
 	mux.HandleFunc("/v1/remove-download", s.handleV1RemoveDownload)
 	mux.HandleFunc("/v1/history", s.handleV1History)
+	mux.HandleFunc("/v1/queue-status", s.handleV1QueueStatus)
 	mux.HandleFunc("/v1/search", s.handleV1Search)
 	mux.HandleFunc("/v1/tmdb/search", s.handleV1TMDBSearch)
 	mux.HandleFunc("/v1/anilist/search", s.handleV1AniListSearch)
@@ -1073,6 +1085,18 @@ func (s *Server) CheckAccess(discordID string) (bool, string) {
 func (s *Server) GetUserTotalSize(discordID string) int64 {
 	var totalSize sql.NullInt64
 	err := s.db.QueryRow("SELECT SUM(size) FROM download_history WHERE discord_id = ?", discordID).Scan(&totalSize)
+	if err != nil || !totalSize.Valid {
+		return 0
+	}
+	return totalSize.Int64
+}
+
+// GetUserMonthlySize returns the sum of sizes (in bytes) of all historical downloads for a user in the current calendar month
+func (s *Server) GetUserMonthlySize(discordID string) int64 {
+	var totalSize sql.NullInt64
+	now := time.Now().UTC()
+	firstOfMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC).Format("2006-01-02 15:04:05")
+	err := s.db.QueryRow("SELECT SUM(size) FROM download_history WHERE discord_id = ? AND created_at >= ?", discordID, firstOfMonth).Scan(&totalSize)
 	if err != nil || !totalSize.Valid {
 		return 0
 	}

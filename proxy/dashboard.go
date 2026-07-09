@@ -380,62 +380,29 @@ func (s *Server) handleApiAddTorrent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp, clientIndex, err := s.clientPool.AddTorrentWithFallback(req.Link, false)
+	qd := &QueuedDownload{
+		DiscordID: discordID,
+		Username:  discordUsername,
+		Avatar:    discordAvatar,
+		Type:      "torrent",
+		Link:      req.Link,
+		CacheOnly: false,
+	}
+
+	qd, err := s.downloadManager.Submit(qd)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 		return
 	}
 
-	if !resp.Success {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{"error": resp.Detail})
-		return
-	}
-
-	data, _ := resp.Data.(map[string]interface{})
-	torrentID, _ := data["torrent_id"].(float64)
-	name, _ := data["name"].(string)
-
-	var size int64 = 0
-	if name == "" {
-		time.Sleep(1 * time.Second)
-		client := s.clientPool.GetClient(clientIndex)
-		if info, err := client.GetTorrentInfo(int(torrentID)); err == nil {
-			name = info.Name
-			size = info.Size
-		}
-	}
-
-	if name == "" {
-		name = "Torrent"
-	}
-
-	// Check if it's ready immediately
-	client := s.clientPool.GetClient(clientIndex)
-	_, dlErr := client.RequestDownloadURL(int(torrentID), -1)
-
-	proxyLink, status := s.RegisterDownloadWithUser("torrent", int(torrentID), clientIndex, discordID, discordUsername, discordAvatar, name, size)
-
-	res := map[string]string{
-		"success": "true",
-	}
-	if status == 1 {
-		res["message"] = "You already added this download. Returning existing link."
-	} else if status == 2 {
-		res["message"] = "Added successfully. (Already cached by another user)"
-	}
-
-	if dlErr != nil {
-		res["status"] = "monitoring" // Note: the bot monitor won't track this unless we add a web monitor hook, but the user can still find it in history
-	} else {
-		res["status"] = "ready"
-		res["download_url"] = proxyLink
-		res["browse_url"] = strings.Replace(proxyLink, "/dl/", "/browse/", 1)
-	}
-
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(res)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success":  true,
+		"status":   "queued",
+		"queue_id": qd.ID,
+		"message":  "Download added to queue.",
+	})
 }
 
 func (s *Server) handleApiAddWebdl(w http.ResponseWriter, r *http.Request) {
@@ -453,62 +420,31 @@ func (s *Server) handleApiAddWebdl(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp, clientIndex, err := s.clientPool.AddWebDownloadWithFallback(req.Link)
+
+
+	qd := &QueuedDownload{
+		DiscordID: discordID,
+		Username:  discordUsername,
+		Avatar:    discordAvatar,
+		Type:      "webdl",
+		Link:      req.Link,
+		CacheOnly: false,
+	}
+
+	qd, err := s.downloadManager.Submit(qd)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 		return
 	}
 
-	if !resp.Success {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{"error": resp.Detail})
-		return
-	}
-
-	data, _ := resp.Data.(map[string]interface{})
-	webdlID, _ := data["webdownload_id"].(float64)
-	name, _ := data["name"].(string)
-
-	var size int64 = 0
-	if name == "" || name == "Getting info..." {
-		time.Sleep(1 * time.Second)
-		client := s.clientPool.GetClient(clientIndex)
-		if info, err := client.GetWebDownloadInfo(int(webdlID)); err == nil {
-			name = info.Name
-			size = info.Size
-		}
-	}
-
-	if name == "" || name == "Getting info..." {
-		name = "Web Download"
-	}
-
-	// Check if it's ready immediately
-	client := s.clientPool.GetClient(clientIndex)
-	_, dlErr := client.RequestWebDownloadURL(int(webdlID), -1)
-
-	proxyLink, status := s.RegisterDownloadWithUser("webdl", int(webdlID), clientIndex, discordID, discordUsername, discordAvatar, name, size)
-
-	res := map[string]string{
-		"success": "true",
-	}
-	if status == 1 {
-		res["message"] = "You already added this download. Returning existing link."
-	} else if status == 2 {
-		res["message"] = "Added successfully. (Already cached by another user)"
-	}
-
-	if dlErr != nil {
-		res["status"] = "monitoring"
-	} else {
-		res["status"] = "ready"
-		res["download_url"] = proxyLink
-		res["browse_url"] = strings.Replace(proxyLink, "/dl/", "/browse/", 1)
-	}
-
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(res)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success":  true,
+		"status":   "queued",
+		"queue_id": qd.ID,
+		"message":  "Download added to queue.",
+	})
 }
 
 func (s *Server) handleApiAddTorrentFile(w http.ResponseWriter, r *http.Request) {
@@ -558,66 +494,30 @@ func (s *Server) handleApiAddTorrentFile(w http.ResponseWriter, r *http.Request)
 	// Check cache_only setting
 	cacheOnly := s.GetSetting("cache_only", "false") == "true"
 
-	resp, clientIndex, err := s.clientPool.AddTorrentFileWithFallback(fileData, fileName, cacheOnly)
+	qd := &QueuedDownload{
+		DiscordID: discordID,
+		Username:  discordUsername,
+		Avatar:    discordAvatar,
+		Type:      "torrent_file",
+		FileData:  fileData,
+		FileName:  fileName,
+		CacheOnly: cacheOnly,
+	}
+
+	qd, err = s.downloadManager.Submit(qd)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 		return
 	}
 
-	if !resp.Success {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{"error": resp.Detail})
-		return
-	}
-
-	data, _ := resp.Data.(map[string]interface{})
-	torrentID, _ := data["torrent_id"].(float64)
-	name, _ := data["name"].(string)
-
-	var size int64 = 0
-	if name == "" {
-		time.Sleep(1 * time.Second)
-		client := s.clientPool.GetClient(clientIndex)
-		if info, err := client.GetTorrentInfo(int(torrentID)); err == nil {
-			name = info.Name
-			size = info.Size
-		}
-	}
-
-	if name == "" {
-		// Use filename without .torrent extension as fallback
-		name = strings.TrimSuffix(fileName, ".torrent")
-		if name == "" {
-			name = "Torrent"
-		}
-	}
-
-	// Check if it's ready immediately
-	client := s.clientPool.GetClient(clientIndex)
-	_, dlErr := client.RequestDownloadURL(int(torrentID), -1)
-
-	proxyLink, status := s.RegisterDownloadWithUser("torrent", int(torrentID), clientIndex, discordID, discordUsername, discordAvatar, name, size)
-
-	res := map[string]string{
-		"success": "true",
-	}
-	if status == 1 {
-		res["message"] = "You already added this download. Returning existing link."
-	} else if status == 2 {
-		res["message"] = "Added successfully. (Already cached by another user)"
-	}
-
-	if dlErr != nil {
-		res["status"] = "monitoring"
-	} else {
-		res["status"] = "ready"
-		res["download_url"] = proxyLink
-		res["browse_url"] = strings.Replace(proxyLink, "/dl/", "/browse/", 1)
-	}
-
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(res)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success":  true,
+		"status":   "queued",
+		"queue_id": qd.ID,
+		"message":  "Download added to queue.",
+	})
 }
 
 
@@ -852,6 +752,7 @@ func (s *Server) handleApiAdminUserProfile(w http.ResponseWriter, r *http.Reques
 		"access_type":      accessType,
 		"total_downloads":  totalDownloads,
 		"total_size":       totalSize,
+		"monthly_size":     s.GetUserMonthlySize(targetDiscordID),
 		"history":          history,
 	})
 }
