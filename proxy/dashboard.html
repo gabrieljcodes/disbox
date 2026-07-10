@@ -1476,6 +1476,7 @@
                 document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
                 document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
                 document.getElementById('panel-profile').classList.add('active');
+                loadUserProfile();
             });
         }
 
@@ -1672,10 +1673,7 @@
                 }).catch(console.error);
         }
 
-        document.getElementById('tab-profile')?.addEventListener('click', () => {
-            loadUserProfile();
-        });
-
+        // loadUserProfile is now called when user-badge-btn is clicked
         document.getElementById('btn-save-ftp')?.addEventListener('click', () => {
             const host = document.getElementById('input-ftp-host').value.trim();
             const user = document.getElementById('input-ftp-user').value.trim();
