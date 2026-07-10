@@ -1528,9 +1528,10 @@
                                 const state = document.getElementById('progress-state-' + token);
                                 const stats = document.getElementById('progress-stats-' + token);
                                 
-                                bar.style.width = data.Progress + '%';
+                                const pct = data.Progress * 100;
+                                bar.style.width = pct + '%';
                                 let stateText = data.DownloadState || 'Active';
-                                let statsText = data.Progress.toFixed(1) + '%';
+                                let statsText = pct.toFixed(1) + '%';
                                 
                                 if (data.DownloadSpeed > 0) {
                                     statsText += ' • ' + formatSpeed(data.DownloadSpeed);
@@ -1542,7 +1543,7 @@
                                 state.textContent = stateText.charAt(0).toUpperCase() + stateText.slice(1);
                                 stats.textContent = statsText;
 
-                                if (data.Progress >= 100 || data.DownloadState === 'finished') {
+                                if (pct >= 100 || data.DownloadState === 'finished' || data.DownloadState === 'completed') {
                                     tokens = tokens.filter(t => t !== token);
                                     container.style.display = 'none'; // hide when done
                                 }

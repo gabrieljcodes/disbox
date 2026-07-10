@@ -199,9 +199,10 @@
                         const state = document.getElementById('progress-state-' + token);
                         const stats = document.getElementById('progress-stats-' + token);
                         
-                        bar.style.width = progData.Progress + '%';
+                        const pct = progData.Progress * 100;
+                        bar.style.width = pct + '%';
                         let stateText = progData.DownloadState || 'Active';
-                        let statsText = progData.Progress.toFixed(1) + '%';
+                        let statsText = pct.toFixed(1) + '%';
                         
                         if (progData.DownloadSpeed > 0) {
                             statsText += ' • ' + formatSpeed(progData.DownloadSpeed);
@@ -213,7 +214,7 @@
                         state.textContent = stateText.charAt(0).toUpperCase() + stateText.slice(1);
                         stats.textContent = statsText;
 
-                        if (progData.Progress >= 100 || progData.DownloadState === 'finished') {
+                        if (pct >= 100 || progData.DownloadState === 'finished' || progData.DownloadState === 'completed') {
                             tokens = tokens.filter(t => t !== token);
                             container.style.display = 'none';
                         }
