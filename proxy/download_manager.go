@@ -166,8 +166,8 @@ func (dm *DownloadManager) RefreshActiveCount() {
 		active := 0
 
 		// Torrents
-		torrents, err := client.ListTorrents()
-		if err == nil {
+		torrents, errTorrents := client.ListTorrents()
+		if errTorrents == nil {
 			for _, t := range torrents {
 				if t.Active && !t.DownloadFinished {
 					active++
@@ -190,8 +190,8 @@ func (dm *DownloadManager) RefreshActiveCount() {
 		}
 
 		// Web downloads
-		webdls, err := client.ListWebDownloads()
-		if err == nil {
+		webdls, errWebDLs := client.ListWebDownloads()
+		if errWebDLs == nil {
 			for _, w := range webdls {
 				if w.Active && !w.DownloadFinished {
 					active++
@@ -214,6 +214,46 @@ func (dm *DownloadManager) RefreshActiveCount() {
 		}
 
 		newActiveCount[i] = active
+
+		// Sync with DB: Mark local items as deleted if they are missing from TorBox
+		if errTorrents == nil && errWebDLs == nil {
+			go func(cIndex int, tList []torbox.TorrentInfo, wList []torbox.WebDownloadInfo) {
+				validIDs := make(map[string]bool)
+				for _, t := range tList {
+					validIDs[fmt.Sprintf("torrent_%d", t.ID)] = true
+				}
+				for _, w := range wList {
+					validIDs[fmt.Sprintf("webdl_%d", w.ID)] = true
+				}
+
+				rows, err := dm.server.db.Query("SELECT token, type, download_id FROM download_history WHERE client_index = ? AND deleted = 0", cIndex)
+				if err != nil {
+					return
+				}
+				defer rows.Close()
+
+				var toDelete []string
+				for rows.Next() {
+					var token, dlType string
+					var downloadID int
+					if err := rows.Scan(&token, &dlType, &downloadID); err == nil {
+						key := fmt.Sprintf("%s_%d", dlType, downloadID)
+						if !validIDs[key] {
+							toDelete = append(toDelete, token)
+						}
+					}
+				}
+
+				for _, token := range toDelete {
+					dm.server.db.Exec("UPDATE download_history SET deleted = 1 WHERE token = ?", token)
+					dm.server.db.Exec("DELETE FROM download_links WHERE token = ?", token)
+					
+					dm.server.mu.Lock()
+					delete(dm.server.downloads, token)
+					dm.server.mu.Unlock()
+				}
+			}(i, torrents, webdls)
+		}
 	}
 
 	dm.mu.Lock()
