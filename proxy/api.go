@@ -9,6 +9,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -1135,4 +1136,101 @@ func (s *Server) handleV1FtpSend(w http.ResponseWriter, r *http.Request) {
 	go s.uploadToFTP(host, username, password, dlType, downloadID, clientIndex, name)
 
 	jsonOK(w, map[string]string{"message": "FTP upload started in background"})
+}
+
+func (s *Server) getAggregatedHosters() ([]torbox.HosterInfo, error) {
+	pool := s.clientPool
+	
+	aggregated := make(map[int]*torbox.HosterInfo)
+	
+	for i := 0; i < pool.GetClientCount(); i++ {
+		client := pool.GetClient(i)
+		hosters, err := client.GetHosters()
+		if err != nil {
+			log.Printf("Failed to fetch hosters from client %d: %v", i, err)
+			continue
+		}
+		
+		for _, h := range hosters {
+			if existing, ok := aggregated[h.ID]; ok {
+				if existing.DailyLinkLimit == 0 || h.DailyLinkLimit == 0 {
+					existing.DailyLinkLimit = 0
+				} else {
+					existing.DailyLinkLimit += h.DailyLinkLimit
+				}
+				
+				if existing.DailyBandwidthLimit == 0 || h.DailyBandwidthLimit == 0 {
+					existing.DailyBandwidthLimit = 0
+				} else {
+					existing.DailyBandwidthLimit += h.DailyBandwidthLimit
+				}
+				
+				existing.DailyLinkUsed += h.DailyLinkUsed
+				existing.DailyBandwidthUsed += h.DailyBandwidthUsed
+				
+				if h.Status {
+					existing.Status = true
+				}
+			} else {
+				clone := h
+				aggregated[h.ID] = &clone
+			}
+		}
+	}
+	
+	if len(aggregated) == 0 {
+		return nil, fmt.Errorf("could not fetch hosters from any TorBox client")
+	}
+	
+	var result []torbox.HosterInfo
+	for _, h := range aggregated {
+		result = append(result, *h)
+	}
+	
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].ID < result[j].ID
+	})
+	
+	return result, nil
+}
+
+func (s *Server) handleApiHosters(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+	
+	_, _, _, ok := s.getSessionUser(r)
+	if !ok {
+		jsonError(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+	
+	hosters, err := s.getAggregatedHosters()
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	
+	jsonOK(w, hosters)
+}
+
+func (s *Server) handleV1Hosters(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+	
+	_, ok := s.checkV1PublicAccess(w, r)
+	if !ok {
+		return
+	}
+	
+	hosters, err := s.getAggregatedHosters()
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	
+	jsonOK(w, hosters)
 }

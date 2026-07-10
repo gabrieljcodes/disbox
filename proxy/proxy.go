@@ -244,6 +244,7 @@ func NewServer(baseURL, port string, clientPool *torbox.ClientPool, discordClien
 		mux.HandleFunc("/api/user/profile", s.handleApiUserProfile)
 		mux.HandleFunc("/api/user/ftp", s.handleApiUserFtp)
 		mux.HandleFunc("/api/ftp/send", s.handleApiFtpSend)
+		mux.HandleFunc("/api/hosters", s.handleApiHosters)
 		
 		// Admin Settings
 		mux.HandleFunc("/api/admin/settings", s.handleApiAdminSettingsGet)
@@ -265,6 +266,7 @@ func NewServer(baseURL, port string, clientPool *torbox.ClientPool, discordClien
 	mux.HandleFunc("/v1/user/profile", s.handleV1UserProfile)
 	mux.HandleFunc("/v1/user/ftp", s.handleV1UserFtp)
 	mux.HandleFunc("/v1/ftp/send", s.handleV1FtpSend)
+	mux.HandleFunc("/v1/hosters", s.handleV1Hosters)
 	
 	// Public API Admin Routes
 	mux.HandleFunc("/v1/admin/access", s.handleV1AdminAccessGet)

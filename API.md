@@ -34,11 +34,40 @@ If an error occurs, the response will look like:
 
 ---
 
-### User Endpoints
+### User & Profile Endpoints
 
-#### Get User Profile
+#### Get User Details
 `GET /v1/me`
-Retrieves information about the token owner.
+Retrieves basic information about the token owner (username, ID, etc).
+
+#### Get User Profile Statistics
+`GET /v1/user/profile`
+Retrieves user statistics, such as total downloaded bytes, monthly downloaded bytes, and checking if FTP is configured.
+
+---
+
+### FTP Configuration Endpoints
+
+#### Update FTP Settings
+`POST /v1/user/ftp`
+Body:
+```json
+{
+  "host": "ftp.example.com",
+  "username": "my_user",
+  "password": "my_password"
+}
+```
+Configures the user's FTP server details. These details are securely stored.
+
+#### Send Download to FTP
+`POST /v1/ftp/send`
+Body: `{"token": "download_token_here"}`
+Triggers a background process that will download the specified file from TorBox and stream it directly to your configured FTP server.
+
+---
+
+### Downloads Endpoints
 
 #### Add Torrent
 `POST /v1/add-torrent`
@@ -58,7 +87,7 @@ Adds a direct download link.
 #### Remove Download
 `POST /v1/remove-download`
 Body: `{"token": "download_token_here"}`
-Removes a download from the Disbox proxy and deletes it from TorBox.
+Removes a download from the Disbox proxy and deletes it from TorBox as well.
 
 #### Get History
 `GET /v1/history`
@@ -68,20 +97,28 @@ Returns the user's download history and active proxy links.
 `GET /v1/queue-status`
 Returns the global slots capacity, active jobs, and queued jobs. This helps identify if a new download will be queued or start immediately.
 
+#### Get Hoster List
+`GET /v1/hosters`
+Returns a dynamic list of hosters that TorBox supports. 
+The system automatically aggregates limits across all available API keys. For example, if you have two keys each with a 50GB limit for a hoster, the API will display an aggregated limit of 100GB.
+
+---
+
+### Search Endpoints
+
+*Note: Search endpoints may return HTTP 403 if the administrator has disabled the Search Torrents feature.*
+
 #### Search TMDB
 `GET /v1/tmdb/search?query=Matrix&type=movie`
 Searches TMDB for movies or series. Returns standard metadata. 
-*Note: This endpoint may return HTTP 403 if the administrator has disabled the Search Torrents feature.*
 
 #### Search AniList (Anime)
 `GET /v1/anilist/search?query=Naruto`
 Searches AniList for anime by title. Returns standard metadata. 
-*Note: This endpoint may return HTTP 403 if the administrator has disabled the Search Torrents feature.*
 
 #### Search AIOStreams
 `GET /v1/search?query=tmdb:27205&type=movie`
 Searches for torrents on AIOStreams. For series, the query format must include season and episode (e.g. `tmdb:2131:1:3`). TMDB IDs are automatically resolved to IMDB IDs in the background.
-*Note: This endpoint may return HTTP 403 if the administrator has disabled the Search Torrents feature.*
 
 ---
 
