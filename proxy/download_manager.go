@@ -39,11 +39,19 @@ type QueueStatusItem struct {
 	Status   string    `json:"status"`
 }
 
+type CachedProgress struct {
+	Progress      float64
+	DownloadSpeed int64
+	DownloadState string
+	ETA           int64 // seconds
+}
+
 type DownloadManager struct {
-	server      *Server
-	queue       []*QueuedDownload
-	mu          sync.Mutex
-	stopChan    chan struct{}
+	server        *Server
+	queue         []*QueuedDownload
+	mu            sync.Mutex
+	stopChan      chan struct{}
+	progressCache map[string]CachedProgress
 
 	globalSlots int
 	activeCount map[int]int    // active downloads per client index
@@ -55,11 +63,12 @@ type DownloadManager struct {
 
 func NewDownloadManager(server *Server) *DownloadManager {
 	dm := &DownloadManager{
-		server:      server,
-		queue:       make([]*QueuedDownload, 0),
-		stopChan:    make(chan struct{}),
-		activeCount: make(map[int]int),
-		userActive:  make(map[string]int),
+		server:        server,
+		queue:         make([]*QueuedDownload, 0),
+		stopChan:      make(chan struct{}),
+		activeCount:   make(map[int]int),
+		userActive:    make(map[string]int),
+		progressCache: make(map[string]CachedProgress),
 	}
 
 	go dm.processQueue()
@@ -150,6 +159,7 @@ func (dm *DownloadManager) GetSlotCapacity() int {
 func (dm *DownloadManager) RefreshActiveCount() {
 	pool := dm.server.clientPool
 	newActiveCount := make(map[int]int)
+	newProgressCache := make(map[string]CachedProgress)
 
 	for i := 0; i < pool.GetClientCount(); i++ {
 		client := pool.GetClient(i)
@@ -162,6 +172,20 @@ func (dm *DownloadManager) RefreshActiveCount() {
 				if t.Active && !t.DownloadFinished {
 					active++
 				}
+				var eta int64 = 0
+				if t.DownloadSpeed > 0 {
+					eta = (t.Size - t.Downloaded) / t.DownloadSpeed
+				}
+				if eta < 0 {
+					eta = 0
+				}
+				key := fmt.Sprintf("%d_torrent_%d", i, t.ID)
+				newProgressCache[key] = CachedProgress{
+					Progress:      t.Progress,
+					DownloadSpeed: t.DownloadSpeed,
+					DownloadState: t.DownloadState,
+					ETA:           eta,
+				}
 			}
 		}
 
@@ -172,6 +196,20 @@ func (dm *DownloadManager) RefreshActiveCount() {
 				if w.Active && !w.DownloadFinished {
 					active++
 				}
+				var eta int64 = 0
+				if w.DownloadSpeed > 0 {
+					eta = (w.Size - w.Downloaded) / w.DownloadSpeed
+				}
+				if eta < 0 {
+					eta = 0
+				}
+				key := fmt.Sprintf("%d_webdl_%d", i, w.ID)
+				newProgressCache[key] = CachedProgress{
+					Progress:      w.Progress,
+					DownloadSpeed: w.DownloadSpeed,
+					DownloadState: w.DownloadState,
+					ETA:           eta,
+				}
 			}
 		}
 
@@ -180,7 +218,15 @@ func (dm *DownloadManager) RefreshActiveCount() {
 
 	dm.mu.Lock()
 	dm.activeCount = newActiveCount
+	dm.progressCache = newProgressCache
 	dm.mu.Unlock()
+}
+
+func (dm *DownloadManager) GetProgress(key string) (CachedProgress, bool) {
+	dm.mu.Lock()
+	defer dm.mu.Unlock()
+	prog, exists := dm.progressCache[key]
+	return prog, exists
 }
 
 func (dm *DownloadManager) periodicRefresh() {
@@ -189,9 +235,9 @@ func (dm *DownloadManager) periodicRefresh() {
 	dm.RefreshActiveCount()
 	dm.RefreshBandwidthUsage()
 
-	// Refresh slots every hour, active count every minute
+	// Refresh slots every hour, active count every 10 seconds
 	slotTicker := time.NewTicker(1 * time.Hour)
-	activeTicker := time.NewTicker(1 * time.Minute)
+	activeTicker := time.NewTicker(10 * time.Second)
 	defer slotTicker.Stop()
 	defer activeTicker.Stop()
 
@@ -249,6 +295,11 @@ func (dm *DownloadManager) Submit(qd *QueuedDownload) (*QueuedDownload, error) {
 	dm.mu.Lock()
 	limit := dm.globalBandwidthLimit
 	used := dm.globalBandwidthUsed
+	totalActive := 0
+	for _, count := range dm.activeCount {
+		totalActive += count
+	}
+	availableSlots := dm.globalSlots - totalActive
 	dm.mu.Unlock()
 
 	if limit > 0 && used >= limit {
@@ -259,8 +310,26 @@ func (dm *DownloadManager) Submit(qd *QueuedDownload) (*QueuedDownload, error) {
 	rand.Read(b)
 	qd.ID = hex.EncodeToString(b)
 	qd.QueuedAt = time.Now()
-	qd.Status = "queued"
 
+	if availableSlots > 0 {
+		qd.Status = "processing"
+		dm.mu.Lock()
+		if len(dm.activeCount) > 0 {
+			dm.activeCount[0]++
+		} else {
+			dm.activeCount[0] = 1
+		}
+		dm.userActive[qd.DiscordID]++
+		dm.mu.Unlock()
+
+		err := dm.executeDownload(qd)
+		if err != nil {
+			return qd, err
+		}
+		return qd, nil
+	}
+
+	qd.Status = "queued"
 	dm.mu.Lock()
 	dm.queue = append(dm.queue, qd)
 	dm.mu.Unlock()
@@ -316,7 +385,7 @@ func (dm *DownloadManager) tryDispatch() {
 	go dm.executeDownload(qd)
 }
 
-func (dm *DownloadManager) executeDownload(qd *QueuedDownload) {
+func (dm *DownloadManager) executeDownload(qd *QueuedDownload) error {
 	var err error
 	var clientIndex int
 	var proxyLink string
@@ -370,13 +439,15 @@ func (dm *DownloadManager) executeDownload(qd *QueuedDownload) {
 
 	if err != nil {
 		qd.ResultError = err
-		log.Printf("Queued download %s failed: %v", qd.ID, err)
+		log.Printf("Download %s failed: %v", qd.ID, err)
 		dm.mu.Lock()
 		dm.userActive[qd.DiscordID]--
 		dm.mu.Unlock()
+		return err
 	} else {
-		log.Printf("Queued download %s started successfully: %s", qd.ID, proxyLink)
+		log.Printf("Download %s started successfully: %s", qd.ID, proxyLink)
 		qd.ProxyLink = proxyLink
+		return nil
 	}
 }
 

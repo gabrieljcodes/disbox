@@ -316,6 +316,48 @@ func (s *Server) handleApiHistory(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(history)
 }
 
+func (s *Server) handleApiProgress(w http.ResponseWriter, r *http.Request) {
+	_, _, _, ok := s.getSessionUser(r)
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	tokens := r.URL.Query().Get("tokens")
+	if tokens == "" {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{})
+		return
+	}
+
+	tokenList := strings.Split(tokens, ",")
+	results := make(map[string]interface{})
+
+	for _, token := range tokenList {
+		token = strings.TrimSpace(token)
+		if token == "" {
+			continue
+		}
+
+		s.mu.RLock()
+		entry, exists := s.downloads[token]
+		s.mu.RUnlock()
+
+		if !exists {
+			continue
+		}
+
+		cacheKey := fmt.Sprintf("%d_%s_%d", entry.ClientIndex, entry.Type, entry.ID)
+		prog, found := s.downloadManager.GetProgress(cacheKey)
+		if found {
+			results[token] = prog
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(results)
+}
+
 func (s *Server) handleApiAdminHistory(w http.ResponseWriter, r *http.Request) {
 	id, _, _, ok := s.getSessionUser(r)
 	if !ok {

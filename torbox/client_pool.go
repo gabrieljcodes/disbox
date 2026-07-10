@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"sort"
+	"strings"
 	"sync"
 )
 
@@ -142,8 +143,8 @@ func (p *ClientPool) doWithFallback(action func(client *Client) (*APIResponse, e
 			continue
 		}
 
-		if !resp.Success && isActiveLimitError(resp) {
-			log.Printf("API key #%d reached active limit, trying next...", idx+1)
+		if !resp.Success && (isActiveLimitError(resp) || isPlanLimitError(resp)) {
+			log.Printf("API key #%d reached limit or rejected size, trying next...", idx+1)
 			continue
 		}
 
@@ -196,6 +197,21 @@ func isActiveLimitError(resp *APIResponse) bool {
 				return true
 			}
 		}
+	}
+	
+	return false
+}
+
+func isPlanLimitError(resp *APIResponse) bool {
+	if resp == nil || resp.Success {
+		return false
+	}
+	
+	detail := strings.ToLower(resp.Detail)
+	if strings.Contains(detail, "too large") || 
+	   strings.Contains(detail, "plan limit") || 
+	   strings.Contains(detail, "upgrade") {
+		return true
 	}
 	
 	return false

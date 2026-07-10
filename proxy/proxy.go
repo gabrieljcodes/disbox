@@ -224,6 +224,7 @@ func NewServer(baseURL, port string, clientPool *torbox.ClientPool, discordClien
 		mux.HandleFunc("/auth/logout", s.handleAuthLogout)
 		mux.HandleFunc("/api/me", s.handleApiMe)
 		mux.HandleFunc("/api/history", s.handleApiHistory)
+		mux.HandleFunc("/api/progress", s.handleApiProgress)
 		mux.HandleFunc("/api/add-torrent", s.handleApiAddTorrent)
 		mux.HandleFunc("/api/add-torrent-file", s.handleApiAddTorrentFile)
 		mux.HandleFunc("/api/add-webdl", s.handleApiAddWebdl)

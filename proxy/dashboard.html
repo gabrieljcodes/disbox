@@ -172,6 +172,12 @@
             background: var(--bg-glass);
             border: 1px solid var(--border-subtle);
             border-radius: 50px;
+            cursor: pointer;
+            transition: var(--transition);
+        }
+        .user-badge:hover {
+            background: rgba(255, 255, 255, 0.05);
+            border-color: var(--accent-indigo);
         }
 
         .user-avatar {
@@ -854,7 +860,7 @@
                 </div>
             </div>
             <div class="topbar-right">
-                <div class="user-badge">
+                <div class="user-badge" id="user-badge-btn" title="View Profile">
                     <img class="user-avatar" id="user-avatar" src="" alt="">
                     <span class="user-name" id="user-name"></span>
                 </div>
@@ -869,10 +875,7 @@
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
                     My Downloads
                 </button>
-                <button class="tab-btn" data-tab="profile" id="tab-profile">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                    Profile
-                </button>
+
                 <button class="tab-btn" data-tab="add" id="tab-add">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
                     Add New
@@ -1467,6 +1470,15 @@
             });
         });
 
+        const userBadgeBtn = document.getElementById('user-badge-btn');
+        if (userBadgeBtn) {
+            userBadgeBtn.addEventListener('click', () => {
+                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+                document.getElementById('panel-profile').classList.add('active');
+            });
+        }
+
         // ─── Admin Sub-tabs ───
         document.querySelectorAll('.admin-subtab').forEach(btn => {
             btn.addEventListener('click', () => {
@@ -1476,6 +1488,74 @@
                 document.getElementById('admin-panel-' + btn.dataset.adminTab).classList.add('active');
             });
         });
+
+        // ─── Progress Tracking ───
+        let progressInterval = null;
+
+        function formatSpeed(bytes) {
+            if (bytes === 0) return '0 B/s';
+            const k = 1024, sizes = ['B/s', 'KB/s', 'MB/s', 'GB/s'], i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+        }
+        function formatETA(seconds) {
+            if (seconds <= 0) return '';
+            if (seconds < 60) return seconds + 's';
+            const m = Math.floor(seconds / 60);
+            if (m < 60) return m + 'm';
+            const h = Math.floor(m / 60);
+            const rm = m % 60;
+            return h + 'h ' + rm + 'm';
+        }
+
+        function startProgressPolling(tokens) {
+            if (progressInterval) clearInterval(progressInterval);
+            if (tokens.length === 0) return;
+
+            const poll = () => {
+                if (tokens.length === 0) {
+                    clearInterval(progressInterval);
+                    return;
+                }
+                fetch('/api/progress?tokens=' + tokens.join(','))
+                    .then(r => r.json())
+                    .then(res => {
+                        Object.keys(res).forEach(token => {
+                            const data = res[token];
+                            const container = document.getElementById('progress-container-' + token);
+                            if (container) {
+                                container.style.display = 'block';
+                                const bar = document.getElementById('progress-bar-' + token);
+                                const state = document.getElementById('progress-state-' + token);
+                                const stats = document.getElementById('progress-stats-' + token);
+                                
+                                bar.style.width = data.Progress + '%';
+                                let stateText = data.DownloadState || 'Active';
+                                let statsText = data.Progress.toFixed(1) + '%';
+                                
+                                if (data.DownloadSpeed > 0) {
+                                    statsText += ' • ' + formatSpeed(data.DownloadSpeed);
+                                }
+                                if (data.ETA > 0) {
+                                    statsText += ' • ' + formatETA(data.ETA);
+                                }
+                                
+                                state.textContent = stateText.charAt(0).toUpperCase() + stateText.slice(1);
+                                stats.textContent = statsText;
+
+                                if (data.Progress >= 100 || data.DownloadState === 'finished') {
+                                    tokens = tokens.filter(t => t !== token);
+                                    container.style.display = 'none'; // hide when done
+                                }
+                            } else {
+                                tokens = tokens.filter(t => t !== token);
+                            }
+                        });
+                    }).catch(console.error);
+            };
+
+            poll(); // initial call
+            progressInterval = setInterval(poll, 5000);
+        }
 
         // ─── Load History ───
         function loadHistory() {
@@ -1493,6 +1573,7 @@
                     }
                     historyList.style.display = '';
                     historyList.innerHTML = '';
+                    const activeTokens = [];
                     items.forEach((item, i) => {
                         const el = document.createElement('div');
                         el.className = 'history-item';
@@ -1511,6 +1592,15 @@
                                 <div class="history-meta">
                                     <span class="history-type ${item.type}">${typeLabel}</span>
                                     <span class="history-date">${date}</span>
+                                </div>
+                                <div class="progress-container" id="progress-container-${item.token}" style="display: none; margin-top: 8px;">
+                                    <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--text-muted); margin-bottom: 4px;">
+                                        <span id="progress-state-${item.token}">Downloading...</span>
+                                        <span id="progress-stats-${item.token}">0%</span>
+                                    </div>
+                                    <div style="width: 100%; background: var(--bg-input); border-radius: 4px; height: 6px; overflow: hidden; border: 1px solid var(--border-subtle);">
+                                        <div id="progress-bar-${item.token}" style="width: 0%; height: 100%; background: var(--accent-emerald); transition: width 0.5s ease; box-shadow: 0 0 10px var(--accent-emerald);"></div>
+                                    </div>
                                 </div>
                             </div>
                             <div class="history-actions">
@@ -1536,7 +1626,10 @@
                                 </button>
                             </div>`;
                         historyList.appendChild(el);
+                        activeTokens.push(item.token);
                     });
+                    
+                    startProgressPolling(activeTokens);
                 })
                 .catch(() => {
                     historyLoading.style.display = 'none';

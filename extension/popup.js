@@ -159,6 +159,75 @@
         }
     }
 
+    // ─── Progress Tracking ───
+    let progressInterval = null;
+
+    function formatSpeed(bytes) {
+        if (bytes === 0) return '0 B/s';
+        const k = 1024, sizes = ['B/s', 'KB/s', 'MB/s', 'GB/s'], i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    }
+    
+    function formatETA(seconds) {
+        if (seconds <= 0) return '';
+        if (seconds < 60) return seconds + 's';
+        const m = Math.floor(seconds / 60);
+        if (m < 60) return m + 'm';
+        const h = Math.floor(m / 60);
+        const rm = m % 60;
+        return h + 'h ' + rm + 'm';
+    }
+
+    function startProgressPolling(tokens) {
+        if (progressInterval) clearInterval(progressInterval);
+        if (tokens.length === 0) return;
+
+        const poll = async () => {
+            if (tokens.length === 0) {
+                clearInterval(progressInterval);
+                return;
+            }
+            try {
+                // apiFetch uses the serverUrl internally if we provide the path
+                const data = await apiFetch('/api/progress?tokens=' + tokens.join(','));
+                Object.keys(data).forEach(token => {
+                    const progData = data[token];
+                    const container = document.getElementById('progress-container-' + token);
+                    if (container) {
+                        container.style.display = 'block';
+                        const bar = document.getElementById('progress-bar-' + token);
+                        const state = document.getElementById('progress-state-' + token);
+                        const stats = document.getElementById('progress-stats-' + token);
+                        
+                        bar.style.width = progData.Progress + '%';
+                        let stateText = progData.DownloadState || 'Active';
+                        let statsText = progData.Progress.toFixed(1) + '%';
+                        
+                        if (progData.DownloadSpeed > 0) {
+                            statsText += ' • ' + formatSpeed(progData.DownloadSpeed);
+                        }
+                        if (progData.ETA > 0) {
+                            statsText += ' • ' + formatETA(progData.ETA);
+                        }
+                        
+                        state.textContent = stateText.charAt(0).toUpperCase() + stateText.slice(1);
+                        stats.textContent = statsText;
+
+                        if (progData.Progress >= 100 || progData.DownloadState === 'finished') {
+                            tokens = tokens.filter(t => t !== token);
+                            container.style.display = 'none';
+                        }
+                    } else {
+                        tokens = tokens.filter(t => t !== token);
+                    }
+                });
+            } catch (e) {}
+        };
+
+        poll();
+        progressInterval = setInterval(poll, 5000);
+    }
+
     // ─── Load Downloads ───
     async function loadDownloads() {
         downloadsLoading.style.display = '';
@@ -183,6 +252,7 @@
 
             downloadList.style.display = '';
             downloadList.innerHTML = '';
+            const activeTokens = [];
 
             items.forEach((item, i) => {
                 const el = document.createElement('div');
@@ -207,6 +277,15 @@
                             <div class="dl-meta">
                                 <span class="dl-type ${typeClass}">${typeLabel}</span>
                                 <span class="dl-date">${date}</span>
+                            </div>
+                            <div class="progress-container" id="progress-container-${item.token}" style="display: none; margin-top: 6px;">
+                                <div style="display: flex; justify-content: space-between; font-size: 10px; color: var(--text-muted); margin-bottom: 3px;">
+                                    <span id="progress-state-${item.token}">Downloading...</span>
+                                    <span id="progress-stats-${item.token}">0%</span>
+                                </div>
+                                <div style="width: 100%; background: var(--bg-input); border-radius: 3px; height: 4px; overflow: hidden; border: 1px solid var(--border-subtle);">
+                                    <div id="progress-bar-${item.token}" style="width: 0%; height: 100%; background: var(--accent-emerald); transition: width 0.5s ease; box-shadow: 0 0 8px var(--accent-emerald);"></div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -235,7 +314,10 @@
                 `;
 
                 downloadList.appendChild(el);
+                activeTokens.push(item.token);
             });
+            
+            startProgressPolling(activeTokens);
 
             // Attach action listeners
             downloadList.querySelectorAll('[data-action]').forEach(btn => {
