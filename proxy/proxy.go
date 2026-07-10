@@ -42,6 +42,9 @@ var dashboardFS embed.FS
 //go:embed preview.html
 var previewFS embed.FS
 
+//go:embed hosters.html
+var hostersFS embed.FS
+
 //go:embed favicon.ico
 var faviconBytes []byte
 
@@ -59,6 +62,7 @@ var browserTemplate = template.Must(template.ParseFS(browserFS, "browser.html"))
 var readerTemplate = template.Must(template.ParseFS(readerFS, "reader.html"))
 var dashboardTemplate = template.Must(template.ParseFS(dashboardFS, "dashboard.html"))
 var previewTemplate = template.Must(template.ParseFS(previewFS, "preview.html"))
+var hostersTemplate = template.Must(template.ParseFS(hostersFS, "hosters.html"))
 
 type DownloadEntry struct {
 	Type        string // "torrent" or "webdl"
@@ -219,6 +223,7 @@ func NewServer(baseURL, port string, clientPool *torbox.ClientPool, discordClien
 
 	if discordClientID != "" && discordClientSecret != "" {
 		mux.HandleFunc("/dashboard", s.handleDashboard)
+		mux.HandleFunc("/hosters", s.handleHostersPage)
 		mux.HandleFunc("/auth/login", s.handleAuthLogin)
 		mux.HandleFunc("/auth/callback", s.handleAuthCallback)
 		mux.HandleFunc("/auth/logout", s.handleAuthLogout)

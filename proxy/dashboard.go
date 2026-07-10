@@ -112,6 +112,11 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	dashboardTemplate.Execute(w, nil)
 }
 
+func (s *Server) handleHostersPage(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	hostersTemplate.Execute(w, nil)
+}
+
 func (s *Server) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
 	redirectURI := s.baseURL + "/auth/callback"
 	u, _ := url.Parse("https://discord.com/api/oauth2/authorize")
