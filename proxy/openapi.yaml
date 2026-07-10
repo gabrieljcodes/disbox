@@ -43,6 +43,8 @@ security:
 tags:
   - name: User
     description: User information and limits
+  - name: FTP
+    description: FTP integration and upload
   - name: Downloads
     description: Add and manage downloads
   - name: Search
@@ -74,6 +76,74 @@ paths:
                         type: string
                       avatar_url:
                         type: string
+
+  /v1/user/profile:
+    get:
+      summary: Get user profile and stats
+      tags: [User]
+      responses:
+        '200':
+          description: User statistics and FTP configuration state
+
+  /v1/user/ftp:
+    post:
+      summary: Update FTP settings
+      tags: [FTP]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [host, username, password]
+              properties:
+                host:
+                  type: string
+                username:
+                  type: string
+                password:
+                  type: string
+      responses:
+        '200':
+          description: FTP settings saved successfully
+
+  /v1/ftp/send:
+    post:
+      summary: Send download to FTP
+      tags: [FTP]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token:
+                  type: string
+      responses:
+        '200':
+          description: FTP upload started successfully
+
+  /v1/hosters:
+    get:
+      summary: Get supported hosters
+      description: Returns a dynamic, aggregated list of hosters that TorBox supports with combined limits across all API keys.
+      tags: [Downloads]
+      responses:
+        '200':
+          description: Hoster list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      type: object
 
   /v1/history:
     get:
@@ -120,7 +190,6 @@ paths:
                         type: integer
                       available_slots:
                         type: integer
-
 
   /v1/add-torrent:
     post:
