@@ -45,6 +45,9 @@ var previewFS embed.FS
 //go:embed favicon.ico
 var faviconBytes []byte
 
+//go:embed icon_transparent.png
+var iconTransparentBytes []byte
+
 //go:embed scalar.html
 var scalarBytes []byte
 
@@ -141,6 +144,12 @@ func NewServer(baseURL, port string, clientPool *torbox.ClientPool, discordClien
 			added_by TEXT NOT NULL,
 			added_at DATETIME DEFAULT CURRENT_TIMESTAMP
 		);
+		CREATE TABLE IF NOT EXISTS user_ftp_configs (
+			discord_id TEXT PRIMARY KEY,
+			host TEXT NOT NULL,
+			username TEXT NOT NULL,
+			password TEXT NOT NULL
+		);
 	`); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("failed to create download_links table: %w", err)
@@ -187,6 +196,10 @@ func NewServer(baseURL, port string, clientPool *torbox.ClientPool, discordClien
 		w.Header().Set("Content-Type", "image/x-icon")
 		w.Write(faviconBytes)
 	})
+	mux.HandleFunc("/icon.png", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/png")
+		w.Write(iconTransparentBytes)
+	})
 	mux.HandleFunc("/api/docs", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Write(scalarBytes)
@@ -227,6 +240,9 @@ func NewServer(baseURL, port string, clientPool *torbox.ClientPool, discordClien
 		mux.HandleFunc("/api/admin/user", s.handleApiAdminUserProfile)
 		mux.HandleFunc("/api/remove-download", s.handleApiRemoveDownload)
 		mux.HandleFunc("/api/queue-status", s.handleApiQueueStatus)
+		mux.HandleFunc("/api/user/profile", s.handleApiUserProfile)
+		mux.HandleFunc("/api/user/ftp", s.handleApiUserFtp)
+		mux.HandleFunc("/api/ftp/send", s.handleApiFtpSend)
 		
 		// Admin Settings
 		mux.HandleFunc("/api/admin/settings", s.handleApiAdminSettingsGet)
@@ -245,6 +261,9 @@ func NewServer(baseURL, port string, clientPool *torbox.ClientPool, discordClien
 	mux.HandleFunc("/v1/search", s.handleV1Search)
 	mux.HandleFunc("/v1/tmdb/search", s.handleV1TMDBSearch)
 	mux.HandleFunc("/v1/anilist/search", s.handleV1AniListSearch)
+	mux.HandleFunc("/v1/user/profile", s.handleV1UserProfile)
+	mux.HandleFunc("/v1/user/ftp", s.handleV1UserFtp)
+	mux.HandleFunc("/v1/ftp/send", s.handleV1FtpSend)
 	
 	// Public API Admin Routes
 	mux.HandleFunc("/v1/admin/access", s.handleV1AdminAccessGet)

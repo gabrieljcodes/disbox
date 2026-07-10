@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=400">
+    <title>Disbox</title>
+    <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+    <!-- ═══ Settings View ═══ -->
+    <div id="view-settings" class="view">
+        <div class="settings-header">
+            <div class="logo-row">
+                <img src="icons/logo-128.png" width="32" height="32" style="vertical-align: middle;">
+                <span class="logo-text">Disbox</span>
+            </div>
+            <p class="settings-desc">Connect to your Disbox server to manage downloads.</p>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label" for="input-server-url">Server URL</label>
+            <input type="text" class="form-input" id="input-server-url" placeholder="https://disbox.example.com" spellcheck="false">
+        </div>
+
+        <div class="form-group">
+            <label class="form-label" for="input-api-token">API Token</label>
+            <input type="password" class="form-input" id="input-api-token" placeholder="Paste your API token" spellcheck="false">
+            <div class="form-hint">Generate a token from the dashboard's API Keys tab.</div>
+        </div>
+
+        <button class="btn-primary" id="btn-connect">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+            Connect
+        </button>
+
+        <div class="toast" id="settings-toast"></div>
+    </div>
+
+    <!-- ═══ Main View ═══ -->
+    <div id="view-main" class="view" style="display:none;">
+        <!-- Header -->
+        <div class="main-header">
+            <div class="header-left">
+                <img src="icons/logo-128.png" width="20" height="20" style="vertical-align: middle;">
+                <span class="logo-text-sm">Disbox</span>
+                <span class="connection-dot" id="connection-dot"></span>
+            </div>
+            <div class="header-right">
+                <button class="icon-btn" id="btn-refresh" title="Refresh">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                </button>
+                <button class="icon-btn" id="btn-settings" title="Settings">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.26.604.852.997 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- Server Stats -->
+        <div class="stats-bar">
+            <div class="stat-item">
+                <div class="stat-label">Active</div>
+                <div class="stat-value"><span id="stat-active">0</span> / <span id="stat-total">0</span></div>
+            </div>
+            <div class="stat-divider"></div>
+            <div class="stat-item">
+                <div class="stat-label">Queued</div>
+                <div class="stat-value accent-blue" id="stat-queued">0</div>
+            </div>
+            <div class="stat-divider"></div>
+            <div class="stat-item">
+                <div class="stat-label">Bandwidth</div>
+                <div class="stat-value accent-amber"><span id="stat-bw-used">0</span> / <span id="stat-bw-limit">0</span> TB</div>
+            </div>
+        </div>
+
+        <!-- Tab Navigation -->
+        <div class="tabs">
+            <button class="tab active" data-tab="downloads">Downloads</button>
+            <button class="tab" data-tab="add">Add New</button>
+            <button class="tab" data-tab="profile">Profile</button>
+        </div>
+
+        <!-- Downloads Panel -->
+        <div class="panel active" id="panel-downloads">
+            <div class="loading" id="downloads-loading">
+                <div class="spinner"></div>
+            </div>
+            <div class="download-list" id="download-list"></div>
+            <div class="empty-state" id="downloads-empty" style="display:none;">
+                <div class="empty-icon">📭</div>
+                <p>No downloads yet.</p>
+            </div>
+        </div>
+
+        <!-- Add New Panel -->
+        <div class="panel" id="panel-add">
+            <div class="form-group">
+                <label class="form-label" for="input-add-link">Magnet Link or URL</label>
+                <input type="text" class="form-input" id="input-add-link" placeholder="magnet:?xt=urn:btih:... or https://..." spellcheck="false">
+                <div class="link-type-indicator" id="link-type-indicator">
+                    <span>Paste a link to detect type</span>
+                </div>
+            </div>
+            <button class="btn-primary" id="btn-add-download" disabled>
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>
+                Add Download
+            </button>
+        </div>
+
+        <!-- Profile Panel -->
+        <div class="panel" id="panel-profile">
+            <div class="profile-stats">
+                <div class="profile-stat-card">
+                    <div class="profile-stat-label">Total Downloaded</div>
+                    <div class="profile-stat-value" id="profile-total">—</div>
+                </div>
+                <div class="profile-stat-card">
+                    <div class="profile-stat-label">Monthly Downloaded</div>
+                    <div class="profile-stat-value" id="profile-monthly">—</div>
+                </div>
+            </div>
+
+            <div class="section-title">FTP Configuration</div>
+            <div class="form-group">
+                <label class="form-label" for="input-ftp-host">FTP Host</label>
+                <input type="text" class="form-input" id="input-ftp-host" placeholder="ftp.example.com:21">
+            </div>
+            <div class="form-row">
+                <div class="form-group" style="flex:1">
+                    <label class="form-label" for="input-ftp-user">Username</label>
+                    <input type="text" class="form-input" id="input-ftp-user" placeholder="user">
+                </div>
+                <div class="form-group" style="flex:1">
+                    <label class="form-label" for="input-ftp-pass">Password</label>
+                    <input type="password" class="form-input" id="input-ftp-pass" placeholder="Leave empty to keep">
+                </div>
+            </div>
+            <button class="btn-primary btn-sm-width" id="btn-save-ftp">Save FTP Settings</button>
+        </div>
+
+        <div class="toast" id="main-toast"></div>
+    </div>
+
+    <script src="popup.js"></script>
+</body>
+</html>

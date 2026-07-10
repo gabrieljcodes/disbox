@@ -1,0 +1,37 @@
+{
+  "manifest_version": 3,
+  "name": "Disbox",
+  "description": "Send magnet links and URLs directly to your Disbox server from any page.",
+  "version": "1.0.0",
+  "icons": {
+    "16": "icons/logo-16.png",
+    "48": "icons/logo-128.png",
+    "128": "icons/logo-128.png"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/logo-16.png",
+      "48": "icons/logo-128.png",
+      "128": "icons/logo-128.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js",
+    "scripts": ["background.js"]
+  },
+  "permissions": [
+    "contextMenus",
+    "storage",
+    "notifications"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "extension@disbox.app",
+      "strict_min_version": "109.0"
+    }
+  }
+}

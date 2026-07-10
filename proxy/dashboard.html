@@ -819,7 +819,7 @@
     <!-- Login Page -->
     <div class="login-page" id="login-page">
         <div class="login-card">
-            <div class="login-logo">📦</div>
+            <div class="login-logo"><img src="/icon.png" width="48" height="48" style="vertical-align: middle;"></div>
             <h1 class="login-title">Disbox</h1>
             <p class="login-subtitle">Sign in to manage your downloads</p>
             <a href="/auth/login" class="btn-discord" id="btn-login">
@@ -834,8 +834,24 @@
         <!-- Top Bar -->
         <div class="topbar">
             <div class="topbar-left">
-                <span style="font-size:22px">📦</span>
+                <img src="/icon.png" width="28" height="28" style="vertical-align: middle;">
                 <span class="topbar-brand">Disbox</span>
+            </div>
+            <div class="topbar-center hide-mobile" style="display: flex; gap: 16px; background: var(--bg-glass); padding: 6px 16px; border-radius: 8px; border: 1px solid var(--border-subtle); align-items: center;">
+                <div style="text-align: center;">
+                    <div style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Active Slots</div>
+                    <div style="font-size: 14px; font-weight: 700; color: var(--accent-emerald);"><span id="stats-active-slots">0</span> / <span id="stats-total-slots">0</span></div>
+                </div>
+                <div style="width: 1px; height: 24px; background: var(--border-subtle);"></div>
+                <div style="text-align: center;">
+                    <div style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Queued</div>
+                    <div style="font-size: 14px; font-weight: 700; color: var(--accent-indigo);" id="stats-queued-slots">0</div>
+                </div>
+                <div style="width: 1px; height: 24px; background: var(--border-subtle);"></div>
+                <div style="text-align: center;">
+                    <div style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Bandwidth (Mo)</div>
+                    <div style="font-size: 14px; font-weight: 700; color: #ffb86c;"><span id="stats-bw-used">0</span> / <span id="stats-bw-limit">0</span> TB</div>
+                </div>
             </div>
             <div class="topbar-right">
                 <div class="user-badge">
@@ -852,6 +868,10 @@
                 <button class="tab-btn active" data-tab="history" id="tab-history">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
                     My Downloads
+                </button>
+                <button class="tab-btn" data-tab="profile" id="tab-profile">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                    Profile
                 </button>
                 <button class="tab-btn" data-tab="add" id="tab-add">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
@@ -952,6 +972,44 @@
                         </div>
                         <div class="search-grid" id="search-results" style="margin-top:0;"></div>
                     </div>
+                </div>
+            </div>
+
+            <!-- Profile Tab -->
+            <div class="tab-panel" id="panel-profile">
+                <div class="add-form">
+                    <h2>My Profile</h2>
+                    <p class="add-form-subtitle">Your statistics and configurations.</p>
+                    
+                    <div style="display: flex; gap: 16px; margin-bottom: 24px; flex-wrap: wrap;">
+                        <div style="flex: 1; min-width: 150px; background: var(--bg-glass); padding: 16px; border-radius: var(--radius); border: 1px solid var(--border-subtle); text-align: center;">
+                            <div style="font-size: 12px; color: var(--text-muted); text-transform: uppercase;">Total Downloaded</div>
+                            <div style="font-size: 24px; font-weight: 700; color: var(--accent-indigo);" id="profile-total-dl">0 GB</div>
+                        </div>
+                        <div style="flex: 1; min-width: 150px; background: var(--bg-glass); padding: 16px; border-radius: var(--radius); border: 1px solid var(--border-subtle); text-align: center;">
+                            <div style="font-size: 12px; color: var(--text-muted); text-transform: uppercase;">Monthly Downloaded</div>
+                            <div style="font-size: 24px; font-weight: 700; color: var(--accent-emerald);" id="profile-monthly-dl">0 GB</div>
+                        </div>
+                    </div>
+
+                    <h3 style="font-size: 16px; margin-bottom: 12px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 8px;">FTP Configuration</h3>
+                    <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 16px;">Configure your FTP server to directly upload downloaded files from TorBox.</p>
+                    
+                    <div class="form-group">
+                        <label class="form-label" for="input-ftp-host">FTP Host</label>
+                        <input type="text" class="form-input" id="input-ftp-host" placeholder="ftp.example.com:21">
+                    </div>
+                    <div class="form-group" style="display:flex; gap:16px;">
+                        <div style="flex:1;">
+                            <label class="form-label" for="input-ftp-user">Username</label>
+                            <input type="text" class="form-input" id="input-ftp-user" placeholder="FTP Username">
+                        </div>
+                        <div style="flex:1;">
+                            <label class="form-label" for="input-ftp-pass">Password</label>
+                            <input type="password" class="form-input" id="input-ftp-pass" placeholder="Leave empty to keep existing">
+                        </div>
+                    </div>
+                    <button class="btn-submit" id="btn-save-ftp" style="width: auto; padding: 12px 24px;">Save Settings</button>
                 </div>
             </div>
 
@@ -1161,23 +1219,6 @@
                             <div style="flex: 1;">
                                 <div class="admin-section-title">Global Settings</div>
                                 <div class="admin-section-desc">Configure bot behavior and API settings</div>
-                            </div>
-                            
-                            <div style="display: flex; gap: 16px; background: rgba(0,0,0,0.2); padding: 8px 16px; border-radius: 8px; border: 1px solid var(--border-subtle);">
-                                <div style="text-align: center;">
-                                    <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Active Slots</div>
-                                    <div style="font-size: 16px; font-weight: 700; color: var(--accent-emerald);"><span id="stats-active-slots">0</span> / <span id="stats-total-slots">0</span></div>
-                                </div>
-                                <div style="width: 1px; background: var(--border-subtle);"></div>
-                                <div style="text-align: center;">
-                                    <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Queued</div>
-                                    <div style="font-size: 16px; font-weight: 700; color: var(--accent-indigo);" id="stats-queued-slots">0</div>
-                                </div>
-                                <div style="width: 1px; background: var(--border-subtle);"></div>
-                                <div style="text-align: center;">
-                                    <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Bandwidth (Month)</div>
-                                    <div style="font-size: 16px; font-weight: 700; color: #ffb86c;"><span id="stats-bw-used">0</span> / <span id="stats-bw-limit">0</span> TB</div>
-                                </div>
                             </div>
                         </div>
 
@@ -1409,6 +1450,7 @@
                     }
                 }
                 loadHistory();
+                loadGlobalStats();
             })
             .catch(() => {
                 loginPage.classList.add('visible');
@@ -1480,6 +1522,10 @@
                                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                                     Download
                                 </a>
+                                <button class="btn-sm" style="background: rgba(30, 191, 106, 0.1); color: var(--accent-indigo); border: 1px solid rgba(30, 191, 106, 0.2); cursor: pointer;" onclick="sendToFtp('${item.token}', this)">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                                    Send to FTP
+                                </button>
                                 <button class="btn-sm" style="background: rgba(255, 255, 255, 0.05); color: var(--text-secondary); border: 1px solid var(--border-subtle); cursor: pointer;" onclick="copyToClipboard('${dlURL}', this)">
                                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
                                     Copy Link
@@ -1497,6 +1543,82 @@
                     historyEmpty.style.display = '';
                 });
         }
+
+        // ─── Global Stats ───
+        function loadGlobalStats() {
+            fetch('/api/queue-status')
+                .then(r => r.json())
+                .then(res => {
+                    if (!res.success) return;
+                    const data = res.data;
+                    document.getElementById('stats-active-slots').textContent = data.active_jobs;
+                    document.getElementById('stats-total-slots').textContent = data.total_capacity;
+                    document.getElementById('stats-queued-slots').textContent = data.queued_jobs;
+                    const tb = 1024*1024*1024*1024;
+                    document.getElementById('stats-bw-used').textContent = data.global_bandwidth_used ? (data.global_bandwidth_used / tb).toFixed(2) : "0";
+                    document.getElementById('stats-bw-limit').textContent = data.global_bandwidth_limit ? (data.global_bandwidth_limit / tb).toFixed(0) : "0";
+                }).catch(e => console.error("Failed to load queue status:", e));
+        }
+
+        // ─── Profile & FTP ───
+        function loadUserProfile() {
+            fetch('/api/user/profile')
+                .then(r => r.json())
+                .then(res => {
+                    if(!res.success) return;
+                    document.getElementById('profile-total-dl').textContent = formatFileSizeSimple(res.data.total_downloaded);
+                    document.getElementById('profile-monthly-dl').textContent = formatFileSizeSimple(res.data.monthly_downloaded);
+                    document.getElementById('input-ftp-host').value = res.data.ftp_host || '';
+                    document.getElementById('input-ftp-user').value = res.data.ftp_username || '';
+                    if (res.data.has_ftp_password) {
+                        document.getElementById('input-ftp-pass').placeholder = '•••••••• (Saved)';
+                    } else {
+                        document.getElementById('input-ftp-pass').placeholder = 'FTP Password';
+                    }
+                }).catch(console.error);
+        }
+
+        document.getElementById('tab-profile')?.addEventListener('click', () => {
+            loadUserProfile();
+        });
+
+        document.getElementById('btn-save-ftp')?.addEventListener('click', () => {
+            const host = document.getElementById('input-ftp-host').value.trim();
+            const user = document.getElementById('input-ftp-user').value.trim();
+            const pass = document.getElementById('input-ftp-pass').value;
+
+            fetch('/api/user/ftp', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({host: host, username: user, password: pass})
+            }).then(r => r.json()).then(res => {
+                if (res.success) {
+                    showToast('FTP Settings Saved', 'success');
+                    document.getElementById('input-ftp-pass').value = '';
+                    loadUserProfile();
+                } else {
+                    showToast(res.error || 'Failed to save FTP settings', 'error');
+                }
+            });
+        });
+
+        window.sendToFtp = function(token, btn) {
+            btn.disabled = true;
+            btn.style.opacity = '0.5';
+            fetch('/api/ftp/send', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({token: token})
+            }).then(r => r.json()).then(res => {
+                btn.disabled = false;
+                btn.style.opacity = '1';
+                if (res.success) {
+                    showToast(res.data?.message || 'FTP upload started', 'success');
+                } else {
+                    showToast(res.error || 'Failed to start FTP upload', 'error');
+                }
+            });
+        };
 
           // ─── Load Admin Access List ───
           function loadAccessList() {
@@ -1596,19 +1718,6 @@
 
           // ─── Load Admin Settings ───
           function loadAdminSettings() {
-              fetch('/api/queue-status')
-                  .then(r => r.json())
-                  .then(res => {
-                      if (!res.success) return;
-                      const data = res.data;
-                      document.getElementById('stats-active-slots').textContent = data.active_jobs;
-                      document.getElementById('stats-total-slots').textContent = data.total_capacity;
-                      document.getElementById('stats-queued-slots').textContent = data.queued_jobs;
-                      const tb = 1024*1024*1024*1024;
-                      document.getElementById('stats-bw-used').textContent = data.global_bandwidth_used ? (data.global_bandwidth_used / tb).toFixed(2) : "0";
-                      document.getElementById('stats-bw-limit').textContent = data.global_bandwidth_limit ? (data.global_bandwidth_limit / tb).toFixed(0) : "0";
-                  }).catch(e => console.error("Failed to load queue status:", e));
-
               fetch('/api/admin/settings')
                   .then(r => r.json())
                   .then(res => {

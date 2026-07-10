@@ -13,6 +13,8 @@ import (
 	"strings"
 	"time"
 	"torbox-discord-bot/torbox"
+
+	"github.com/jlaffaye/ftp"
 )
 
 // ─── JSON Response Helpers ───
@@ -844,4 +846,293 @@ func (s *Server) serveQueueStatus(w http.ResponseWriter, discordID string) {
 		"global_bandwidth_limit": status.GlobalBandwidthLimit,
 		"global_bandwidth_used":  status.GlobalBandwidthUsed,
 	})
+}
+
+// ─── User Profile & FTP ───
+
+type UserProfileResponse struct {
+	TotalDownloaded   int64  `json:"total_downloaded"`
+	MonthlyDownloaded int64  `json:"monthly_downloaded"`
+	FTPHost           string `json:"ftp_host"`
+	FTPUsername       string `json:"ftp_username"`
+	HasFTPPassword    bool   `json:"has_ftp_password"`
+}
+
+func (s *Server) handleApiUserProfile(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	discordID, _, _, ok := s.getSessionUser(r)
+	if !ok {
+		jsonError(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+
+	total := s.GetUserTotalSize(discordID)
+	monthly := s.GetUserMonthlySize(discordID)
+
+	var host, username, password string
+	err := s.db.QueryRow("SELECT host, username, password FROM user_ftp_configs WHERE discord_id = ?", discordID).Scan(&host, &username, &password)
+	if err != nil && err != sql.ErrNoRows {
+		jsonError(w, http.StatusInternalServerError, "Database error")
+		return
+	}
+
+	jsonOK(w, UserProfileResponse{
+		TotalDownloaded:   total,
+		MonthlyDownloaded: monthly,
+		FTPHost:           host,
+		FTPUsername:       username,
+		HasFTPPassword:    password != "",
+	})
+}
+
+func (s *Server) handleApiUserFtp(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	discordID, _, _, ok := s.getSessionUser(r)
+	if !ok {
+		jsonError(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+
+	var req struct {
+		Host     string `json:"host"`
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, http.StatusBadRequest, "Invalid JSON")
+		return
+	}
+
+	if req.Password == "" {
+		var existingPassword string
+		s.db.QueryRow("SELECT password FROM user_ftp_configs WHERE discord_id = ?", discordID).Scan(&existingPassword)
+		req.Password = existingPassword
+	}
+
+	_, err := s.db.Exec(`
+		INSERT INTO user_ftp_configs (discord_id, host, username, password) 
+		VALUES (?, ?, ?, ?) 
+		ON CONFLICT(discord_id) DO UPDATE SET host=?, username=?, password=?`,
+		discordID, req.Host, req.Username, req.Password,
+		req.Host, req.Username, req.Password,
+	)
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, "Failed to save FTP config")
+		return
+	}
+
+	jsonOK(w, map[string]string{"message": "FTP settings saved"})
+}
+
+func (s *Server) handleApiFtpSend(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	discordID, _, _, ok := s.getSessionUser(r)
+	if !ok {
+		jsonError(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+
+	var req struct {
+		Token string `json:"token"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, http.StatusBadRequest, "Invalid JSON")
+		return
+	}
+
+	var dlType, name string
+	var downloadID, clientIndex int
+	err := s.db.QueryRow("SELECT type, download_id, client_index, name FROM download_history WHERE token = ? AND discord_id = ?", req.Token, discordID).Scan(&dlType, &downloadID, &clientIndex, &name)
+	if err != nil {
+		jsonError(w, http.StatusNotFound, "Download not found")
+		return
+	}
+
+	var host, username, password string
+	err = s.db.QueryRow("SELECT host, username, password FROM user_ftp_configs WHERE discord_id = ?", discordID).Scan(&host, &username, &password)
+	if err != nil || host == "" {
+		jsonError(w, http.StatusBadRequest, "FTP is not configured")
+		return
+	}
+
+	go s.uploadToFTP(host, username, password, dlType, downloadID, clientIndex, name)
+
+	jsonOK(w, map[string]string{"message": "FTP upload started in background"})
+}
+
+func (s *Server) uploadToFTP(host, username, password, dlType string, downloadID, clientIndex int, filename string) {
+	client := s.clientPool.GetClient(clientIndex)
+	if client == nil {
+		log.Printf("FTP Upload failed: invalid client index %d", clientIndex)
+		return
+	}
+
+	var downloadURL string
+	var err error
+	if dlType == "webdl" {
+		downloadURL, err = client.RequestWebDownloadURL(downloadID, -1)
+	} else {
+		downloadURL, err = client.RequestDownloadURL(downloadID, -1)
+	}
+	if err != nil {
+		log.Printf("FTP Upload failed to get URL: %v", err)
+		return
+	}
+
+	resp, err := http.Get(downloadURL)
+	if err != nil {
+		log.Printf("FTP Upload failed to fetch file: %v", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	if !strings.Contains(host, ":") {
+		host += ":21"
+	}
+
+	c, err := ftp.Dial(host, ftp.DialWithTimeout(5*time.Second))
+	if err != nil {
+		log.Printf("FTP Upload failed to connect: %v", err)
+		return
+	}
+	defer c.Quit()
+
+	err = c.Login(username, password)
+	if err != nil {
+		log.Printf("FTP Upload failed to login: %v", err)
+		return
+	}
+
+	err = c.Stor(filename, resp.Body)
+	if err != nil {
+		log.Printf("FTP Upload failed to store file: %v", err)
+		return
+	}
+
+	log.Printf("FTP Upload successful: %s sent to %s", filename, host)
+}
+
+// ─── V1 Public API: User Profile & FTP ───
+
+func (s *Server) handleV1UserProfile(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	discordID, ok := s.checkV1PublicAccess(w, r)
+	if !ok {
+		return
+	}
+
+	total := s.GetUserTotalSize(discordID)
+	monthly := s.GetUserMonthlySize(discordID)
+
+	var host, username, password string
+	err := s.db.QueryRow("SELECT host, username, password FROM user_ftp_configs WHERE discord_id = ?", discordID).Scan(&host, &username, &password)
+	if err != nil && err != sql.ErrNoRows {
+		jsonError(w, http.StatusInternalServerError, "Database error")
+		return
+	}
+
+	jsonOK(w, UserProfileResponse{
+		TotalDownloaded:   total,
+		MonthlyDownloaded: monthly,
+		FTPHost:           host,
+		FTPUsername:       username,
+		HasFTPPassword:    password != "",
+	})
+}
+
+func (s *Server) handleV1UserFtp(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	discordID, ok := s.checkV1PublicAccess(w, r)
+	if !ok {
+		return
+	}
+
+	var req struct {
+		Host     string `json:"host"`
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, http.StatusBadRequest, "Invalid JSON")
+		return
+	}
+
+	if req.Password == "" {
+		var existingPassword string
+		s.db.QueryRow("SELECT password FROM user_ftp_configs WHERE discord_id = ?", discordID).Scan(&existingPassword)
+		req.Password = existingPassword
+	}
+
+	_, err := s.db.Exec(`
+		INSERT INTO user_ftp_configs (discord_id, host, username, password) 
+		VALUES (?, ?, ?, ?) 
+		ON CONFLICT(discord_id) DO UPDATE SET host=?, username=?, password=?`,
+		discordID, req.Host, req.Username, req.Password,
+		req.Host, req.Username, req.Password,
+	)
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, "Failed to save FTP config")
+		return
+	}
+
+	jsonOK(w, map[string]string{"message": "FTP settings saved"})
+}
+
+func (s *Server) handleV1FtpSend(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	discordID, ok := s.checkV1PublicAccess(w, r)
+	if !ok {
+		return
+	}
+
+	var req struct {
+		Token string `json:"token"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, http.StatusBadRequest, "Invalid JSON")
+		return
+	}
+
+	var dlType, name string
+	var downloadID, clientIndex int
+	err := s.db.QueryRow("SELECT type, download_id, client_index, name FROM download_history WHERE token = ? AND discord_id = ?", req.Token, discordID).Scan(&dlType, &downloadID, &clientIndex, &name)
+	if err != nil {
+		jsonError(w, http.StatusNotFound, "Download not found")
+		return
+	}
+
+	var host, username, password string
+	err = s.db.QueryRow("SELECT host, username, password FROM user_ftp_configs WHERE discord_id = ?", discordID).Scan(&host, &username, &password)
+	if err != nil || host == "" {
+		jsonError(w, http.StatusBadRequest, "FTP is not configured")
+		return
+	}
+
+	go s.uploadToFTP(host, username, password, dlType, downloadID, clientIndex, name)
+
+	jsonOK(w, map[string]string{"message": "FTP upload started in background"})
 }
