@@ -1702,8 +1702,8 @@
                         const date = new Date(item.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
                         // Add a cache buster to bypass Cloudflare/browser redirect caches
                         const cacheBuster = '?v=' + Date.now();
-                        const browseURL = baseURL + '/browse/' + item.token + cacheBuster;
-                        const dlURL = baseURL + '/dl/' + item.token + cacheBuster;
+                        const browseURL = baseURL + '/browse/' + (item.link_token || item.token) + cacheBuster;
+                        const dlURL = baseURL + '/dl/' + (item.link_token || item.token) + cacheBuster;
                         el.innerHTML = `
                             <div class="history-icon ${item.type}">${icon}</div>
                             <div class="history-details">
@@ -1773,6 +1773,9 @@
                                         </button>
                                         <button onclick="openCloudModal('${item.token}')" data-tooltip="Send to Cloud">
                                             <svg xmlns="http://www.w3.org/2000/svg" shape-rendering="geometricPrecision" text-rendering="geometricPrecision" image-rendering="optimizeQuality" fill-rule="evenodd" clip-rule="evenodd" viewBox="0 0 512 386.883" fill="currentColor"><path fill-rule="nonzero" d="M377.763 115.7c-9.42 2.733-18.532 6.86-27.591 12.155-9.256 5.41-18.373 12.031-27.649 19.629l-19.849-22.742c16.721-15.527 33.187-26.464 49.108-33.514-13.06-22.39-31.538-38.532-52.418-48.549-21.339-10.238-45.242-14.171-68.507-11.922-23.123 2.234-45.56 10.619-64.123 25.025-21.451 16.646-37.775 41.521-44.034 74.469l-1.959 10.309-10.27 1.801c-27.993 4.909-49.283 18.793-62.859 36.776-7.186 9.518-12.228 20.161-14.969 31.19-2.728 10.979-3.193 22.399-1.243 33.525 3.291 18.766 13.592 36.737 31.669 50.382 5.467 4.128 11.376 7.709 17.886 10.48 6.215 2.647 13.017 4.612 20.558 5.686h78.258v30.246h-78.827l-1.891-.178c-11.099-1.413-20.982-4.186-29.914-7.99-8.994-3.829-16.989-8.65-24.264-14.142C20.256 299.753 6.183 275.02 1.628 249.05c-2.669-15.225-2.027-30.868 1.715-45.929 3.73-15.012 10.524-29.404 20.167-42.177 16.233-21.507 40.501-38.514 71.737-46.241 9.014-35.904 28.299-63.573 53.057-82.786C171.438 13.963 199.327 3.521 228.021.748c28.551-2.76 57.975 2.11 84.339 14.758 28.095 13.479 52.661 35.696 68.986 66.815 13.827-2.201 27.042-1.521 39.42 1.5 18.862 4.603 35.493 14.611 49.212 28.159 13.36 13.193 23.994 29.797 31.216 48.001 16.814 42.377 15.209 93.978-13.361 131.996-9.299 12.37-21.252 22.45-35.572 30.468-13.811 7.735-29.884 13.593-47.949 17.787l-3.368.414h-66.346V310.4h64.727c14.501-3.496 27.297-8.212 38.168-14.299 10.794-6.045 19.62-13.396 26.238-22.2 21.842-29.066 22.745-69.34 9.463-102.815-5.698-14.359-13.999-27.371-24.363-37.605-10.007-9.882-21.906-17.126-35.154-20.36-6.654-1.625-13.721-2.248-21.145-1.705l-14.769 4.284zM205.205 265.348c-5.288 6.391-14.756 7.285-21.148 1.997-6.391-5.288-7.285-14.757-1.997-21.148l59.645-72.019c5.288-6.392 14.757-7.285 21.148-1.998a15.053 15.053 0 012.707 2.921l60.072 72.279c5.287 6.359 4.42 15.802-1.939 21.09-6.359 5.287-15.801 4.42-21.089-1.939l-34.288-41.256.202 146.628c0 8.273-6.707 14.98-14.98 14.98-8.274 0-14.981-6.707-14.981-14.98l-.202-146.582-33.15 40.027z"/></svg>
+                                        </button>
+                                        <button onclick="regenerateLink('${item.token}', this)" data-tooltip="Regenerate Link">
+                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
                                         </button>${item.type === 'torrent' ? `<button onclick="exportTorrent('${item.token}', 'file', this)" data-tooltip="Export .torrent">
                                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><polyline points="9 15 12 18 15 15"/></svg>
                                         </button>
@@ -2205,8 +2208,8 @@
                         const typeLabel = item.type === 'torrent' ? 'Torrent' : 'Web DL';
                         const date = new Date(item.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
                         const cacheBuster = '?v=' + Date.now();
-                        const browseURL = baseURL + '/browse/' + item.token + cacheBuster;
-                        const dlURL = baseURL + '/dl/' + item.token + cacheBuster;
+                        const browseURL = baseURL + '/browse/' + (item.link_token || item.token) + cacheBuster;
+                        const dlURL = baseURL + '/dl/' + (item.link_token || item.token) + cacheBuster;
                         
                         const avatarUrl = item.discord_avatar || 'https://cdn.discordapp.com/embed/avatars/0.png';
                         const username = item.discord_username || 'Unknown User';
@@ -2251,19 +2254,19 @@
       }
     </style></defs><path d="m34,1H14c-2.76,0-5,2.24-5,5v3h-3c-2.76,0-5,2.24-5,5v20c0,2.76,2.24,5,5,5h20c2.76,0,5-2.24,5-5v-3h3c2.76,0,5-2.24,5-5V6c0-2.76-2.24-5-5-5Zm-5,33c0,1.65-1.35,3-3,3H6c-1.65,0-3-1.35-3-3V14c0-1.65,1.35-3,3-3h20c1.65,0,3,1.35,3,3v20Zm8-8c0,1.65-1.35,3-3,3h-3v-15c0-2.76-2.24-5-5-5h-15v-3c0-1.65,1.35-3,3-3h20c1.65,0,3,1.35,3,3v20Z"></path><g><path d="m16.71,30.36l-1.41,1.41c-1.95,1.95-5.12,1.95-7.07,0s-1.95-5.12,0-7.07l2.83-2.83c1.95-1.95,5.12-1.95,7.07,0,.39.39.39,1.02,0,1.41s-1.02.39-1.41,0c-1.17-1.17-3.07-1.17-4.24,0l-2.83,2.83c-1.17,1.17-1.17,3.07,0,4.24s3.07,1.17,4.24,0l1.41-1.41c.39-.39,1.02-.39,1.41,0s.39,1.02,0,1.41Z"></path><path d="m23.78,23.29l-2.83,2.83c-1.95,1.95-5.12,1.95-7.07,0-.39-.39-.39-1.02,0-1.41s1.02-.39,1.41,0c1.17,1.17,3.07,1.17,4.24,0l2.83-2.83c1.17-1.17,1.17-3.07,0-4.24s-3.07-1.17-4.24,0l-1.41,1.41c-.39.39-1.02.39-1.41,0s-.39-1.02,0-1.41l1.41-1.41c1.95-1.95,5.12-1.95,7.07,0s1.95,5.12,0,7.07Z"></path></g></svg>
                                 </button>
-                                <button class="btn-sm" style="background: rgba(251, 113, 133, 0.1); color: var(--accent-rose); border: 1px solid rgba(251, 113, 133, 0.2); cursor: pointer;" onclick="removeDownload('${item.token}', this)" data-tooltip="Delete">
-                                    
-<svg
-    xmlns="http://www.w3.org/2000/svg"
-    viewBox="0 0 40 40"
-    width="40"
-    height="40"
-    fill="#ef4444"
-    stroke="#ef4444">
-    <path d="m20,39C9.52,39,1,30.48,1,20S9.52,1,20,1s19,8.52,19,19-8.52,19-19,19Zm0-36C10.63,3,3,10.63,3,20s7.63,17,17,17,17-7.63,17-17S29.37,3,20,3Z"/>
-    <path d="m26.67,30.24c-.92,0-1.83-.35-2.53-1.04l-4.14-4.14-4.14,4.14c-1.39,1.39-3.66,1.39-5.05,0s-1.39-3.66,0-5.05l4.14-4.14-4.14-4.14c-1.39-1.39-1.39-3.66,0-5.05s3.66-1.39,5.05,0l4.14,4.14,4.14-4.14c1.39-1.39,3.66-1.39,5.05,0s1.39,3.66,0,5.05l-4.14,4.14,4.14,4.14c1.39,1.39,1.39,3.66,0,5.05-.7.7-1.61,1.04-2.53,1.04Zm-6.67-7.6c.26,0,.51.1.71.29l4.85,4.85c.61.61,1.61.61,2.22,0,.61-.61.61-1.61,0-2.22l-4.85-4.85c-.39-.39-.39-1.02,0-1.41l4.85-4.85c.61-.61.61-1.61,0-2.22-.61-.61-1.61-.61-2.22,0l-4.85,4.85c-.39.39-1.02.39-1.41,0l-4.85-4.85c-.61-.61-1.61-.61-2.22,0-.61.61-.61,1.61,0,2.22l4.85,4.85c.39.39.39,1.02,0,1.41l-4.85,4.85c-.61.61-.61,1.61,0,2.22.61.61,1.61.61,2.22,0l4.85-4.85c.2-.2.45-.29.71-.29Z"/>
-</svg>
-                                </button>
+                                <div class="dropdown">
+                                    <button class="btn-sm" style="background: rgba(255, 255, 255, 0.05); color: var(--text-secondary); border: 1px solid var(--border-subtle); cursor: pointer;" onclick="toggleDropdown('global-${item.token}', event)">
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
+                                    </button>
+                                    <div class="dropdown-content" id="dropdown-global-${item.token}">
+                                        <button onclick="regenerateLink('${item.token}', this)" data-tooltip="Regenerate Link">
+                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                                        </button>
+                                        <button class="danger" onclick="removeDownload('${item.token}', this)" data-tooltip="Delete">
+                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" width="40" height="40" fill="#ef4444" stroke="#ef4444"><path d="m20,39C9.52,39,1,30.48,1,20S9.52,1,20,1s19,8.52,19,19-8.52,19-19,19Zm0-36C10.63,3,3,10.63,3,20s7.63,17,17,17,17-7.63,17-17S29.37,3,20,3Z"/><path d="m26.67,30.24c-.92,0-1.83-.35-2.53-1.04l-4.14-4.14-4.14,4.14c-1.39,1.39-3.66,1.39-5.05,0s-1.39-3.66,0-5.05l4.14-4.14-4.14-4.14c-1.39-1.39-1.39-3.66,0-5.05s3.66-1.39,5.05,0l4.14,4.14,4.14-4.14c1.39-1.39,3.66-1.39,5.05,0s1.39,3.66,0,5.05l-4.14,4.14,4.14,4.14c1.39,1.39,1.39,3.66,0,5.05-.7.7-1.61,1.04-2.53,1.04Zm-6.67-7.6c.26,0,.51.1.71.29l4.85,4.85c.61.61,1.61.61,2.22,0,.61-.61.61-1.61,0-2.22l-4.85-4.85c-.39-.39-.39-1.02,0-1.41l4.85-4.85c.61-.61.61-1.61,0-2.22-.61-.61-1.61-.61-2.22,0l-4.85,4.85c-.39.39-1.02.39-1.41,0l-4.85-4.85c-.61-.61-1.61-.61-2.22,0-.61.61-.61,1.61,0,2.22l4.85,4.85c.39.39.39,1.02,0,1.41l-4.85,4.85c-.61.61-.61,1.61,0,2.22.61.61,1.61.61,2.22,0l4.85-4.85c.2-.2.45-.29.71-.29Z"/></svg>
+                                        </button>
+                                    </div>
+                                </div>
                             </div>`;
                         adminList.appendChild(el);
                     });
@@ -2943,6 +2946,60 @@
                 setTimeout(() => {
                     btnElement.innerHTML = originalHtml;
                 }, 2000);
+            });
+        };
+
+        
+        window.regenerateLink = function(token, btnElement) {
+            const originalHtml = btnElement.innerHTML;
+            btnElement.innerHTML = `<span class="spinner-inline" style="width: 14px; height: 14px; border-color: var(--border-subtle); border-top-color: var(--text-primary);"></span>`;
+            btnElement.disabled = true;
+
+            fetch('/api/regenerate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token: token })
+            })
+            .then(r => r.json())
+            .then(data => {
+                btnElement.innerHTML = originalHtml;
+                btnElement.disabled = false;
+                
+                if (data.success && data.new_link_token) {
+                    // Update DOM links
+                    const parentActions = btnElement.closest('.history-actions');
+                    if (parentActions) {
+                        const newBrowseUrl = baseURL + '/browse/' + data.new_link_token;
+                        const newDlUrl = baseURL + '/dl/' + data.new_link_token;
+                        
+                        const browseBtn = parentActions.querySelector('.btn-browse');
+                        if (browseBtn) browseBtn.href = newBrowseUrl;
+                        
+                        const dlBtn = parentActions.querySelector('.btn-dl');
+                        if (dlBtn) dlBtn.href = newDlUrl;
+                        
+                        // Update copy link button
+                        const copyBtn = parentActions.querySelector('button[onclick^="copyToClipboard"]');
+                        if (copyBtn) {
+                            copyBtn.setAttribute('onclick', `copyToClipboard('${newDlUrl}', this)`);
+                            
+                            // Success animation on Copy btn
+                            const copyIcon = copyBtn.innerHTML;
+                            copyBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="var(--accent-emerald)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
+                            setTimeout(() => {
+                                copyBtn.innerHTML = copyIcon;
+                            }, 2000);
+                        }
+                    }
+                    showToast('Link regenerated successfully!');
+                } else {
+                    showToast(data.error || 'Failed to regenerate link', true);
+                }
+            })
+            .catch(err => {
+                btnElement.innerHTML = originalHtml;
+                btnElement.disabled = false;
+                showToast('Error regenerating link', true);
             });
         };
 

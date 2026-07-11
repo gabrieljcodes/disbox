@@ -123,6 +123,7 @@ func NewServer(baseURL, port string, clientPool *torbox.ClientPool, discordClien
 			discord_username TEXT DEFAULT '',
 			discord_avatar TEXT DEFAULT '',
 			token TEXT NOT NULL,
+			link_token TEXT DEFAULT '',
 			name TEXT NOT NULL,
 			type TEXT NOT NULL,
 			download_id INTEGER NOT NULL,
@@ -256,6 +257,7 @@ func NewServer(baseURL, port string, clientPool *torbox.ClientPool, discordClien
 		mux.HandleFunc("/api/admin/access/remove", s.handleApiAdminAccessRemove)
 		mux.HandleFunc("/api/admin/user", s.handleApiAdminUserProfile)
 		mux.HandleFunc("/api/remove-download", s.handleApiRemoveDownload)
+		mux.HandleFunc("/api/regenerate", s.handleApiRegenerate)
 		mux.HandleFunc("/api/queue-status", s.handleApiQueueStatus)
 		mux.HandleFunc("/api/user/profile", s.handleApiUserProfile)
 		mux.HandleFunc("/api/user/ftp", s.handleApiUserFtp)

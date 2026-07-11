@@ -1689,3 +1689,80 @@ func (s *Server) handleV1Integration(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
 }
+
+func (s *Server) handleApiRegenerate(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	discordID, _, _, ok := s.getSessionUser(r)
+	if !ok {
+		jsonError(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+
+	var req struct {
+		Token string `json:"token"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Token == "" {
+		jsonError(w, http.StatusBadRequest, "Invalid payload")
+		return
+	}
+
+	// Find the file in history to ensure ownership
+	var downloadType, oldLinkToken string
+	var downloadID, clientIndex int
+	err := s.db.QueryRow("SELECT type, download_id, client_index, link_token FROM download_history WHERE token = ? AND discord_id = ? LIMIT 1", req.Token, discordID).Scan(&downloadType, &downloadID, &clientIndex, &oldLinkToken)
+	if err != nil {
+		jsonError(w, http.StatusNotFound, "File not found in your history")
+		return
+	}
+
+	// Generate new link token
+	newLinkToken := generateToken()
+
+	// Update DB
+	tx, err := s.db.Begin()
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, "Database error")
+		return
+	}
+
+	// Remove old link
+	tx.Exec("DELETE FROM download_links WHERE token = ?", oldLinkToken)
+	
+	// Insert new link
+	_, err = tx.Exec("INSERT INTO download_links (token, type, download_id, client_index) VALUES (?, ?, ?, ?)", newLinkToken, downloadType, downloadID, clientIndex)
+	if err != nil {
+		tx.Rollback()
+		jsonError(w, http.StatusInternalServerError, "Failed to regenerate link")
+		return
+	}
+
+	// Update history
+	_, err = tx.Exec("UPDATE download_history SET link_token = ? WHERE token = ? AND discord_id = ?", newLinkToken, req.Token, discordID)
+	if err != nil {
+		tx.Rollback()
+		jsonError(w, http.StatusInternalServerError, "Failed to update history")
+		return
+	}
+
+	tx.Commit()
+
+	// Update in-memory mapping
+	s.mu.Lock()
+	delete(s.downloads, oldLinkToken)
+	s.downloads[newLinkToken] = &DownloadEntry{
+		Type:        downloadType,
+		ID:          downloadID,
+		ClientIndex: clientIndex,
+	}
+	s.mu.Unlock()
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"new_link_token": newLinkToken,
+	})
+}

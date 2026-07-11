@@ -23,17 +23,22 @@ func (s *Server) GetBaseURL() string {
 // Returns (proxyURL, status) where status: 0=new, 1=already added by same user, 2=already added by another user
 func (s *Server) RegisterDownloadWithUser(downloadType string, id int, clientIndex int, discordID, discordUsername, discordAvatar, name string, size int64) (string, int) {
 	status := 0
-	token := generateToken()
+	fileToken := generateToken() // Stable File ID
+	linkToken := generateToken() // Public URL Token
 
 	if discordID != "" {
 		var existingDiscordID string
 		err := s.db.QueryRow("SELECT discord_id FROM download_history WHERE type = ? AND download_id = ? ORDER BY id ASC LIMIT 1", downloadType, id).Scan(&existingDiscordID)
 		if err == nil {
-			var userExistingToken string
-			err2 := s.db.QueryRow("SELECT token FROM download_history WHERE type = ? AND download_id = ? AND discord_id = ? LIMIT 1", downloadType, id, discordID).Scan(&userExistingToken)
+			var userExistingLinkToken string
+			err2 := s.db.QueryRow("SELECT link_token FROM download_history WHERE type = ? AND download_id = ? AND discord_id = ? LIMIT 1", downloadType, id, discordID).Scan(&userExistingLinkToken)
 			if err2 == nil {
 				status = 1
-				proxyURL := fmt.Sprintf("%s/dl/%s", s.baseURL, userExistingToken)
+				// If somehow the link_token is empty in DB, fallback to token
+				if userExistingLinkToken == "" {
+					s.db.QueryRow("SELECT token FROM download_history WHERE type = ? AND download_id = ? AND discord_id = ? LIMIT 1", downloadType, id, discordID).Scan(&userExistingLinkToken)
+				}
+				proxyURL := fmt.Sprintf("%s/dl/%s", s.baseURL, userExistingLinkToken)
 				return proxyURL, status
 			} else {
 				status = 2
@@ -42,20 +47,29 @@ func (s *Server) RegisterDownloadWithUser(downloadType string, id int, clientInd
 		}
 	}
 
-	// Save to database first
+	// Save the link token to download_links
 	_, err := s.db.Exec(
 		"INSERT INTO download_links (token, type, download_id, client_index) VALUES (?, ?, ?, ?)",
-		token, downloadType, id, clientIndex,
+		linkToken, downloadType, id, clientIndex,
 	)
 	if err != nil {
 		log.Printf("Warning: failed to persist proxy link to database: %v", err)
 	}
 
+	// Save to in-memory map (simulating RegisterDownload logic for the linkToken)
+	s.mu.Lock()
+	s.downloads[linkToken] = &DownloadEntry{
+		Type:        downloadType,
+		ID:          id,
+		ClientIndex: clientIndex,
+	}
+	s.mu.Unlock()
+
 	// Save to user history
 	if discordID != "" {
 		_, err = s.db.Exec(
-			"INSERT INTO download_history (discord_id, discord_username, discord_avatar, token, name, type, download_id, client_index, size) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-			discordID, discordUsername, discordAvatar, token, name, downloadType, id, clientIndex, size,
+			"INSERT INTO download_history (discord_id, discord_username, discord_avatar, token, link_token, name, type, download_id, client_index, size) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+			discordID, discordUsername, discordAvatar, fileToken, linkToken, name, downloadType, id, clientIndex, size,
 		)
 		if err != nil {
 			log.Printf("Warning: failed to save download history: %v", err)
@@ -82,9 +96,9 @@ func (s *Server) RegisterDownloadWithUser(downloadType string, id int, clientInd
 
 					if newSize > 0 {
 						if newName != "" && newName != "Getting info..." {
-							s.db.Exec("UPDATE download_history SET size = ?, name = ? WHERE token = ?", newSize, newName, token)
+							s.db.Exec("UPDATE download_history SET size = ?, name = ? WHERE token = ?", newSize, newName, fileToken)
 						} else {
-							s.db.Exec("UPDATE download_history SET size = ? WHERE token = ?", newSize, token)
+							s.db.Exec("UPDATE download_history SET size = ? WHERE token = ?", newSize, fileToken)
 						}
 						break
 					}
@@ -93,16 +107,7 @@ func (s *Server) RegisterDownloadWithUser(downloadType string, id int, clientInd
 		}
 	}
 
-	// Save to in-memory map for fast lookups
-	s.mu.Lock()
-	s.downloads[token] = &DownloadEntry{
-		Type:        downloadType,
-		ID:          id,
-		ClientIndex: clientIndex,
-	}
-	s.mu.Unlock()
-
-	proxyURL := fmt.Sprintf("%s/dl/%s", s.baseURL, token)
+	proxyURL := fmt.Sprintf("%s/dl/%s", s.baseURL, linkToken)
 	log.Printf("Registered proxy link for %s #%d (client #%d): %s (User: %s)", downloadType, id, clientIndex+1, proxyURL, discordID)
 	return proxyURL, status
 }
@@ -295,7 +300,7 @@ func (s *Server) handleApiHistory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := s.db.Query("SELECT token, name, type, created_at FROM download_history WHERE discord_id = ? AND deleted = 0 ORDER BY created_at DESC", id)
+	rows, err := s.db.Query("SELECT token, link_token, name, type, created_at FROM download_history WHERE discord_id = ? AND deleted = 0 ORDER BY created_at DESC", id)
 	if err != nil {
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
@@ -304,6 +309,7 @@ func (s *Server) handleApiHistory(w http.ResponseWriter, r *http.Request) {
 
 	type HistoryItem struct {
 		Token     string `json:"token"`
+		LinkToken string `json:"link_token"`
 		Name      string `json:"name"`
 		Type      string `json:"type"`
 		CreatedAt string `json:"created_at"`
@@ -312,7 +318,7 @@ func (s *Server) handleApiHistory(w http.ResponseWriter, r *http.Request) {
 	var history []HistoryItem
 	for rows.Next() {
 		var item HistoryItem
-		if err := rows.Scan(&item.Token, &item.Name, &item.Type, &item.CreatedAt); err == nil {
+		if err := rows.Scan(&item.Token, &item.LinkToken, &item.Name, &item.Type, &item.CreatedAt); err == nil {
 			history = append(history, item)
 		}
 	}
@@ -383,7 +389,7 @@ func (s *Server) handleApiAdminHistory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := s.db.Query("SELECT discord_id, discord_username, discord_avatar, token, name, type, created_at FROM download_history WHERE deleted = 0 ORDER BY created_at DESC")
+	rows, err := s.db.Query("SELECT discord_id, discord_username, discord_avatar, token, link_token, name, type, created_at FROM download_history WHERE deleted = 0 ORDER BY created_at DESC")
 	if err != nil {
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
@@ -395,6 +401,7 @@ func (s *Server) handleApiAdminHistory(w http.ResponseWriter, r *http.Request) {
 		DiscordUsername string `json:"discord_username"`
 		DiscordAvatar   string `json:"discord_avatar"`
 		Token           string `json:"token"`
+		LinkToken       string `json:"link_token"`
 		Name            string `json:"name"`
 		Type            string `json:"type"`
 		CreatedAt       string `json:"created_at"`
@@ -403,7 +410,7 @@ func (s *Server) handleApiAdminHistory(w http.ResponseWriter, r *http.Request) {
 	var history []AdminHistoryItem
 	for rows.Next() {
 		var item AdminHistoryItem
-		if err := rows.Scan(&item.DiscordID, &item.DiscordUsername, &item.DiscordAvatar, &item.Token, &item.Name, &item.Type, &item.CreatedAt); err == nil {
+		if err := rows.Scan(&item.DiscordID, &item.DiscordUsername, &item.DiscordAvatar, &item.Token, &item.LinkToken, &item.Name, &item.Type, &item.CreatedAt); err == nil {
 			history = append(history, item)
 		}
 	}
