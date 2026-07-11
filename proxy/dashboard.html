@@ -499,6 +499,29 @@
 
         .btn-submit svg { width: 16px; height: 16px; }
 
+        /* ─── Dropdown ─── */
+        .dropdown { position: relative; display: inline-block; }
+        .dropdown-content {
+            display: none; position: absolute; right: 0; bottom: 100%; margin-bottom: 8px;
+            background-color: var(--bg-card); min-width: 160px;
+            box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.5);
+            border: 1px solid var(--border-subtle); border-radius: var(--radius);
+            z-index: 100; overflow: hidden;
+        }
+        .dropdown-content.show { display: flex; flex-direction: column; }
+        .dropdown-content button {
+            background: transparent; color: var(--text-primary); padding: 10px 16px;
+            text-align: left; border: none; cursor: pointer; font-size: 13px; font-weight: 500;
+            display: flex; align-items: center; gap: 8px; transition: background 0.2s;
+            width: 100%; border-radius: 0; justify-content: flex-start;
+        }
+        .dropdown-content button:hover { background-color: var(--bg-glass); }
+        .dropdown-content button:not(:last-child) { border-bottom: 1px solid var(--border-subtle); }
+        .dropdown-content button svg { width: 14px; height: 14px; opacity: 0.7; }
+        .dropdown-content button.danger { color: var(--accent-rose); }
+        .dropdown-content button.danger:hover { background-color: rgba(251, 113, 133, 0.1); }
+
+
         /* ─── Feedback Toast ─── */
         .toast {
             display: none; padding: 14px 18px; border-radius: var(--radius);
@@ -1648,28 +1671,36 @@
                                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                                     Download
                                 </a>
-                                <button class="btn-sm" style="background: rgba(30, 191, 106, 0.1); color: var(--accent-indigo); border: 1px solid rgba(30, 191, 106, 0.2); cursor: pointer;" onclick="sendToFtp('${item.token}', this)">
-                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                                    Send to FTP
-                                </button>
                                 <button class="btn-sm" style="background: rgba(255, 255, 255, 0.05); color: var(--text-secondary); border: 1px solid var(--border-subtle); cursor: pointer;" onclick="copyToClipboard('${dlURL}', this)">
                                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
                                     Copy Link
                                 </button>
-                                <button class="btn-sm" style="background: rgba(251, 113, 133, 0.1); color: var(--accent-rose); border: 1px solid rgba(251, 113, 133, 0.2); cursor: pointer;" onclick="removeDownload('${item.token}', this)">
-                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-                                    Remove
-                                </button>
-                                ${item.type === 'torrent' ? `
-                                <button class="btn-sm" style="background: rgba(94, 203, 165, 0.1); color: var(--accent-indigo); border: 1px solid rgba(94, 203, 165, 0.2); cursor: pointer;" onclick="exportTorrent('${item.token}', 'file', this)">
-                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><polyline points="9 15 12 18 15 15"/></svg>
-                                    Export .torrent
-                                </button>
-                                <button class="btn-sm" style="background: rgba(94, 203, 165, 0.1); color: var(--accent-indigo); border: 1px solid rgba(94, 203, 165, 0.2); cursor: pointer;" onclick="exportTorrent('${item.token}', 'magnet', this)">
-                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-                                    Export Magnet
-                                </button>
-                                ` : ''}
+                                
+                                <div class="dropdown">
+                                    <button class="btn-sm" style="background: rgba(255, 255, 255, 0.05); color: var(--text-secondary); border: 1px solid var(--border-subtle); cursor: pointer;" onclick="toggleDropdown('${item.token}', event)">
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
+                                    </button>
+                                    <div class="dropdown-content" id="dropdown-${item.token}">
+                                        <button onclick="sendToFtp('${item.token}', this)">
+                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                                            Send to FTP
+                                        </button>
+                                        ${item.type === 'torrent' ? `
+                                        <button onclick="exportTorrent('${item.token}', 'file', this)">
+                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><polyline points="9 15 12 18 15 15"/></svg>
+                                            Export .torrent
+                                        </button>
+                                        <button onclick="exportTorrent('${item.token}', 'magnet', this)">
+                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                                            Export Magnet
+                                        </button>
+                                        ` : ''}
+                                        <button class="danger" onclick="removeDownload('${item.token}', this)">
+                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                                            Remove
+                                        </button>
+                                    </div>
+                                </div>
                             </div>`;
                         historyList.appendChild(el);
                         activeTokens.push(item.token);
@@ -2725,6 +2756,31 @@
                 }, 2000);
             });
         };
+
+        window.toggleDropdown = function(token, event) {
+            // Close any currently open dropdowns
+            document.querySelectorAll('.dropdown-content').forEach(d => {
+                if (d.id !== 'dropdown-' + token) {
+                    d.classList.remove('show');
+                }
+            });
+            const d = document.getElementById('dropdown-' + token);
+            if (d) {
+                d.classList.toggle('show');
+            }
+            if (event) {
+                event.stopPropagation();
+            }
+        };
+
+        // Close dropdowns when clicking outside
+        window.addEventListener('click', function(event) {
+            if (!event.target.closest('.dropdown')) {
+                document.querySelectorAll('.dropdown-content').forEach(d => {
+                    d.classList.remove('show');
+                });
+            }
+        });
 
         window.removeDownload = function(token, btnElement) {
             if (!confirm('Are you sure you want to remove this download? It will be deleted from TorBox as well.')) return;
