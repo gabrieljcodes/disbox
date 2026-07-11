@@ -1394,3 +1394,316 @@ func (s *Server) handleV1Hosters(w http.ResponseWriter, r *http.Request) {
 	
 	jsonOK(w, hosters)
 }
+
+func (s *Server) handleApiUserCloud(w http.ResponseWriter, r *http.Request) {
+	discordID, _, _, ok := s.getSessionUser(r)
+	if !ok {
+		jsonError(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+
+	if r.Method == http.MethodGet {
+		var google, dropbox, onedrive, gofile, onefichier, pixeldrain string
+		err := s.db.QueryRow("SELECT google_token, dropbox_token, onedrive_token, gofile_token, onefichier_token, pixeldrain_token FROM user_cloud_configs WHERE discord_id = ?", discordID).Scan(&google, &dropbox, &onedrive, &gofile, &onefichier, &pixeldrain)
+		if err != nil && err != sql.ErrNoRows {
+			jsonError(w, http.StatusInternalServerError, "Database error")
+			return
+		}
+		
+		jsonOK(w, map[string]string{
+			"google": google,
+			"dropbox": dropbox,
+			"onedrive": onedrive,
+			"gofile": gofile,
+			"onefichier": onefichier,
+			"pixeldrain": pixeldrain,
+		})
+		return
+	}
+
+	if r.Method == http.MethodPost {
+		var req map[string]string
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			jsonError(w, http.StatusBadRequest, "Invalid JSON")
+			return
+		}
+
+		_, err := s.db.Exec(`
+			INSERT INTO user_cloud_configs (discord_id, google_token, dropbox_token, onedrive_token, gofile_token, onefichier_token, pixeldrain_token) 
+			VALUES (?, ?, ?, ?, ?, ?, ?)
+			ON CONFLICT(discord_id) DO UPDATE SET 
+				google_token=excluded.google_token,
+				dropbox_token=excluded.dropbox_token,
+				onedrive_token=excluded.onedrive_token,
+				gofile_token=excluded.gofile_token,
+				onefichier_token=excluded.onefichier_token,
+				pixeldrain_token=excluded.pixeldrain_token
+		`, discordID, req["google"], req["dropbox"], req["onedrive"], req["gofile"], req["onefichier"], req["pixeldrain"])
+		
+		if err != nil {
+			jsonError(w, http.StatusInternalServerError, "Failed to save config")
+			return
+		}
+		
+		jsonOK(w, map[string]string{"message": "Settings saved"})
+		return
+	}
+
+	jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+}
+
+func (s *Server) handleApiIntegration(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	discordID, _, _, ok := s.getSessionUser(r)
+	if !ok {
+		jsonError(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+
+	provider := strings.TrimPrefix(r.URL.Path, "/api/integration/")
+	if provider == "" || strings.Contains(provider, "/") {
+		jsonError(w, http.StatusBadRequest, "Invalid provider")
+		return
+	}
+	
+	validProviders := map[string]string{
+		"googledrive": "google_token",
+		"dropbox": "dropbox_token",
+		"onedrive": "onedrive_token",
+		"gofile": "gofile_token",
+		"1fichier": "onefichier_token",
+		"pixeldrain": "pixeldrain_token",
+	}
+	
+	dbField, ok := validProviders[provider]
+	if !ok {
+		jsonError(w, http.StatusBadRequest, "Unsupported provider")
+		return
+	}
+
+	var token string
+	err := s.db.QueryRow(fmt.Sprintf("SELECT %s FROM user_cloud_configs WHERE discord_id = ?", dbField), discordID).Scan(&token)
+	if err != nil || token == "" {
+		jsonError(w, http.StatusForbidden, "API token for this provider is not configured. Please set it in your Profile.")
+		return
+	}
+
+	var req map[string]interface{}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, http.StatusBadRequest, "Invalid JSON")
+		return
+	}
+
+	req[dbField] = token
+
+	historyToken, ok := req["token"].(string)
+	if !ok || historyToken == "" {
+		jsonError(w, http.StatusBadRequest, "token is required")
+		return
+	}
+
+	var dlType string
+	var downloadID int
+	var clientIndex int
+	err = s.db.QueryRow("SELECT type, download_id, client_index FROM download_history WHERE token = ? AND discord_id = ?", historyToken, discordID).Scan(&dlType, &downloadID, &clientIndex)
+	if err != nil {
+		jsonError(w, http.StatusNotFound, "Download not found")
+		return
+	}
+	
+	req["id"] = downloadID
+	if dlType == "webdl" {
+		req["type"] = "webdownload"
+	} else {
+		req["type"] = dlType
+	}
+	delete(req, "token")
+	
+	if _, ok := req["zip"]; !ok {
+		req["zip"] = false
+	}
+	
+	if _, ok := req["file_id"]; !ok {
+		req["file_id"] = 0
+	}
+
+	client := s.clientPool.GetClient(clientIndex)
+	resp, err := client.UploadToCloud(provider, req)
+	if err != nil {
+		log.Printf("[Cloud] Request to Torbox failed: %v", err)
+		jsonError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	if !resp.Success {
+		log.Printf("[Cloud] Torbox rejected %s upload: %s (error: %s)", provider, resp.Detail, resp.Error)
+	} else {
+		log.Printf("[Cloud] Successfully requested %s upload", provider)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}
+
+func (s *Server) handleV1UserCloud(w http.ResponseWriter, r *http.Request) {
+	discordID, ok := s.checkV1PublicAccess(w, r)
+	if !ok {
+		return
+	}
+
+	if r.Method == http.MethodGet {
+		var config struct {
+			Google     string `json:"google"`
+			Dropbox    string `json:"dropbox"`
+			OneDrive   string `json:"onedrive"`
+			Gofile     string `json:"gofile"`
+			Onefichier string `json:"onefichier"`
+			Pixeldrain string `json:"pixeldrain"`
+		}
+
+		err := s.db.QueryRow("SELECT google_token, dropbox_token, onedrive_token, gofile_token, onefichier_token, pixeldrain_token FROM user_cloud_configs WHERE discord_id = ?", discordID).
+			Scan(&config.Google, &config.Dropbox, &config.OneDrive, &config.Gofile, &config.Onefichier, &config.Pixeldrain)
+		
+		if err != nil && err != sql.ErrNoRows {
+			jsonError(w, http.StatusInternalServerError, "Database error")
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(config)
+		return
+	}
+
+	if r.Method == http.MethodPost {
+		var config struct {
+			Google     string `json:"google"`
+			Dropbox    string `json:"dropbox"`
+			OneDrive   string `json:"onedrive"`
+			Gofile     string `json:"gofile"`
+			Onefichier string `json:"onefichier"`
+			Pixeldrain string `json:"pixeldrain"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&config); err != nil {
+			jsonError(w, http.StatusBadRequest, "Invalid JSON")
+			return
+		}
+
+		_, err := s.db.Exec(`
+			INSERT INTO user_cloud_configs (discord_id, google_token, dropbox_token, onedrive_token, gofile_token, onefichier_token, pixeldrain_token) 
+			VALUES (?, ?, ?, ?, ?, ?, ?)
+			ON CONFLICT(discord_id) DO UPDATE SET 
+				google_token = excluded.google_token,
+				dropbox_token = excluded.dropbox_token,
+				onedrive_token = excluded.onedrive_token,
+				gofile_token = excluded.gofile_token,
+				onefichier_token = excluded.onefichier_token,
+				pixeldrain_token = excluded.pixeldrain_token
+		`, discordID, config.Google, config.Dropbox, config.OneDrive, config.Gofile, config.Onefichier, config.Pixeldrain)
+		
+		if err != nil {
+			jsonError(w, http.StatusInternalServerError, "Failed to save cloud config")
+			return
+		}
+		
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"success": true, "message": "Cloud configurations updated"})
+		return
+	}
+
+	jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+}
+
+func (s *Server) handleV1Integration(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	discordID, ok := s.checkV1PublicAccess(w, r)
+	if !ok {
+		return
+	}
+
+	provider := strings.TrimPrefix(r.URL.Path, "/v1/integration/")
+	validProviders := map[string]string{
+		"googledrive": "google_token",
+		"dropbox":     "dropbox_token",
+		"onedrive":    "onedrive_token",
+		"gofile":      "gofile_token",
+		"1fichier":    "onefichier_token",
+		"pixeldrain":  "pixeldrain_token",
+	}
+	
+	dbField, ok := validProviders[provider]
+	if !ok {
+		jsonError(w, http.StatusBadRequest, "Unsupported provider")
+		return
+	}
+
+	var token string
+	err := s.db.QueryRow(fmt.Sprintf("SELECT %s FROM user_cloud_configs WHERE discord_id = ?", dbField), discordID).Scan(&token)
+	if err != nil || token == "" {
+		jsonError(w, http.StatusForbidden, "API token for this provider is not configured. Please set it in your Profile.")
+		return
+	}
+
+	var req map[string]interface{}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, http.StatusBadRequest, "Invalid JSON")
+		return
+	}
+
+	req[dbField] = token
+
+	historyToken, ok := req["token"].(string)
+	if !ok || historyToken == "" {
+		jsonError(w, http.StatusBadRequest, "token is required")
+		return
+	}
+
+	var dlType string
+	var downloadID int
+	var clientIndex int
+	err = s.db.QueryRow("SELECT type, download_id, client_index FROM download_history WHERE token = ? AND discord_id = ?", historyToken, discordID).Scan(&dlType, &downloadID, &clientIndex)
+	if err != nil {
+		jsonError(w, http.StatusNotFound, "Download not found")
+		return
+	}
+	
+	req["id"] = downloadID
+	if dlType == "webdl" {
+		req["type"] = "webdownload"
+	} else {
+		req["type"] = dlType
+	}
+	delete(req, "token")
+	
+	if _, ok := req["zip"]; !ok {
+		req["zip"] = false
+	}
+	
+	if _, ok := req["file_id"]; !ok {
+		req["file_id"] = 0
+	}
+
+	client := s.clientPool.GetClient(clientIndex)
+	resp, err := client.UploadToCloud(provider, req)
+	if err != nil {
+		log.Printf("[Cloud] Request to Torbox failed: %v", err)
+		jsonError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	if !resp.Success {
+		log.Printf("[Cloud] Torbox rejected %s upload: %s (error: %s)", provider, resp.Detail, resp.Error)
+	} else {
+		log.Printf("[Cloud] Successfully requested %s upload", provider)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}

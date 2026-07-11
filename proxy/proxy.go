@@ -154,6 +154,15 @@ func NewServer(baseURL, port string, clientPool *torbox.ClientPool, discordClien
 			username TEXT NOT NULL,
 			password TEXT NOT NULL
 		);
+		CREATE TABLE IF NOT EXISTS user_cloud_configs (
+			discord_id TEXT PRIMARY KEY,
+			google_token TEXT DEFAULT '',
+			dropbox_token TEXT DEFAULT '',
+			onedrive_token TEXT DEFAULT '',
+			gofile_token TEXT DEFAULT '',
+			onefichier_token TEXT DEFAULT '',
+			pixeldrain_token TEXT DEFAULT ''
+		);
 	`); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("failed to create download_links table: %w", err)
@@ -252,6 +261,8 @@ func NewServer(baseURL, port string, clientPool *torbox.ClientPool, discordClien
 		mux.HandleFunc("/api/user/ftp", s.handleApiUserFtp)
 		mux.HandleFunc("/api/ftp/send", s.handleApiFtpSend)
 		mux.HandleFunc("/api/hosters", s.handleApiHosters)
+		mux.HandleFunc("/api/user/cloud", s.handleApiUserCloud)
+		mux.HandleFunc("/api/integration/", s.handleApiIntegration)
 		
 		// Admin Settings
 		mux.HandleFunc("/api/admin/settings", s.handleApiAdminSettingsGet)
@@ -276,6 +287,8 @@ func NewServer(baseURL, port string, clientPool *torbox.ClientPool, discordClien
 	mux.HandleFunc("/v1/user/ftp", s.handleV1UserFtp)
 	mux.HandleFunc("/v1/ftp/send", s.handleV1FtpSend)
 	mux.HandleFunc("/v1/hosters", s.handleV1Hosters)
+	mux.HandleFunc("/v1/user/cloud", s.handleV1UserCloud)
+	mux.HandleFunc("/v1/integration/", s.handleV1Integration)
 	
 	// Public API Admin Routes
 	mux.HandleFunc("/v1/admin/access", s.handleV1AdminAccessGet)

@@ -1035,7 +1035,38 @@
                             <input type="password" class="form-input" id="input-ftp-pass" placeholder="Leave empty to keep existing">
                         </div>
                     </div>
-                    <button class="btn-submit" id="btn-save-ftp" style="width: auto; padding: 12px 24px;">Save Settings</button>
+                    <button class="btn-submit" id="btn-save-ftp" style="width: auto; padding: 12px 24px;">Save FTP Settings</button>
+
+                    <h3 style="font-size: 16px; margin-top: 32px; margin-bottom: 12px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 8px;">Cloud Integrations</h3>
+                    <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 16px;">Configure your API tokens to send downloaded files directly to cloud providers.</p>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                        <div class="form-group">
+                            <label class="form-label" for="input-cloud-google">Google Drive Token</label>
+                            <input type="password" class="form-input" id="input-cloud-google" placeholder="Enter token">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="input-cloud-dropbox">Dropbox Token</label>
+                            <input type="password" class="form-input" id="input-cloud-dropbox" placeholder="Enter token">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="input-cloud-onedrive">OneDrive Token</label>
+                            <input type="password" class="form-input" id="input-cloud-onedrive" placeholder="Enter token">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="input-cloud-gofile">GoFile Token</label>
+                            <input type="password" class="form-input" id="input-cloud-gofile" placeholder="Enter token">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="input-cloud-1fichier">1Fichier Token</label>
+                            <input type="password" class="form-input" id="input-cloud-1fichier" placeholder="Enter token">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="input-cloud-pixeldrain">PixelDrain Token</label>
+                            <input type="password" class="form-input" id="input-cloud-pixeldrain" placeholder="Enter token">
+                        </div>
+                    </div>
+                    <button class="btn-submit" id="btn-save-cloud" style="width: auto; padding: 12px 24px; margin-top: 16px; background: linear-gradient(135deg, var(--accent-purple), var(--accent-indigo));">Save Cloud Tokens</button>
                 </div>
             </div>
 
@@ -1685,6 +1716,10 @@
                                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
                                             Send to FTP
                                         </button>
+                                        <button onclick="openCloudModal('${item.token}')">
+                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/><path d="M12 12v9"/></svg>
+                                            Send to Cloud
+                                        </button>
                                         ${item.type === 'torrent' ? `
                                         <button onclick="exportTorrent('${item.token}', 'file', this)">
                                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><polyline points="9 15 12 18 15 15"/></svg>
@@ -1746,6 +1781,18 @@
                         document.getElementById('input-ftp-pass').placeholder = 'FTP Password';
                     }
                 }).catch(console.error);
+                
+            fetch('/api/user/cloud')
+                .then(r => r.json())
+                .then(res => {
+                    if(!res.success) return;
+                    if (res.data.google) document.getElementById('input-cloud-google').placeholder = '•••••••• (Saved)';
+                    if (res.data.dropbox) document.getElementById('input-cloud-dropbox').placeholder = '•••••••• (Saved)';
+                    if (res.data.onedrive) document.getElementById('input-cloud-onedrive').placeholder = '•••••••• (Saved)';
+                    if (res.data.gofile) document.getElementById('input-cloud-gofile').placeholder = '•••••••• (Saved)';
+                    if (res.data.onefichier) document.getElementById('input-cloud-1fichier').placeholder = '•••••••• (Saved)';
+                    if (res.data.pixeldrain) document.getElementById('input-cloud-pixeldrain').placeholder = '•••••••• (Saved)';
+                }).catch(console.error);
         }
 
         // loadUserProfile is now called when user-badge-btn is clicked
@@ -1769,6 +1816,36 @@
             });
         });
 
+        document.getElementById('btn-save-cloud')?.addEventListener('click', () => {
+            const payload = {
+                google: document.getElementById('input-cloud-google').value,
+                dropbox: document.getElementById('input-cloud-dropbox').value,
+                onedrive: document.getElementById('input-cloud-onedrive').value,
+                gofile: document.getElementById('input-cloud-gofile').value,
+                onefichier: document.getElementById('input-cloud-1fichier').value,
+                pixeldrain: document.getElementById('input-cloud-pixeldrain').value
+            };
+
+            fetch('/api/user/cloud', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(payload)
+            }).then(r => r.json()).then(res => {
+                if (res.success) {
+                    showToast('Cloud Tokens Saved', 'success');
+                    document.getElementById('input-cloud-google').value = '';
+                    document.getElementById('input-cloud-dropbox').value = '';
+                    document.getElementById('input-cloud-onedrive').value = '';
+                    document.getElementById('input-cloud-gofile').value = '';
+                    document.getElementById('input-cloud-1fichier').value = '';
+                    document.getElementById('input-cloud-pixeldrain').value = '';
+                    loadUserProfile();
+                } else {
+                    showToast(res.error || 'Failed to save tokens', 'error');
+                }
+            });
+        });
+
         window.sendToFtp = function(token, btn) {
             btn.disabled = true;
             btn.style.opacity = '0.5';
@@ -1784,6 +1861,40 @@
                 } else {
                     showToast(res.error || 'Failed to start FTP upload', 'error');
                 }
+            });
+        };
+
+        window.openCloudModal = function(token) {
+            document.getElementById('cloud-target-token').value = token;
+            document.getElementById('cloud-modal').style.display = 'flex';
+        };
+
+        window.sendToCloud = function(provider, btn) {
+            const token = document.getElementById('cloud-target-token').value;
+            const originalText = btn.innerHTML;
+            btn.disabled = true;
+            btn.style.opacity = '0.5';
+            btn.innerHTML = '<div class="spinner" style="width: 16px; height: 16px; border-width: 2px;"></div>';
+            
+            fetch('/api/integration/' + provider, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({token: token, zip: false})
+            }).then(r => r.json()).then(res => {
+                btn.disabled = false;
+                btn.style.opacity = '1';
+                btn.innerHTML = originalText;
+                if (res.success === false) {
+                    showToast(res.error || res.detail || 'Failed to start cloud upload', 'error');
+                } else {
+                    showToast('Cloud upload started', 'success');
+                    document.getElementById('cloud-modal').style.display = 'none';
+                }
+            }).catch(e => {
+                btn.disabled = false;
+                btn.style.opacity = '1';
+                btn.innerHTML = originalText;
+                showToast('Failed to start cloud upload', 'error');
             });
         };
 
@@ -2878,6 +2989,79 @@
                 <h3 style="font-size: 14px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px;">Download History</h3>
                 <div id="profile-history" class="profile-history-list">
                     <!-- History inserted dynamically -->
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- Cloud Integration Modal -->
+    <div id="cloud-modal" class="modal" style="display: none; align-items: center; justify-content: center; z-index: 1000; padding: 20px;">
+        <div class="modal-content" style="max-height: 90vh; display: flex; flex-direction: column; width: 450px; background: rgba(20, 20, 25, 0.85); backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; box-shadow: 0 24px 48px rgba(0,0,0,0.4);">
+            <button class="btn-close" onclick="document.getElementById('cloud-modal').style.display='none'" style="position: absolute; top: 16px; right: 16px; background: rgba(255,255,255,0.1); border-radius: 50%; padding: 6px; color: #fff; cursor: pointer; border: none;">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 18px; height: 18px;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+            
+            <div style="padding: 32px 32px 24px;">
+                <h2 style="margin-bottom: 8px; font-size: 22px; font-weight: 700; background: linear-gradient(135deg, #fff, #aaa); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">Send to Cloud</h2>
+                <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 24px; line-height: 1.5;">Select a configured cloud provider to instantly transfer this file directly to your drive.</p>
+                
+                <input type="hidden" id="cloud-target-token" value="">
+                
+                <style>
+                    .cloud-btn {
+                        display: flex; flex-direction: column; align-items: center; justify-content: center;
+                        gap: 12px; padding: 20px 12px; border-radius: 12px; cursor: pointer;
+                        transition: all 0.2s ease; border: 1px solid transparent;
+                        background: rgba(255, 255, 255, 0.03); color: var(--text-secondary);
+                        font-weight: 600; font-size: 13px;
+                    }
+                    .cloud-btn svg { width: 28px; height: 28px; opacity: 0.8; transition: all 0.2s ease; }
+                    .cloud-btn:hover { transform: translateY(-3px); box-shadow: 0 8px 16px rgba(0,0,0,0.2); color: #fff; }
+                    .cloud-btn:hover svg { opacity: 1; transform: scale(1.1); }
+                    
+                    .cloud-btn.google:hover { background: rgba(25, 164, 99, 0.1); border-color: rgba(25, 164, 99, 0.3); }
+                    .cloud-btn.google svg { color: #19a463; }
+                    
+                    .cloud-btn.dropbox:hover { background: rgba(0, 97, 254, 0.1); border-color: rgba(0, 97, 254, 0.3); }
+                    .cloud-btn.dropbox svg { color: #0061fe; }
+                    
+                    .cloud-btn.onedrive:hover { background: rgba(0, 120, 212, 0.1); border-color: rgba(0, 120, 212, 0.3); }
+                    .cloud-btn.onedrive svg { color: #0078d4; }
+                    
+                    .cloud-btn.gofile:hover { background: rgba(86, 179, 255, 0.1); border-color: rgba(86, 179, 255, 0.3); }
+                    .cloud-btn.gofile svg { color: #56b3ff; }
+                    
+                    .cloud-btn.fichier:hover { background: rgba(230, 57, 70, 0.1); border-color: rgba(230, 57, 70, 0.3); }
+                    .cloud-btn.fichier svg { color: #e63946; }
+                    
+                    .cloud-btn.pixeldrain:hover { background: rgba(144, 238, 144, 0.1); border-color: rgba(144, 238, 144, 0.3); }
+                    .cloud-btn.pixeldrain svg { color: #90EE90; }
+                </style>
+                
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;">
+                    <div class="cloud-btn google" onclick="sendToCloud('googledrive', this)">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 22h10l10-20H12z"/><path d="M22 22L12 2"/></svg>
+                        Drive
+                    </div>
+                    <div class="cloud-btn dropbox" onclick="sendToCloud('dropbox', this)">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 2l5 4-5 4-5-4 5-4z"/><path d="M17 2l5 4-5 4-5-4 5-4z"/><path d="M7 22l5-4-5-4-5 4 5 4z"/><path d="M17 22l5-4-5-4-5 4 5 4z"/><path d="M12 10l5-4-5-4-5 4 5 4z"/><path d="M12 14l5 4-5 4-5-4 5-4z"/></svg>
+                        Dropbox
+                    </div>
+                    <div class="cloud-btn onedrive" onclick="sendToCloud('onedrive', this)">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg>
+                        OneDrive
+                    </div>
+                    <div class="cloud-btn gofile" onclick="sendToCloud('gofile', this)">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 15v4c0 1.1.9 2 2 2h14a2 2 0 0 0 2-2v-4M17 9l-5 5-5-5M12 12.8V2.5"/></svg>
+                        GoFile
+                    </div>
+                    <div class="cloud-btn fichier" onclick="sendToCloud('1fichier', this)">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+                        1Fichier
+                    </div>
+                    <div class="cloud-btn pixeldrain" onclick="sendToCloud('pixeldrain', this)">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+                        PixelDrain
+                    </div>
                 </div>
             </div>
         </div>

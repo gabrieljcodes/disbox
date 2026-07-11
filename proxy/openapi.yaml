@@ -542,3 +542,62 @@ paths:
       responses:
         '200':
           description: List toggled
+
+  /v1/user/cloud:
+    get:
+      summary: Get user cloud tokens
+      tags: [User]
+      responses:
+        '200':
+          description: The user's saved cloud tokens
+    post:
+      summary: Update user cloud tokens
+      tags: [User]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                google:
+                  type: string
+                dropbox:
+                  type: string
+                onedrive:
+                  type: string
+                gofile:
+                  type: string
+                onefichier:
+                  type: string
+                pixeldrain:
+                  type: string
+      responses:
+        '200':
+          description: Cloud tokens updated successfully
+
+  /v1/integration/{provider}:
+    post:
+      summary: Upload a downloaded file to a cloud provider
+      tags: [Integration]
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [googledrive, dropbox, onedrive, gofile, 1fichier, pixeldrain]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token:
+                  type: string
+                  description: The proxy history link token
+      responses:
+        '200':
+          description: Upload started

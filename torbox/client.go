@@ -505,3 +505,20 @@ func (c *Client) doRequest(req *http.Request) (*APIResponse, error) {
 
 	return &apiResp, nil
 }
+
+func (c *Client) UploadToCloud(provider string, payload map[string]interface{}) (*APIResponse, error) {
+	bodyBytes, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal payload: %w", err)
+	}
+
+	req, err := http.NewRequest("POST", fmt.Sprintf("%s/integration/%s", apiBaseURL, provider), bytes.NewBuffer(bodyBytes))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	return c.doRequest(req)
+}
