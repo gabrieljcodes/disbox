@@ -7,6 +7,8 @@ import (
 	"image/color"
 	_ "image/png"
 	"log"
+	"path"
+	"strings"
 
 	"github.com/fogleman/gg"
 	"github.com/golang/freetype/truetype"
@@ -41,6 +43,12 @@ func init() {
 func GenerateOGImage(name, size, hash, itemType string) ([]byte, error) {
 	const width = 1200
 	const height = 630
+
+	name = path.Base(strings.ReplaceAll(name, "\\", "/"))
+	runes := []rune(name)
+	if len(runes) > 65 {
+		name = string(runes[:62]) + "..."
+	}
 
 	dc := gg.NewContext(width, height)
 
