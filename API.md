@@ -168,6 +168,27 @@ Enables or disables the whitelist or blacklist mode globally. (Note: Enabling on
 
 ---
 
+#### Magnet To File
+`POST /v1/torrents/magnettofile`
+Converts any magnet to a torrent file object. Returns TorBox APIResponse structure. Free endpoint (does not consume API limits).
+Body:
+```json
+{
+  "magnet": "magnet:?xt=urn:btih:..."
+}
+```
+
+#### Export Torrent Data
+`GET /v1/torrents/exportdata?token=&type=`
+Exports the magnet or torrent file.
+**Query Parameters**:
+- `token`: The download token from the history endpoint.
+- `type`: Either "magnet" or "file".
+
+If `type=magnet`, it returns a JSON response with the magnet link in the `data` key. If `type=file`, it responds with a `.torrent` file download.
+
+---
+
 ## Example Request
 
 ```bash

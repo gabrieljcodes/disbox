@@ -13,12 +13,3 @@ services:
     env_file:
       - .env
     command: ["/app/disbox"]
-    depends_on:
-      - og-service
-
-  og-service:
-    build: ./og-service
-    container_name: og-service
-    restart: unless-stopped
-    ports:
-      - "3000:3000"

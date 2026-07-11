@@ -193,6 +193,46 @@ func (c *Client) AddTorrentFile(fileData []byte, fileName string, cacheOnly bool
 	return c.doRequest(req)
 }
 
+// MagnetToFile converts any magnet to a torrent file. Returns TorBox APIResponse.
+func (c *Client) MagnetToFile(magnet string) (*APIResponse, error) {
+	payload := map[string]interface{}{
+		"magnet": magnet,
+	}
+	jsonData, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal payload: %w", err)
+	}
+
+	req, err := http.NewRequest("POST", fmt.Sprintf("%s/torrents/magnettofile", apiBaseURL), bytes.NewBuffer(jsonData))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	
+	req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	return c.doRequest(req)
+}
+
+// ExportData exports the magnet or torrent file. Type must be "magnet" or "file".
+// Returns the raw HTTP response to proxy headers/body (like Content-Disposition for file download).
+func (c *Client) ExportData(torrentID int, exportType string) (*http.Response, error) {
+	url := fmt.Sprintf("%s/torrents/exportdata?torrent_id=%d&type=%s", apiBaseURL, torrentID, exportType)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+c.apiKey)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute request: %w", err)
+	}
+
+	return resp, nil
+}
+
 func (c *Client) ControlTorrent(torrentID int, operation string, all bool) (*APIResponse, error) {
 	payload := map[string]interface{}{
 		"operation": operation,

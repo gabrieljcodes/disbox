@@ -625,6 +625,137 @@ func (s *Server) checkV1Admin(w http.ResponseWriter, r *http.Request) (string, b
 	return discordID, true
 }
 
+func (s *Server) handleApiMagnetToFile(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	_, _, _, ok := s.getSessionUser(r)
+	if !ok {
+		jsonError(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+
+	s.magnetToFileInternal(w, r)
+}
+
+func (s *Server) handleV1MagnetToFile(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	_, ok := s.checkV1PublicAccess(w, r)
+	if !ok {
+		return
+	}
+
+	s.magnetToFileInternal(w, r)
+}
+
+func (s *Server) magnetToFileInternal(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Magnet string `json:"magnet"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Magnet == "" {
+		jsonError(w, http.StatusBadRequest, "Field 'magnet' is required")
+		return
+	}
+
+	client := s.clientPool.GetCurrentClient()
+	resp, err := client.MagnetToFile(req.Magnet)
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, "TorBox API error")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}
+
+func (s *Server) handleApiExportData(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	discordID, _, _, ok := s.getSessionUser(r)
+	if !ok {
+		jsonError(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+
+	s.exportDataInternal(w, r, discordID)
+}
+
+func (s *Server) handleV1ExportData(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	discordID, ok := s.checkV1PublicAccess(w, r)
+	if !ok {
+		return
+	}
+
+	s.exportDataInternal(w, r, discordID)
+}
+
+func (s *Server) exportDataInternal(w http.ResponseWriter, r *http.Request, discordID string) {
+	token := r.URL.Query().Get("token")
+	exportType := r.URL.Query().Get("type")
+
+	if token == "" || (exportType != "magnet" && exportType != "file") {
+		jsonError(w, http.StatusBadRequest, "Missing token or invalid type (must be 'magnet' or 'file')")
+		return
+	}
+
+	var dlType string
+	var downloadID int
+	var clientIndex int
+
+	err := s.db.QueryRow("SELECT type, download_id, client_index FROM download_history WHERE token = ? AND discord_id = ?", token, discordID).Scan(&dlType, &downloadID, &clientIndex)
+	if err != nil {
+		jsonError(w, http.StatusNotFound, "Download not found or you don't have permission")
+		return
+	}
+
+	if dlType != "torrent" {
+		jsonError(w, http.StatusBadRequest, "Export data is only available for torrents")
+		return
+	}
+
+	client := s.clientPool.GetClient(clientIndex)
+	resp, err := client.ExportData(downloadID, exportType)
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, "Failed to communicate with TorBox API")
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		w.WriteHeader(resp.StatusCode)
+		io.Copy(w, resp.Body)
+		return
+	}
+
+	if exportType == "file" {
+		cd := resp.Header.Get("Content-Disposition")
+		if cd != "" {
+			w.Header().Set("Content-Disposition", cd)
+		} else {
+			w.Header().Set("Content-Disposition", "attachment; filename=\"export.torrent\"")
+		}
+		w.Header().Set("Content-Type", "application/x-bittorrent")
+	} else {
+		w.Header().Set("Content-Type", "application/json")
+	}
+
+	io.Copy(w, resp.Body)
+}
+
 func (s *Server) handleV1AdminAccessGet(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")

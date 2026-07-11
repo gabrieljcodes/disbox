@@ -143,9 +143,3 @@ func (c *Client) SearchTorrents(query string, checkCache bool) (*TorrentSearchRe
 	url := fmt.Sprintf("https://search-api.torbox.app/torrents/search/%s", query)
 	return c.executeSearchRequest(url, checkCache)
 }
-
-// SearchTorrentsByIMDB searches for torrents by IMDB ID
-func (c *Client) SearchTorrentsByIMDB(imdbID string, checkCache bool) (*TorrentSearchResponse, error) {
-	url := fmt.Sprintf("https://search-api.torbox.app/torrents/imdb:%s", imdbID)
-	return c.executeSearchRequest(url, checkCache)
-}

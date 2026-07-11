@@ -233,6 +233,8 @@ func NewServer(baseURL, port string, clientPool *torbox.ClientPool, discordClien
 		mux.HandleFunc("/api/add-torrent", s.handleApiAddTorrent)
 		mux.HandleFunc("/api/add-torrent-file", s.handleApiAddTorrentFile)
 		mux.HandleFunc("/api/add-webdl", s.handleApiAddWebdl)
+		mux.HandleFunc("/api/torrents/magnettofile", s.handleApiMagnetToFile)
+		mux.HandleFunc("/api/torrents/exportdata", s.handleApiExportData)
 		mux.HandleFunc("/api/search", s.handleApiSearch)
 		mux.HandleFunc("/api/tmdb/search", s.handleApiTMDBSearch)
 		mux.HandleFunc("/api/anilist/search", s.handleApiAniListSearch)
@@ -262,6 +264,8 @@ func NewServer(baseURL, port string, clientPool *torbox.ClientPool, discordClien
 	mux.HandleFunc("/v1/add-torrent", s.handleV1AddTorrent)
 	mux.HandleFunc("/v1/add-torrent-file", s.handleV1AddTorrentFile)
 	mux.HandleFunc("/v1/add-webdl", s.handleV1AddWebdl)
+	mux.HandleFunc("/v1/torrents/magnettofile", s.handleV1MagnetToFile)
+	mux.HandleFunc("/v1/torrents/exportdata", s.handleV1ExportData)
 	mux.HandleFunc("/v1/remove-download", s.handleV1RemoveDownload)
 	mux.HandleFunc("/v1/history", s.handleV1History)
 	mux.HandleFunc("/v1/queue-status", s.handleV1QueueStatus)
@@ -559,21 +563,9 @@ func (s *Server) handlePreview(w http.ResponseWriter, r *http.Request, entry *Do
 }
 
 func (s *Server) handleOgImage(w http.ResponseWriter, r *http.Request) {
-	// Proxies the request to the og-service inside docker network
-	ogServiceURL := "http://og-service:3000/generate?" + r.URL.RawQuery
-	
-	resp, err := http.Get(ogServiceURL)
-	if err != nil {
-		log.Printf("Failed to fetch OG image from og-service: %v", err)
-		http.Error(w, "Failed to generate image", http.StatusInternalServerError)
-		return
-	}
-	defer resp.Body.Close()
-
 	w.Header().Set("Content-Type", "image/png")
 	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
-	w.WriteHeader(resp.StatusCode)
-	io.Copy(w, resp.Body)
+	w.Write(iconTransparentBytes)
 }
 
 // ─── Viewer (existing media player) ───

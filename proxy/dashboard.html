@@ -1490,7 +1490,41 @@
             });
         });
 
-        // ─── Progress Tracking ───
+        // ─── Export Torrent ───
+        window.exportTorrent = function(token, type, btn) {
+            if (type === 'file') {
+                // For file, we just navigate to it so the browser downloads it
+                window.location.href = '/api/torrents/exportdata?token=' + token + '&type=file';
+                return;
+            }
+            
+            // For magnet, fetch and copy
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<div class="spinner-inline"></div> Fetching...';
+            btn.disabled = true;
+
+            fetch('/api/torrents/exportdata?token=' + token + '&type=magnet')
+                .then(r => r.json())
+                .then(res => {
+                    btn.disabled = false;
+                    btn.innerHTML = originalText;
+                    
+                    if (res.success && res.data) {
+                        navigator.clipboard.writeText(res.data).then(() => {
+                            showToast('Magnet link copied to clipboard!', 'success');
+                        });
+                    } else {
+                        showToast(res.error || 'Failed to export magnet', 'error');
+                    }
+                })
+                .catch(() => {
+                    btn.disabled = false;
+                    btn.innerHTML = originalText;
+                    showToast('Network error during export', 'error');
+                });
+        };
+
+        // ─── Progress Polling ───
         let progressInterval = null;
 
         function formatSpeed(bytes) {
@@ -1626,6 +1660,16 @@
                                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
                                     Remove
                                 </button>
+                                ${item.type === 'torrent' ? `
+                                <button class="btn-sm" style="background: rgba(94, 203, 165, 0.1); color: var(--accent-indigo); border: 1px solid rgba(94, 203, 165, 0.2); cursor: pointer;" onclick="exportTorrent('${item.token}', 'file', this)">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><polyline points="9 15 12 18 15 15"/></svg>
+                                    Export .torrent
+                                </button>
+                                <button class="btn-sm" style="background: rgba(94, 203, 165, 0.1); color: var(--accent-indigo); border: 1px solid rgba(94, 203, 165, 0.2); cursor: pointer;" onclick="exportTorrent('${item.token}', 'magnet', this)">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                                    Export Magnet
+                                </button>
+                                ` : ''}
                             </div>`;
                         historyList.appendChild(el);
                         activeTokens.push(item.token);

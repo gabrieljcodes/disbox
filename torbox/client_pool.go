@@ -47,25 +47,7 @@ func (p *ClientPool) GetCurrentClient() *Client {
 	return p.clients[p.currentIndex]
 }
 
-func (p *ClientPool) TryNextClient() bool {
-	p.mu.Lock()
-	defer p.mu.Unlock()
 
-	nextIndex := (p.currentIndex + 1) % len(p.clients)
-	if nextIndex == 0 && p.currentIndex != 0 {
-		return false
-	}
-
-	p.currentIndex = nextIndex
-	log.Printf("Switching to Torbox API key #%d", p.currentIndex+1)
-	return true
-}
-
-func (p *ClientPool) ResetToFirst() {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.currentIndex = 0
-}
 
 func (p *ClientPool) GetClientCount() int {
 	p.mu.RLock()

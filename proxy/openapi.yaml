@@ -232,6 +232,59 @@ paths:
                       message:
                         type: string
 
+  /v1/torrents/magnettofile:
+    post:
+      summary: Magnet To File
+      description: Converts any magnet to a torrent file object. Free endpoint.
+      tags: [Downloads]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [magnet]
+              properties:
+                magnet:
+                  type: string
+                  description: Magnet URI
+      responses:
+        '200':
+          description: Torrent file object
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /v1/torrents/exportdata:
+    get:
+      summary: Export Torrent Data
+      description: Exports the magnet or torrent file.
+      tags: [Downloads]
+      parameters:
+        - name: token
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: type
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [magnet, file]
+      responses:
+        '200':
+          description: Magnet JSON or .torrent file
+          content:
+            application/json:
+              schema:
+                type: object
+            application/x-bittorrent:
+              schema:
+                type: string
+                format: binary
+
   /v1/add-torrent-file:
     post:
       summary: Add a Torrent File
