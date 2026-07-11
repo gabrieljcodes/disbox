@@ -447,48 +447,48 @@
 
                 const noteHtml = h.note ? `<div class="note-box">${h.note}</div>` : '';
 
-                const html = \`
-                    <a href="\${h.url}" target="_blank" class="hoster-card \${cardClass}">
+                const html = `
+                    <a href="${h.url}" target="_blank" class="hoster-card ${cardClass}">
                         <div class="card-header">
-                            <img src="\${h.icon}" alt="\${h.name}" class="hoster-icon" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOGJhMzk2IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTEwIDEzaDJ2NEgxMHoiLz48cGF0aCBkPSJNMTAgN2gydjRMMTAgMTF6Ii8+PGNpcmNsZSBjeD0iMTIiIGN5PSIxMiIgcj0iMTAiLz48L3N2Zz4='">
+                            <img src="${h.icon}" alt="${h.name}" class="hoster-icon" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOGJhMzk2IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTEwIDEzaDJ2NEgxMHoiLz48cGF0aCBkPSJNMTAgN2gydjRMMTAgMTF6Ii8+PGNpcmNsZSBjeD0iMTIiIGN5PSIxMiIgcj0iMTAiLz48L3N2Zz4='">
                             <div class="hoster-info">
-                                <div class="hoster-name">\${h.name}</div>
-                                <div class="status-badge \${statusClass}">
+                                <div class="hoster-name">${h.name}</div>
+                                <div class="status-badge ${statusClass}">
                                     <div class="status-dot"></div>
-                                    \${statusText}
+                                    ${statusText}
                                 </div>
                             </div>
                         </div>
                         
                         <div class="domains-list">
-                            \${domainsHtml}\${domainsExtra}
+                            ${domainsHtml}${domainsExtra}
                         </div>
                         
                         <div class="limit-section">
                             <div class="limit-item">
                                 <div class="limit-label">
                                     <span>Daily Links</span>
-                                    <span class="limit-value">\${linkLimitText}</span>
+                                    <span class="limit-value">${linkLimitText}</span>
                                 </div>
                                 <div class="progress-bar">
-                                    <div class="progress-fill \${linkFillClass}" style="width: \${linkPercent}%"></div>
+                                    <div class="progress-fill ${linkFillClass}" style="width: ${linkPercent}%"></div>
                                 </div>
                             </div>
                             
                             <div class="limit-item">
                                 <div class="limit-label">
                                     <span>Daily Bandwidth</span>
-                                    <span class="limit-value">\${bwLimitText}</span>
+                                    <span class="limit-value">${bwLimitText}</span>
                                 </div>
                                 <div class="progress-bar">
-                                    <div class="progress-fill \${bwFillClass}" style="width: \${bwPercent}%"></div>
+                                    <div class="progress-fill ${bwFillClass}" style="width: ${bwPercent}%"></div>
                                 </div>
                             </div>
                         </div>
                         
-                        \${noteHtml}
+                        ${noteHtml}
                     </a>
-                \`;
+                `;
                 
                 grid.insertAdjacentHTML('beforeend', html);
             });

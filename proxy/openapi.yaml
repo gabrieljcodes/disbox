@@ -544,12 +544,6 @@ paths:
           description: List toggled
 
   /v1/user/cloud:
-    get:
-      summary: Get user cloud tokens
-      tags: [User]
-      responses:
-        '200':
-          description: The user's saved cloud tokens
     post:
       summary: Update user cloud tokens
       tags: [User]

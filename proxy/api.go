@@ -1556,25 +1556,7 @@ func (s *Server) handleV1UserCloud(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method == http.MethodGet {
-		var config struct {
-			Google     string `json:"google"`
-			Dropbox    string `json:"dropbox"`
-			OneDrive   string `json:"onedrive"`
-			Gofile     string `json:"gofile"`
-			Onefichier string `json:"onefichier"`
-			Pixeldrain string `json:"pixeldrain"`
-		}
-
-		err := s.db.QueryRow("SELECT google_token, dropbox_token, onedrive_token, gofile_token, onefichier_token, pixeldrain_token FROM user_cloud_configs WHERE discord_id = ?", discordID).
-			Scan(&config.Google, &config.Dropbox, &config.OneDrive, &config.Gofile, &config.Onefichier, &config.Pixeldrain)
-		
-		if err != nil && err != sql.ErrNoRows {
-			jsonError(w, http.StatusInternalServerError, "Database error")
-			return
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(config)
+		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
 
