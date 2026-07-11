@@ -563,9 +563,35 @@ func (s *Server) handlePreview(w http.ResponseWriter, r *http.Request, entry *Do
 }
 
 func (s *Server) handleOgImage(w http.ResponseWriter, r *http.Request) {
+	name := r.URL.Query().Get("name")
+	if name == "" {
+		name = "Unknown File"
+	}
+	size := r.URL.Query().Get("size")
+	if size == "" {
+		size = "0 B"
+	}
+	hash := r.URL.Query().Get("hash")
+	if hash == "" {
+		hash = "N/A"
+	}
+	itemType := r.URL.Query().Get("type")
+	if itemType == "" {
+		itemType = "unknown"
+	}
+
+	imgData, err := GenerateOGImage(name, size, hash, itemType)
+	if err != nil {
+		log.Printf("Failed to generate OG image natively: %v", err)
+		w.Header().Set("Content-Type", "image/png")
+		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		w.Write(iconTransparentBytes)
+		return
+	}
+
 	w.Header().Set("Content-Type", "image/png")
 	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
-	w.Write(iconTransparentBytes)
+	w.Write(imgData)
 }
 
 // ─── Viewer (existing media player) ───
