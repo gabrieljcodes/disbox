@@ -669,9 +669,22 @@ func (s *Server) magnetToFileInternal(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, http.StatusInternalServerError, "TorBox API error")
 		return
 	}
+	defer resp.Body.Close()
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
+	if resp.StatusCode != http.StatusOK {
+		w.WriteHeader(resp.StatusCode)
+		io.Copy(w, resp.Body)
+		return
+	}
+
+	cd := resp.Header.Get("Content-Disposition")
+	if cd != "" {
+		w.Header().Set("Content-Disposition", cd)
+	} else {
+		w.Header().Set("Content-Disposition", "attachment; filename=\"export.torrent\"")
+	}
+	w.Header().Set("Content-Type", "application/x-bittorrent")
+	io.Copy(w, resp.Body)
 }
 
 func (s *Server) handleApiExportData(w http.ResponseWriter, r *http.Request) {
@@ -728,7 +741,33 @@ func (s *Server) exportDataInternal(w http.ResponseWriter, r *http.Request, disc
 	}
 
 	client := s.clientPool.GetClient(clientIndex)
-	resp, err := client.ExportData(downloadID, exportType)
+	
+	// Since TorBox's native ExportData fails with `null` for cached torrents,
+	// we will manually construct the magnet or use MagnetToFile endpoint instead.
+	info, err := client.GetTorrentInfo(downloadID)
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, "Failed to fetch torrent info")
+		return
+	}
+
+	if info.Hash == "" {
+		jsonError(w, http.StatusInternalServerError, "Torrent hash is missing")
+		return
+	}
+
+	magnet := fmt.Sprintf("magnet:?xt=urn:btih:%s", info.Hash)
+
+	if exportType == "magnet" {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": true,
+			"data":    magnet,
+		})
+		return
+	}
+
+	// For type=file, TorBox's MagnetToFile returns the `.torrent` binary directly.
+	resp, err := client.MagnetToFile(magnet)
 	if err != nil {
 		jsonError(w, http.StatusInternalServerError, "Failed to communicate with TorBox API")
 		return
@@ -741,18 +780,8 @@ func (s *Server) exportDataInternal(w http.ResponseWriter, r *http.Request, disc
 		return
 	}
 
-	if exportType == "file" {
-		cd := resp.Header.Get("Content-Disposition")
-		if cd != "" {
-			w.Header().Set("Content-Disposition", cd)
-		} else {
-			w.Header().Set("Content-Disposition", "attachment; filename=\"export.torrent\"")
-		}
-		w.Header().Set("Content-Type", "application/x-bittorrent")
-	} else {
-		w.Header().Set("Content-Type", "application/json")
-	}
-
+	w.Header().Set("Content-Disposition", "attachment; filename=\"export.torrent\"")
+	w.Header().Set("Content-Type", "application/x-bittorrent")
 	io.Copy(w, resp.Body)
 }
 

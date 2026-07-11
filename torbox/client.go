@@ -194,7 +194,7 @@ func (c *Client) AddTorrentFile(fileData []byte, fileName string, cacheOnly bool
 }
 
 // MagnetToFile converts any magnet to a torrent file. Returns TorBox APIResponse.
-func (c *Client) MagnetToFile(magnet string) (*APIResponse, error) {
+func (c *Client) MagnetToFile(magnet string) (*http.Response, error) {
 	payload := map[string]interface{}{
 		"magnet": magnet,
 	}
@@ -211,7 +211,12 @@ func (c *Client) MagnetToFile(magnet string) (*APIResponse, error) {
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
 	req.Header.Set("Content-Type", "application/json")
 
-	return c.doRequest(req)
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute request: %w", err)
+	}
+
+	return resp, nil
 }
 
 // ExportData exports the magnet or torrent file. Type must be "magnet" or "file".
