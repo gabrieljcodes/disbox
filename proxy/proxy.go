@@ -863,6 +863,7 @@ func (s *Server) handleBrowse(w http.ResponseWriter, r *http.Request) {
 		TotalSize:   formatBytes(totalSize),
 		FileCount:   len(files),
 		DownloadURL: fmt.Sprintf("%s/dl/%s", s.baseURL, token),
+		Token:       token,
 	}
 
 	for _, f := range files {
