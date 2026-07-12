@@ -777,6 +777,7 @@ type BrowseData struct {
 	TotalSize    string
 	FileCount    int
 	DownloadURL  string
+	Token        string
 	Files        []BrowseFile
 	ErrorMessage string
 }
@@ -823,6 +824,7 @@ func (s *Server) handleBrowse(w http.ResponseWriter, r *http.Request) {
 				ErrorMessage: "This download is still processing or could not be found. Please check back later.",
 			}
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			data.Token = token
 			browserTemplate.Execute(w, data)
 			return
 		}
@@ -837,6 +839,7 @@ func (s *Server) handleBrowse(w http.ResponseWriter, r *http.Request) {
 				ErrorMessage: "This download is still processing or could not be found. Please check back later.",
 			}
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			data.Token = token
 			browserTemplate.Execute(w, data)
 			return
 		}

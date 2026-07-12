@@ -1113,7 +1113,8 @@ func (s *Server) handleApiFtpSend(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		Token string `json:"token"`
+		Token  string `json:"token"`
+		FileID *int   `json:"file_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonError(w, http.StatusBadRequest, "Invalid JSON")
@@ -1135,12 +1136,17 @@ func (s *Server) handleApiFtpSend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	go s.uploadToFTP(host, username, password, dlType, downloadID, clientIndex, name)
+	fileID := -1
+	if req.FileID != nil {
+		fileID = *req.FileID
+	}
+
+	go s.uploadToFTP(host, username, password, dlType, downloadID, clientIndex, name, fileID)
 
 	jsonOK(w, map[string]string{"message": "FTP upload started in background"})
 }
 
-func (s *Server) uploadToFTP(host, username, password, dlType string, downloadID, clientIndex int, filename string) {
+func (s *Server) uploadToFTP(host, username, password, dlType string, downloadID, clientIndex int, filename string, fileID int) {
 	client := s.clientPool.GetClient(clientIndex)
 	if client == nil {
 		log.Printf("FTP Upload failed: invalid client index %d", clientIndex)
@@ -1150,9 +1156,9 @@ func (s *Server) uploadToFTP(host, username, password, dlType string, downloadID
 	var downloadURL string
 	var err error
 	if dlType == "webdl" {
-		downloadURL, err = client.RequestWebDownloadURL(downloadID, -1)
+		downloadURL, err = client.RequestWebDownloadURL(downloadID, fileID)
 	} else {
-		downloadURL, err = client.RequestDownloadURL(downloadID, -1)
+		downloadURL, err = client.RequestDownloadURL(downloadID, fileID)
 	}
 	if err != nil {
 		log.Printf("FTP Upload failed to get URL: %v", err)
@@ -1278,7 +1284,8 @@ func (s *Server) handleV1FtpSend(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		Token string `json:"token"`
+		Token  string `json:"token"`
+		FileID *int   `json:"file_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonError(w, http.StatusBadRequest, "Invalid JSON")
@@ -1300,7 +1307,12 @@ func (s *Server) handleV1FtpSend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	go s.uploadToFTP(host, username, password, dlType, downloadID, clientIndex, name)
+	fileID := -1
+	if req.FileID != nil {
+		fileID = *req.FileID
+	}
+
+	go s.uploadToFTP(host, username, password, dlType, downloadID, clientIndex, name, fileID)
 
 	jsonOK(w, map[string]string{"message": "FTP upload started in background"})
 }
