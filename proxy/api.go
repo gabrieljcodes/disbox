@@ -538,6 +538,7 @@ func (s *Server) handleApiRemoveDownload(w http.ResponseWriter, r *http.Request)
 		jsonError(w, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
+	isAdmin := s.IsAdmin(discordID)
 
 	var req struct {
 		Token string `json:"token"`
@@ -547,7 +548,7 @@ func (s *Server) handleApiRemoveDownload(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	s.removeDownloadInternal(w, req.Token, discordID)
+	s.removeDownloadInternal(w, req.Token, discordID, isAdmin)
 }
 
 func (s *Server) handleV1RemoveDownload(w http.ResponseWriter, r *http.Request) {
@@ -560,6 +561,7 @@ func (s *Server) handleV1RemoveDownload(w http.ResponseWriter, r *http.Request) 
 	if !ok {
 		return
 	}
+	isAdmin := s.IsAdmin(discordID)
 
 	var req struct {
 		Token string `json:"token"`
@@ -569,15 +571,20 @@ func (s *Server) handleV1RemoveDownload(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	s.removeDownloadInternal(w, req.Token, discordID)
+	s.removeDownloadInternal(w, req.Token, discordID, isAdmin)
 }
 
-func (s *Server) removeDownloadInternal(w http.ResponseWriter, token, discordID string) {
+func (s *Server) removeDownloadInternal(w http.ResponseWriter, token, discordID string, isAdmin bool) {
 	var dlType string
 	var downloadID int
 	var clientIndex int
 
-	err := s.db.QueryRow("SELECT type, download_id, client_index FROM download_history WHERE token = ? AND discord_id = ?", token, discordID).Scan(&dlType, &downloadID, &clientIndex)
+	var err error
+	if isAdmin {
+		err = s.db.QueryRow("SELECT type, download_id, client_index FROM download_history WHERE token = ?", token).Scan(&dlType, &downloadID, &clientIndex)
+	} else {
+		err = s.db.QueryRow("SELECT type, download_id, client_index FROM download_history WHERE token = ? AND discord_id = ?", token, discordID).Scan(&dlType, &downloadID, &clientIndex)
+	}
 	if err != nil {
 		jsonError(w, http.StatusNotFound, "Download not found or you don't have permission")
 		return
@@ -1701,7 +1708,27 @@ func (s *Server) handleApiRegenerate(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
+	isAdmin := s.IsAdmin(discordID)
 
+	s.regenerateLinkInternal(w, r, discordID, isAdmin)
+}
+
+func (s *Server) handleV1Regenerate(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	discordID, ok := s.checkV1PublicAccess(w, r)
+	if !ok {
+		return
+	}
+	isAdmin := s.IsAdmin(discordID)
+
+	s.regenerateLinkInternal(w, r, discordID, isAdmin)
+}
+
+func (s *Server) regenerateLinkInternal(w http.ResponseWriter, r *http.Request, discordID string, isAdmin bool) {
 	var req struct {
 		Token string `json:"token"`
 	}
@@ -1713,9 +1740,16 @@ func (s *Server) handleApiRegenerate(w http.ResponseWriter, r *http.Request) {
 	// Find the file in history to ensure ownership
 	var downloadType, oldLinkToken string
 	var downloadID, clientIndex int
-	err := s.db.QueryRow("SELECT type, download_id, client_index, link_token FROM download_history WHERE token = ? AND discord_id = ? LIMIT 1", req.Token, discordID).Scan(&downloadType, &downloadID, &clientIndex, &oldLinkToken)
+	var err error
+	
+	if isAdmin {
+		err = s.db.QueryRow("SELECT type, download_id, client_index, link_token FROM download_history WHERE token = ? LIMIT 1", req.Token).Scan(&downloadType, &downloadID, &clientIndex, &oldLinkToken)
+	} else {
+		err = s.db.QueryRow("SELECT type, download_id, client_index, link_token FROM download_history WHERE token = ? AND discord_id = ? LIMIT 1", req.Token, discordID).Scan(&downloadType, &downloadID, &clientIndex, &oldLinkToken)
+	}
+
 	if err != nil {
-		jsonError(w, http.StatusNotFound, "File not found in your history")
+		jsonError(w, http.StatusNotFound, "File not found or you don't have permission")
 		return
 	}
 
@@ -1741,7 +1775,12 @@ func (s *Server) handleApiRegenerate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Update history
-	_, err = tx.Exec("UPDATE download_history SET link_token = ? WHERE token = ? AND discord_id = ?", newLinkToken, req.Token, discordID)
+	if isAdmin {
+		_, err = tx.Exec("UPDATE download_history SET link_token = ? WHERE token = ?", newLinkToken, req.Token)
+	} else {
+		_, err = tx.Exec("UPDATE download_history SET link_token = ? WHERE token = ? AND discord_id = ?", newLinkToken, req.Token, discordID)
+	}
+	
 	if err != nil {
 		tx.Rollback()
 		jsonError(w, http.StatusInternalServerError, "Failed to update history")

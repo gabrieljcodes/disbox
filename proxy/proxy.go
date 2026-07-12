@@ -280,6 +280,7 @@ func NewServer(baseURL, port string, clientPool *torbox.ClientPool, discordClien
 	mux.HandleFunc("/v1/torrents/magnettofile", s.handleV1MagnetToFile)
 	mux.HandleFunc("/v1/torrents/exportdata", s.handleV1ExportData)
 	mux.HandleFunc("/v1/remove-download", s.handleV1RemoveDownload)
+	mux.HandleFunc("/v1/regenerate", s.handleV1Regenerate)
 	mux.HandleFunc("/v1/history", s.handleV1History)
 	mux.HandleFunc("/v1/queue-status", s.handleV1QueueStatus)
 	mux.HandleFunc("/v1/search", s.handleV1Search)

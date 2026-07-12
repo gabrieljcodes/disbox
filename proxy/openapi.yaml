@@ -388,6 +388,26 @@ paths:
         '200':
           description: Download removed successfully
 
+  /v1/regenerate:
+    post:
+      summary: Regenerate a download link
+      description: Regenerates the public proxy link token for a download.
+      tags: [Downloads]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token:
+                  type: string
+                  description: The stable file token
+      responses:
+        '200':
+          description: Link regenerated successfully
+
   /v1/search:
     get:
       summary: Search AIOStreams
