@@ -1972,25 +1972,34 @@
                           data.users.forEach(u => {
                               const el = document.createElement('div');
                               el.className = 'history-item';
-                              const icon = u.type === 'whitelist' ? '✅' : '🚫';
                               const date = new Date(u.added_at).toLocaleDateString('en-US');
                               const svgIcon = u.type === 'whitelist' 
                                   ? '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent-emerald)"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>'
                                   : '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent-rose)"><circle cx="12" cy="12" r="10"></circle><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line></svg>';
                               
+                              let avatarHTML = '';
+                              if (u.discord_avatar) {
+                                  avatarHTML = `<img src="${u.discord_avatar}" style="width:32px; height:32px; border-radius:50%; object-fit:cover;" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">`;
+                              } else {
+                                  avatarHTML = `<div style="width:32px; height:32px; border-radius:50%; background:var(--surface-active); display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:bold;">${(u.discord_username || '?')[0].toUpperCase()}</div>`;
+                              }
+
+                              const displayName = u.discord_username || u.discord_id;
+
                               el.innerHTML = `
                                   <div class="history-icon" style="background: ${u.type === 'whitelist' ? 'rgba(52, 211, 153, 0.1)' : 'rgba(251, 113, 133, 0.1)'}; box-shadow: none;">
                                       ${svgIcon}
                                   </div>
+                                  ${avatarHTML}
                                   <div class="history-details" style="flex:1;">
                                       <div class="history-name" style="display:flex; align-items:center; gap:8px;">
-                                          ${u.discord_id}
+                                          ${displayName} <span style="font-size:12px; color:var(--text-secondary);">(${u.discord_id})</span>
                                           <span style="font-size:10px; text-transform:uppercase; letter-spacing:1px; font-weight:700; padding:2px 6px; border-radius:4px; background:${u.type === 'whitelist' ? 'rgba(52, 211, 153, 0.1)' : 'rgba(251, 113, 133, 0.1)'}; color:${u.type === 'whitelist' ? 'var(--accent-emerald)' : 'var(--accent-rose)'}">${u.type}</span>
                                       </div>
                                       <div class="history-meta">Added by <strong>${u.added_by}</strong> on ${date}</div>
                                   </div>
                                   <button class="btn-sm" style="background:rgba(251, 113, 133, 0.1); border:1px solid rgba(251, 113, 133, 0.2); color:var(--accent-rose); padding:6px 12px; border-radius:8px;" onclick="removeAccessUser('${u.discord_id}')">
-                                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px; height:14px;"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path></svg>
                                       Remove
                                   </button>
                               `;

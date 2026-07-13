@@ -80,6 +80,7 @@ type Server struct {
 	db                  *sql.DB
 	discordClientID     string
 	discordClientSecret string
+	discordBotToken     string
 	adminUsers          []string
 	adminAPIEnabled     bool
 	
@@ -89,7 +90,7 @@ type Server struct {
 	downloadManager     *DownloadManager
 }
 
-func NewServer(baseURL, port, databaseURL string, clientPool *torbox.ClientPool, discordClientID, discordClientSecret string, adminUsers []string, cacheOnly bool, adminAPIEnabled bool) (*Server, error) {
+func NewServer(baseURL, port, databaseURL string, clientPool *torbox.ClientPool, discordClientID, discordClientSecret, discordBotToken string, adminUsers []string, cacheOnly bool, adminAPIEnabled bool) (*Server, error) {
 	db, err := sql.Open("pgx", databaseURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open PostgreSQL database: %w", err)
@@ -139,6 +140,8 @@ func NewServer(baseURL, port, databaseURL string, clientPool *torbox.ClientPool,
 		);
 		CREATE TABLE IF NOT EXISTS access_list (
 			discord_id TEXT PRIMARY KEY,
+			discord_username TEXT DEFAULT '',
+			discord_avatar TEXT DEFAULT '',
 			type TEXT NOT NULL,
 			added_by TEXT NOT NULL,
 			added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -171,6 +174,7 @@ func NewServer(baseURL, port, databaseURL string, clientPool *torbox.ClientPool,
 		db:                  db,
 		discordClientID:     discordClientID,
 		discordClientSecret: discordClientSecret,
+		discordBotToken:     discordBotToken,
 		adminUsers:          adminUsers,
 		adminAPIEnabled:     adminAPIEnabled,
 		apiRateLimits:       make(map[string]time.Time),

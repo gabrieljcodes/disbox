@@ -587,13 +587,15 @@ func (s *Server) handleApiAdminAccessGet(w http.ResponseWriter, r *http.Request)
 	s.db.QueryRow("SELECT value FROM access_settings WHERE key = 'blacklist_enabled'").Scan(&blacklistEnabled)
 
 	type AccessUser struct {
-		DiscordID string `json:"discord_id"`
-		Type      string `json:"type"`
-		AddedBy   string `json:"added_by"`
-		AddedAt   string `json:"added_at"`
+		DiscordID       string `json:"discord_id"`
+		DiscordUsername string `json:"discord_username"`
+		DiscordAvatar   string `json:"discord_avatar"`
+		Type            string `json:"type"`
+		AddedBy         string `json:"added_by"`
+		AddedAt         string `json:"added_at"`
 	}
 
-	rows, err := s.db.Query("SELECT discord_id, type, added_by, added_at FROM access_list ORDER BY added_at DESC")
+	rows, err := s.db.Query("SELECT discord_id, discord_username, discord_avatar, type, added_by, added_at FROM access_list ORDER BY added_at DESC")
 	if err != nil {
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
@@ -603,10 +605,9 @@ func (s *Server) handleApiAdminAccessGet(w http.ResponseWriter, r *http.Request)
 	var users []AccessUser
 	for rows.Next() {
 		var u AccessUser
-		if err := rows.Scan(&u.DiscordID, &u.Type, &u.AddedBy, &u.AddedAt); err == nil {
+		if err := rows.Scan(&u.DiscordID, &u.DiscordUsername, &u.DiscordAvatar, &u.Type, &u.AddedBy, &u.AddedAt); err == nil {
 			users = append(users, u)
 		}
-
 	}
 	if users == nil {
 		users = []AccessUser{}
@@ -686,7 +687,35 @@ func (s *Server) handleApiAdminAccessAdd(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	_, err := s.db.Exec("INSERT INTO access_list (discord_id, type, added_by) VALUES ($1, $2, $3) ON CONFLICT(discord_id) DO UPDATE SET type = $4, added_by = $5", req.DiscordID, req.Type, username, req.Type, username)
+	// Fetch user details from Discord API
+	targetUsername := ""
+	targetAvatar := ""
+	
+	if s.discordBotToken != "" {
+		reqUser, err := http.NewRequest("GET", "https://discord.com/api/v10/users/"+req.DiscordID, nil)
+		if err == nil {
+			reqUser.Header.Set("Authorization", "Bot "+s.discordBotToken)
+			client := &http.Client{Timeout: 5 * time.Second}
+			respUser, err := client.Do(reqUser)
+			if err == nil {
+				defer respUser.Body.Close()
+				if respUser.StatusCode == http.StatusOK {
+					var userRes struct {
+						Username string `json:"username"`
+						Avatar   string `json:"avatar"`
+					}
+					if err := json.NewDecoder(respUser.Body).Decode(&userRes); err == nil {
+						targetUsername = userRes.Username
+						if userRes.Avatar != "" {
+							targetAvatar = fmt.Sprintf("https://cdn.discordapp.com/avatars/%s/%s.png", req.DiscordID, userRes.Avatar)
+						}
+					}
+				}
+			}
+		}
+	}
+
+	_, err := s.db.Exec("INSERT INTO access_list (discord_id, discord_username, discord_avatar, type, added_by) VALUES ($1, $2, $3, $4, $5) ON CONFLICT(discord_id) DO UPDATE SET type = $6, added_by = $7, discord_username = EXCLUDED.discord_username, discord_avatar = EXCLUDED.discord_avatar", req.DiscordID, targetUsername, targetAvatar, req.Type, username, req.Type, username)
 	if err != nil {
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
