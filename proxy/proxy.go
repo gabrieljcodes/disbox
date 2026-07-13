@@ -19,7 +19,7 @@ import (
 	"time"
 	"torbox-discord-bot/torbox"
 
-	_ "modernc.org/sqlite"
+	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
 // GetDownloadManager returns the server's download manager instance
@@ -89,16 +89,10 @@ type Server struct {
 	downloadManager     *DownloadManager
 }
 
-func NewServer(baseURL, port string, clientPool *torbox.ClientPool, discordClientID, discordClientSecret string, adminUsers []string, cacheOnly bool, adminAPIEnabled bool) (*Server, error) {
-	db, err := sql.Open("sqlite", "proxy_links.db")
+func NewServer(baseURL, port, databaseURL string, clientPool *torbox.ClientPool, discordClientID, discordClientSecret string, adminUsers []string, cacheOnly bool, adminAPIEnabled bool) (*Server, error) {
+	db, err := sql.Open("pgx", databaseURL)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open SQLite database: %w", err)
-	}
-
-	// Enable WAL mode for better concurrent performance
-	if _, err := db.Exec("PRAGMA journal_mode=WAL"); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("failed to set WAL mode: %w", err)
+		return nil, fmt.Errorf("failed to open PostgreSQL database: %w", err)
 	}
 
 	// Create table if it doesn't exist
@@ -108,17 +102,17 @@ func NewServer(baseURL, port string, clientPool *torbox.ClientPool, discordClien
 			type TEXT NOT NULL,
 			download_id INTEGER NOT NULL,
 			client_index INTEGER NOT NULL,
-			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		);
 		CREATE TABLE IF NOT EXISTS user_sessions (
 			session_token TEXT PRIMARY KEY,
 			discord_id TEXT NOT NULL,
 			discord_username TEXT NOT NULL,
 			discord_avatar TEXT NOT NULL,
-			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		);
 		CREATE TABLE IF NOT EXISTS download_history (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			id SERIAL PRIMARY KEY,
 			discord_id TEXT NOT NULL,
 			discord_username TEXT DEFAULT '',
 			discord_avatar TEXT DEFAULT '',
@@ -128,16 +122,16 @@ func NewServer(baseURL, port string, clientPool *torbox.ClientPool, discordClien
 			type TEXT NOT NULL,
 			download_id INTEGER NOT NULL,
 			client_index INTEGER NOT NULL,
-			size INTEGER DEFAULT 0,
-			deleted BOOLEAN DEFAULT 0,
-			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+			size BIGINT DEFAULT 0,
+			deleted BOOLEAN DEFAULT false,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		);
 		CREATE TABLE IF NOT EXISTS api_tokens (
 			token TEXT PRIMARY KEY,
 			discord_id TEXT NOT NULL,
 			name TEXT NOT NULL,
-			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-			last_used_at DATETIME
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			last_used_at TIMESTAMP
 		);
 		CREATE TABLE IF NOT EXISTS access_settings (
 			key TEXT PRIMARY KEY,
@@ -147,7 +141,7 @@ func NewServer(baseURL, port string, clientPool *torbox.ClientPool, discordClien
 			discord_id TEXT PRIMARY KEY,
 			type TEXT NOT NULL,
 			added_by TEXT NOT NULL,
-			added_at DATETIME DEFAULT CURRENT_TIMESTAMP
+			added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		);
 		CREATE TABLE IF NOT EXISTS user_ftp_configs (
 			discord_id TEXT PRIMARY KEY,
@@ -166,14 +160,8 @@ func NewServer(baseURL, port string, clientPool *torbox.ClientPool, discordClien
 		);
 	`); err != nil {
 		db.Close()
-		return nil, fmt.Errorf("failed to create download_links table: %w", err)
+		return nil, fmt.Errorf("failed to create tables: %w", err)
 	}
-
-	// Migrations for existing databases
-	db.Exec("ALTER TABLE download_history ADD COLUMN discord_username TEXT DEFAULT ''")
-	db.Exec("ALTER TABLE download_history ADD COLUMN discord_avatar TEXT DEFAULT ''")
-	db.Exec("ALTER TABLE download_history ADD COLUMN size INTEGER DEFAULT 0")
-	db.Exec("ALTER TABLE download_history ADD COLUMN deleted BOOLEAN DEFAULT 0")
 
 	s := &Server{
 		baseURL:             strings.TrimRight(baseURL, "/"),
@@ -365,7 +353,7 @@ func (s *Server) RegisterDownload(downloadType string, id int, clientIndex int) 
 
 	// Save to database first
 	_, err := s.db.Exec(
-		"INSERT INTO download_links (token, type, download_id, client_index) VALUES (?, ?, ?, ?)",
+		"INSERT INTO download_links (token, type, download_id, client_index) VALUES ($1, $2, $3, $4)",
 		token, downloadType, id, clientIndex,
 	)
 	if err != nil {
@@ -1125,7 +1113,7 @@ func (s *Server) CheckAccess(discordID string) (bool, string) {
 
 	// Read user list type
 	var listType string
-	err := s.db.QueryRow("SELECT type FROM access_list WHERE discord_id = ?", discordID).Scan(&listType)
+	err := s.db.QueryRow("SELECT type FROM access_list WHERE discord_id = $1", discordID).Scan(&listType)
 
 	// 2. Whitelist takes precedence if enabled
 	if whitelistEnabled == "true" {
@@ -1149,7 +1137,7 @@ func (s *Server) CheckAccess(discordID string) (bool, string) {
 // GetUserTotalSize returns the sum of sizes (in bytes) of all historical downloads for a user
 func (s *Server) GetUserTotalSize(discordID string) int64 {
 	var totalSize sql.NullInt64
-	err := s.db.QueryRow("SELECT SUM(size) FROM download_history WHERE discord_id = ?", discordID).Scan(&totalSize)
+	err := s.db.QueryRow("SELECT SUM(size) FROM download_history WHERE discord_id = $1", discordID).Scan(&totalSize)
 	if err != nil || !totalSize.Valid {
 		return 0
 	}
@@ -1161,7 +1149,7 @@ func (s *Server) GetUserMonthlySize(discordID string) int64 {
 	var totalSize sql.NullInt64
 	now := time.Now().UTC()
 	firstOfMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC).Format("2006-01-02 15:04:05")
-	err := s.db.QueryRow("SELECT SUM(size) FROM download_history WHERE discord_id = ? AND created_at >= ?", discordID, firstOfMonth).Scan(&totalSize)
+	err := s.db.QueryRow("SELECT SUM(size) FROM download_history WHERE discord_id = $1 AND created_at >= $2", discordID, firstOfMonth).Scan(&totalSize)
 	if err != nil || !totalSize.Valid {
 		return 0
 	}

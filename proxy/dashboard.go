@@ -28,15 +28,15 @@ func (s *Server) RegisterDownloadWithUser(downloadType string, id int, clientInd
 
 	if discordID != "" {
 		var existingDiscordID string
-		err := s.db.QueryRow("SELECT discord_id FROM download_history WHERE type = ? AND download_id = ? ORDER BY id ASC LIMIT 1", downloadType, id).Scan(&existingDiscordID)
+		err := s.db.QueryRow("SELECT discord_id FROM download_history WHERE type = $1 AND download_id = $2 ORDER BY id ASC LIMIT 1", downloadType, id).Scan(&existingDiscordID)
 		if err == nil {
 			var userExistingLinkToken string
-			err2 := s.db.QueryRow("SELECT link_token FROM download_history WHERE type = ? AND download_id = ? AND discord_id = ? LIMIT 1", downloadType, id, discordID).Scan(&userExistingLinkToken)
+			err2 := s.db.QueryRow("SELECT link_token FROM download_history WHERE type = $1 AND download_id = $2 AND discord_id = $3 LIMIT 1", downloadType, id, discordID).Scan(&userExistingLinkToken)
 			if err2 == nil {
 				status = 1
 				// If somehow the link_token is empty in DB, fallback to token
 				if userExistingLinkToken == "" {
-					s.db.QueryRow("SELECT token FROM download_history WHERE type = ? AND download_id = ? AND discord_id = ? LIMIT 1", downloadType, id, discordID).Scan(&userExistingLinkToken)
+					s.db.QueryRow("SELECT token FROM download_history WHERE type = $1 AND download_id = $2 AND discord_id = $3 LIMIT 1", downloadType, id, discordID).Scan(&userExistingLinkToken)
 				}
 				proxyURL := fmt.Sprintf("%s/dl/%s", s.baseURL, userExistingLinkToken)
 				return proxyURL, status
@@ -49,7 +49,7 @@ func (s *Server) RegisterDownloadWithUser(downloadType string, id int, clientInd
 
 	// Save the link token to download_links
 	_, err := s.db.Exec(
-		"INSERT INTO download_links (token, type, download_id, client_index) VALUES (?, ?, ?, ?)",
+		"INSERT INTO download_links (token, type, download_id, client_index) VALUES ($1, $2, $3, $4)",
 		linkToken, downloadType, id, clientIndex,
 	)
 	if err != nil {
@@ -68,7 +68,7 @@ func (s *Server) RegisterDownloadWithUser(downloadType string, id int, clientInd
 	// Save to user history
 	if discordID != "" {
 		_, err = s.db.Exec(
-			"INSERT INTO download_history (discord_id, discord_username, discord_avatar, token, link_token, name, type, download_id, client_index, size) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+			"INSERT INTO download_history (discord_id, discord_username, discord_avatar, token, link_token, name, type, download_id, client_index, size) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
 			discordID, discordUsername, discordAvatar, fileToken, linkToken, name, downloadType, id, clientIndex, size,
 		)
 		if err != nil {
@@ -96,9 +96,9 @@ func (s *Server) RegisterDownloadWithUser(downloadType string, id int, clientInd
 
 					if newSize > 0 {
 						if newName != "" && newName != "Getting info..." {
-							s.db.Exec("UPDATE download_history SET size = ?, name = ? WHERE token = ?", newSize, newName, fileToken)
+							s.db.Exec("UPDATE download_history SET size = $1, name = $2 WHERE token = $3", newSize, newName, fileToken)
 						} else {
-							s.db.Exec("UPDATE download_history SET size = ? WHERE token = ?", newSize, fileToken)
+							s.db.Exec("UPDATE download_history SET size = $1 WHERE token = $2", newSize, fileToken)
 						}
 						break
 					}
@@ -214,7 +214,7 @@ func (s *Server) handleAuthCallback(w http.ResponseWriter, r *http.Request) {
 	sessionToken := hex.EncodeToString(b)
 
 	_, err = s.db.Exec(
-		"INSERT INTO user_sessions (session_token, discord_id, discord_username, discord_avatar) VALUES (?, ?, ?, ?)",
+		"INSERT INTO user_sessions (session_token, discord_id, discord_username, discord_avatar) VALUES ($1, $2, $3, $4)",
 		sessionToken, userRes.ID, userRes.Username, avatarURL,
 	)
 	if err != nil {
@@ -240,7 +240,7 @@ func (s *Server) handleAuthCallback(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleAuthLogout(w http.ResponseWriter, r *http.Request) {
 	cookie, err := r.Cookie("disbox_session")
 	if err == nil {
-		s.db.Exec("DELETE FROM user_sessions WHERE session_token = ?", cookie.Value)
+		s.db.Exec("DELETE FROM user_sessions WHERE session_token = $1", cookie.Value)
 	}
 
 	http.SetCookie(w, &http.Cookie{
@@ -260,7 +260,7 @@ func (s *Server) getSessionUser(r *http.Request) (id, username, avatar string, o
 		return "", "", "", false
 	}
 
-	err = s.db.QueryRow("SELECT discord_id, discord_username, discord_avatar FROM user_sessions WHERE session_token = ?", cookie.Value).
+	err = s.db.QueryRow("SELECT discord_id, discord_username, discord_avatar FROM user_sessions WHERE session_token = $1", cookie.Value).
 		Scan(&id, &username, &avatar)
 	if err != nil {
 		return "", "", "", false
@@ -300,7 +300,7 @@ func (s *Server) handleApiHistory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := s.db.Query("SELECT token, link_token, name, type, created_at FROM download_history WHERE discord_id = ? AND deleted = 0 ORDER BY created_at DESC", id)
+	rows, err := s.db.Query("SELECT token, link_token, name, type, created_at FROM download_history WHERE discord_id = $1 AND deleted = 0 ORDER BY created_at DESC", id)
 	if err != nil {
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
@@ -651,14 +651,14 @@ func (s *Server) handleApiAdminAccessToggle(w http.ResponseWriter, r *http.Reque
 		val = "true"
 	}
 
-	s.db.Exec("INSERT INTO access_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = ?", key, val, val)
+	s.db.Exec("INSERT INTO access_settings (key, value) VALUES ($1, $2) ON CONFLICT(key) DO UPDATE SET value = $3", key, val, val)
 	
 	if req.Enabled {
 		otherKey := "blacklist_enabled"
 		if req.ListType == "blacklist" {
 			otherKey = "whitelist_enabled"
 		}
-		s.db.Exec("INSERT INTO access_settings (key, value) VALUES (?, 'false') ON CONFLICT(key) DO UPDATE SET value = 'false'", otherKey)
+		s.db.Exec("INSERT INTO access_settings (key, value) VALUES ($1, 'false') ON CONFLICT(key) DO UPDATE SET value = 'false'", otherKey)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -686,7 +686,7 @@ func (s *Server) handleApiAdminAccessAdd(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	_, err := s.db.Exec("INSERT INTO access_list (discord_id, type, added_by) VALUES (?, ?, ?) ON CONFLICT(discord_id) DO UPDATE SET type = ?, added_by = ?", req.DiscordID, req.Type, username, req.Type, username)
+	_, err := s.db.Exec("INSERT INTO access_list (discord_id, type, added_by) VALUES ($1, $2, $3) ON CONFLICT(discord_id) DO UPDATE SET type = $4, added_by = $5", req.DiscordID, req.Type, username, req.Type, username)
 	if err != nil {
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
@@ -716,7 +716,7 @@ func (s *Server) handleApiAdminAccessRemove(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	s.db.Exec("DELETE FROM access_list WHERE discord_id = ?", req.DiscordID)
+	s.db.Exec("DELETE FROM access_list WHERE discord_id = $1", req.DiscordID)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"success": "true"})
@@ -746,7 +746,7 @@ func (s *Server) handleApiAdminUserProfile(w http.ResponseWriter, r *http.Reques
 
 	// 1. Get Access Status
 	var accessType string
-	err := s.db.QueryRow("SELECT type FROM access_list WHERE discord_id = ?", targetDiscordID).Scan(&accessType)
+	err := s.db.QueryRow("SELECT type FROM access_list WHERE discord_id = $1", targetDiscordID).Scan(&accessType)
 	if err == sql.ErrNoRows {
 		accessType = "none"
 	} else if err != nil {
@@ -756,10 +756,10 @@ func (s *Server) handleApiAdminUserProfile(w http.ResponseWriter, r *http.Reques
 
 	// 2. Get User Info (try from user_sessions, fallback to history)
 	var discordUsername, discordAvatar string
-	err = s.db.QueryRow("SELECT discord_username, discord_avatar FROM user_sessions WHERE discord_id = ? ORDER BY created_at DESC LIMIT 1", targetDiscordID).Scan(&discordUsername, &discordAvatar)
+	err = s.db.QueryRow("SELECT discord_username, discord_avatar FROM user_sessions WHERE discord_id = $1 ORDER BY created_at DESC LIMIT 1", targetDiscordID).Scan(&discordUsername, &discordAvatar)
 	if err != nil {
 		// fallback to download_history
-		err = s.db.QueryRow("SELECT discord_username, discord_avatar FROM download_history WHERE discord_id = ? ORDER BY created_at DESC LIMIT 1", targetDiscordID).Scan(&discordUsername, &discordAvatar)
+		err = s.db.QueryRow("SELECT discord_username, discord_avatar FROM download_history WHERE discord_id = $1 ORDER BY created_at DESC LIMIT 1", targetDiscordID).Scan(&discordUsername, &discordAvatar)
 		if err != nil {
 			discordUsername = "Unknown User"
 			discordAvatar = "https://cdn.discordapp.com/embed/avatars/0.png"
@@ -767,7 +767,7 @@ func (s *Server) handleApiAdminUserProfile(w http.ResponseWriter, r *http.Reques
 	}
 
 	// 3. Get History and Metrics
-	rows, err := s.db.Query("SELECT token, name, type, size, created_at FROM download_history WHERE discord_id = ? AND deleted = 0 ORDER BY created_at DESC", targetDiscordID)
+	rows, err := s.db.Query("SELECT token, name, type, size, created_at FROM download_history WHERE discord_id = $1 AND deleted = 0 ORDER BY created_at DESC", targetDiscordID)
 	if err != nil {
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return

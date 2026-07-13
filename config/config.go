@@ -19,6 +19,7 @@ type Config struct {
 	ProxyBaseURL         string
 	ProxyPort            string
 	AdminAPIEnabled      bool
+	DatabaseURL          string
 }
 
 func LoadConfig() (*Config, error) {
@@ -46,6 +47,11 @@ func LoadConfig() (*Config, error) {
 		ProxyBaseURL:        proxyBaseURL,
 		ProxyPort:           proxyPort,
 		AdminAPIEnabled:     strings.ToLower(os.Getenv("ADMIN_API_ENABLED")) != "false",
+		DatabaseURL:         os.Getenv("DATABASE_URL"),
+	}
+
+	if cfg.DatabaseURL == "" {
+		log.Fatal("DATABASE_URL is not set")
 	}
 
 	if cfg.DiscordBotToken == "" {

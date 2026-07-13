@@ -12,7 +12,7 @@ RUN go mod download
 # Copy the source code
 COPY . .
 
-# Build the application (modernc.org/sqlite is pure Go, so CGO is not strictly needed, but let's disable it just in case)
+# Build the application
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o disbox .
 
 FROM alpine:latest

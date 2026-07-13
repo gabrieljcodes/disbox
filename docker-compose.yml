@@ -12,4 +12,28 @@ services:
     working_dir: /app/data
     env_file:
       - .env
+    environment:
+      - DATABASE_URL=postgres://disbox:disbox_pass@postgres:5432/disbox?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
     command: ["/app/disbox"]
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: disbox_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: disbox
+      POSTGRES_PASSWORD: disbox_pass
+      POSTGRES_DB: disbox
+    volumes:
+      - disbox_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U disbox -d disbox"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  disbox_pgdata:

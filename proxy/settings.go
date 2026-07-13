@@ -10,7 +10,7 @@ import (
 
 func (s *Server) GetSetting(key string, defaultVal string) string {
 	var val string
-	err := s.db.QueryRow("SELECT value FROM access_settings WHERE key = ?", key).Scan(&val)
+	err := s.db.QueryRow("SELECT value FROM access_settings WHERE key = $1", key).Scan(&val)
 	if err == sql.ErrNoRows {
 		return defaultVal
 	}
@@ -21,7 +21,7 @@ func (s *Server) GetSetting(key string, defaultVal string) string {
 }
 
 func (s *Server) SetSetting(key string, val string) error {
-	_, err := s.db.Exec("INSERT INTO access_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = ?", key, val, val)
+	_, err := s.db.Exec("INSERT INTO access_settings (key, value) VALUES ($1, $2) ON CONFLICT(key) DO UPDATE SET value = $3", key, val, val)
 	return err
 }
 

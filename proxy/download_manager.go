@@ -226,7 +226,7 @@ func (dm *DownloadManager) RefreshActiveCount() {
 					validIDs[fmt.Sprintf("webdl_%d", w.ID)] = true
 				}
 
-				rows, err := dm.server.db.Query("SELECT token, type, download_id FROM download_history WHERE client_index = ? AND deleted = 0", cIndex)
+				rows, err := dm.server.db.Query("SELECT token, type, download_id FROM download_history WHERE client_index = $1 AND deleted = 0", cIndex)
 				if err != nil {
 					return
 				}
@@ -245,8 +245,8 @@ func (dm *DownloadManager) RefreshActiveCount() {
 				}
 
 				for _, token := range toDelete {
-					dm.server.db.Exec("UPDATE download_history SET deleted = 1 WHERE token = ?", token)
-					dm.server.db.Exec("DELETE FROM download_links WHERE token = ?", token)
+					dm.server.db.Exec("UPDATE download_history SET deleted = 1 WHERE token = $1", token)
+					dm.server.db.Exec("DELETE FROM download_links WHERE token = $1", token)
 					
 					dm.server.mu.Lock()
 					delete(dm.server.downloads, token)

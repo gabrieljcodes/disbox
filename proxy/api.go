@@ -51,14 +51,14 @@ func (s *Server) getAPIUser(r *http.Request) (discordID string, ok bool) {
 		return "", false
 	}
 
-	err := s.db.QueryRow("SELECT discord_id FROM api_tokens WHERE token = ?", token).Scan(&discordID)
+	err := s.db.QueryRow("SELECT discord_id FROM api_tokens WHERE token = $1", token).Scan(&discordID)
 	if err != nil {
 		return "", false
 	}
 
 	// Update last_used_at in the background
 	go func() {
-		s.db.Exec("UPDATE api_tokens SET last_used_at = CURRENT_TIMESTAMP WHERE token = ?", token)
+		s.db.Exec("UPDATE api_tokens SET last_used_at = CURRENT_TIMESTAMP WHERE token = $1", token)
 	}()
 
 	return discordID, true
@@ -93,7 +93,7 @@ func (s *Server) handleApiTokensList(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rows, err := s.db.Query(
-		"SELECT token, name, created_at, last_used_at FROM api_tokens WHERE discord_id = ? ORDER BY created_at DESC",
+		"SELECT token, name, created_at, last_used_at FROM api_tokens WHERE discord_id = $1 ORDER BY created_at DESC",
 		discordID,
 	)
 	if err != nil {
@@ -153,7 +153,7 @@ func (s *Server) handleApiTokensCreate(w http.ResponseWriter, r *http.Request) {
 
 	// Limit tokens per user
 	var count int
-	s.db.QueryRow("SELECT COUNT(*) FROM api_tokens WHERE discord_id = ?", discordID).Scan(&count)
+	s.db.QueryRow("SELECT COUNT(*) FROM api_tokens WHERE discord_id = $1", discordID).Scan(&count)
 	if count >= 10 {
 		jsonError(w, http.StatusBadRequest, "Maximum of 10 API tokens per user")
 		return
@@ -161,7 +161,7 @@ func (s *Server) handleApiTokensCreate(w http.ResponseWriter, r *http.Request) {
 
 	token := generateAPIToken()
 	_, err := s.db.Exec(
-		"INSERT INTO api_tokens (token, discord_id, name) VALUES (?, ?, ?)",
+		"INSERT INTO api_tokens (token, discord_id, name) VALUES ($1, $2, $3)",
 		token, discordID, name,
 	)
 	if err != nil {
@@ -203,12 +203,12 @@ func (s *Server) handleApiTokenRevoke(w http.ResponseWriter, r *http.Request) {
 	var result int64
 	if strings.HasSuffix(req.Token, "...") {
 		prefix := strings.TrimSuffix(req.Token, "...")
-		res, err := s.db.Exec("DELETE FROM api_tokens WHERE token LIKE ? AND discord_id = ?", prefix+"%", discordID)
+		res, err := s.db.Exec("DELETE FROM api_tokens WHERE token LIKE $1 AND discord_id = $2", prefix+"%", discordID)
 		if err == nil {
 			result, _ = res.RowsAffected()
 		}
 	} else {
-		res, err := s.db.Exec("DELETE FROM api_tokens WHERE token = ? AND discord_id = ?", req.Token, discordID)
+		res, err := s.db.Exec("DELETE FROM api_tokens WHERE token = $1 AND discord_id = $2", req.Token, discordID)
 		if err == nil {
 			result, _ = res.RowsAffected()
 		}
@@ -262,7 +262,7 @@ func (s *Server) handleV1Me(w http.ResponseWriter, r *http.Request) {
 
 	// Look up user info from sessions or history
 	var username, avatar string
-	err := s.db.QueryRow("SELECT discord_username, discord_avatar FROM user_sessions WHERE discord_id = ? LIMIT 1", discordID).
+	err := s.db.QueryRow("SELECT discord_username, discord_avatar FROM user_sessions WHERE discord_id = $1 LIMIT 1", discordID).
 		Scan(&username, &avatar)
 	if err != nil {
 		username = discordID
@@ -326,7 +326,7 @@ func (s *Server) handleV1AddTorrent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var discordUsername, discordAvatar string
-	if errUser := s.db.QueryRow("SELECT discord_username, discord_avatar FROM user_sessions WHERE discord_id = ? LIMIT 1", discordID).Scan(&discordUsername, &discordAvatar); errUser != nil {
+	if errUser := s.db.QueryRow("SELECT discord_username, discord_avatar FROM user_sessions WHERE discord_id = $1 LIMIT 1", discordID).Scan(&discordUsername, &discordAvatar); errUser != nil {
 		discordUsername = "API User"
 		discordAvatar = ""
 	}
@@ -398,7 +398,7 @@ func (s *Server) handleV1AddTorrentFile(w http.ResponseWriter, r *http.Request) 
 	}
 
 	var discordUsername, discordAvatar string
-	if errUser := s.db.QueryRow("SELECT discord_username, discord_avatar FROM user_sessions WHERE discord_id = ? LIMIT 1", discordID).Scan(&discordUsername, &discordAvatar); errUser != nil {
+	if errUser := s.db.QueryRow("SELECT discord_username, discord_avatar FROM user_sessions WHERE discord_id = $1 LIMIT 1", discordID).Scan(&discordUsername, &discordAvatar); errUser != nil {
 		discordUsername = "API User"
 		discordAvatar = ""
 	}
@@ -452,7 +452,7 @@ func (s *Server) handleV1AddWebdl(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var discordUsername, discordAvatar string
-	if errUser := s.db.QueryRow("SELECT discord_username, discord_avatar FROM user_sessions WHERE discord_id = ? LIMIT 1", discordID).Scan(&discordUsername, &discordAvatar); errUser != nil {
+	if errUser := s.db.QueryRow("SELECT discord_username, discord_avatar FROM user_sessions WHERE discord_id = $1 LIMIT 1", discordID).Scan(&discordUsername, &discordAvatar); errUser != nil {
 		discordUsername = "API User"
 		discordAvatar = ""
 	}
@@ -492,7 +492,7 @@ func (s *Server) handleV1History(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rows, err := s.db.Query(
-		"SELECT token, link_token, name, type, created_at FROM download_history WHERE discord_id = ? AND deleted = 0 ORDER BY created_at DESC LIMIT 100",
+		"SELECT token, link_token, name, type, created_at FROM download_history WHERE discord_id = $1 AND deleted = 0 ORDER BY created_at DESC LIMIT 100",
 		discordID,
 	)
 	if err != nil {
@@ -586,9 +586,9 @@ func (s *Server) removeDownloadInternal(w http.ResponseWriter, token, discordID 
 
 	var err error
 	if isAdmin {
-		err = s.db.QueryRow("SELECT type, download_id, client_index FROM download_history WHERE token = ? OR link_token = ?", token).Scan(&dlType, &downloadID, &clientIndex)
+		err = s.db.QueryRow("SELECT type, download_id, client_index FROM download_history WHERE token = $1 OR link_token = $2", token).Scan(&dlType, &downloadID, &clientIndex)
 	} else {
-		err = s.db.QueryRow("SELECT type, download_id, client_index FROM download_history WHERE (token = ? OR link_token = ?) AND discord_id = ?", token, discordID).Scan(&dlType, &downloadID, &clientIndex)
+		err = s.db.QueryRow("SELECT type, download_id, client_index FROM download_history WHERE (token = $1 OR link_token = $2) AND discord_id = $3", token, discordID).Scan(&dlType, &downloadID, &clientIndex)
 	}
 	if err != nil {
 		jsonError(w, http.StatusNotFound, "Download not found or you don't have permission")
@@ -614,8 +614,8 @@ func (s *Server) removeDownloadInternal(w http.ResponseWriter, token, discordID 
 		}
 	}
 
-	s.db.Exec("UPDATE download_history SET deleted = 1 WHERE token = ? OR link_token = ?", token)
-	s.db.Exec("DELETE FROM download_links WHERE token = ?", token)
+	s.db.Exec("UPDATE download_history SET deleted = 1 WHERE token = $1 OR link_token = $2", token)
+	s.db.Exec("DELETE FROM download_links WHERE token = $1", token)
 
 	s.mu.Lock()
 	delete(s.downloads, token)
@@ -741,7 +741,7 @@ func (s *Server) exportDataInternal(w http.ResponseWriter, r *http.Request, disc
 	var downloadID int
 	var clientIndex int
 
-	err := s.db.QueryRow("SELECT type, download_id, client_index FROM download_history WHERE (token = ? OR link_token = ?) AND discord_id = ?", token, discordID).Scan(&dlType, &downloadID, &clientIndex)
+	err := s.db.QueryRow("SELECT type, download_id, client_index FROM download_history WHERE (token = $1 OR link_token = $2) AND discord_id = $3", token, discordID).Scan(&dlType, &downloadID, &clientIndex)
 	if err != nil {
 		jsonError(w, http.StatusNotFound, "Download not found or you don't have permission")
 		return
@@ -860,7 +860,7 @@ func (s *Server) handleV1AdminAccessCheck(w http.ResponseWriter, r *http.Request
 	}
 
 	var accessType string
-	err := s.db.QueryRow("SELECT type FROM access_list WHERE discord_id = ?", targetID).Scan(&accessType)
+	err := s.db.QueryRow("SELECT type FROM access_list WHERE discord_id = $1", targetID).Scan(&accessType)
 	if err == sql.ErrNoRows {
 		jsonOK(w, map[string]interface{}{
 			"discord_id": targetID,
@@ -899,12 +899,12 @@ func (s *Server) handleV1AdminAccessAdd(w http.ResponseWriter, r *http.Request) 
 	}
 
 	var adminName string
-	s.db.QueryRow("SELECT discord_username FROM user_sessions WHERE discord_id = ? ORDER BY created_at DESC LIMIT 1", adminID).Scan(&adminName)
+	s.db.QueryRow("SELECT discord_username FROM user_sessions WHERE discord_id = $1 ORDER BY created_at DESC LIMIT 1", adminID).Scan(&adminName)
 	if adminName == "" {
 		adminName = "API Admin"
 	}
 
-	_, err := s.db.Exec("INSERT INTO access_list (discord_id, type, added_by) VALUES (?, ?, ?) ON CONFLICT(discord_id) DO UPDATE SET type = ?, added_by = ?", req.DiscordID, req.Type, adminName, req.Type, adminName)
+	_, err := s.db.Exec("INSERT INTO access_list (discord_id, type, added_by) VALUES ($1, $2, $3) ON CONFLICT(discord_id) DO UPDATE SET type = $4, added_by = $5", req.DiscordID, req.Type, adminName, req.Type, adminName)
 	if err != nil {
 		jsonError(w, http.StatusInternalServerError, "Database error")
 		return
@@ -931,7 +931,7 @@ func (s *Server) handleV1AdminAccessRemove(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	s.db.Exec("DELETE FROM access_list WHERE discord_id = ?", req.DiscordID)
+	s.db.Exec("DELETE FROM access_list WHERE discord_id = $1", req.DiscordID)
 
 	jsonOK(w, map[string]string{"message": "User removed from access list"})
 }
@@ -965,14 +965,14 @@ func (s *Server) handleV1AdminAccessToggle(w http.ResponseWriter, r *http.Reques
 		val = "true"
 	}
 
-	s.db.Exec("INSERT INTO access_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = ?", key, val, val)
+	s.db.Exec("INSERT INTO access_settings (key, value) VALUES ($1, $2) ON CONFLICT(key) DO UPDATE SET value = $3", key, val, val)
 	
 	if req.Enabled {
 		otherKey := "blacklist_enabled"
 		if req.ListType == "blacklist" {
 			otherKey = "whitelist_enabled"
 		}
-		s.db.Exec("INSERT INTO access_settings (key, value) VALUES (?, 'false') ON CONFLICT(key) DO UPDATE SET value = 'false'", otherKey)
+		s.db.Exec("INSERT INTO access_settings (key, value) VALUES ($1, 'false') ON CONFLICT(key) DO UPDATE SET value = 'false'", otherKey)
 	}
 
 	jsonOK(w, map[string]string{"message": req.ListType + " set to " + val})
@@ -1047,7 +1047,7 @@ func (s *Server) handleApiUserProfile(w http.ResponseWriter, r *http.Request) {
 	monthly := s.GetUserMonthlySize(discordID)
 
 	var host, username, password string
-	err := s.db.QueryRow("SELECT host, username, password FROM user_ftp_configs WHERE discord_id = ?", discordID).Scan(&host, &username, &password)
+	err := s.db.QueryRow("SELECT host, username, password FROM user_ftp_configs WHERE discord_id = $1", discordID).Scan(&host, &username, &password)
 	if err != nil && err != sql.ErrNoRows {
 		jsonError(w, http.StatusInternalServerError, "Database error")
 		return
@@ -1086,14 +1086,14 @@ func (s *Server) handleApiUserFtp(w http.ResponseWriter, r *http.Request) {
 
 	if req.Password == "" {
 		var existingPassword string
-		s.db.QueryRow("SELECT password FROM user_ftp_configs WHERE discord_id = ?", discordID).Scan(&existingPassword)
+		s.db.QueryRow("SELECT password FROM user_ftp_configs WHERE discord_id = $1", discordID).Scan(&existingPassword)
 		req.Password = existingPassword
 	}
 
 	_, err := s.db.Exec(`
 		INSERT INTO user_ftp_configs (discord_id, host, username, password) 
-		VALUES (?, ?, ?, ?) 
-		ON CONFLICT(discord_id) DO UPDATE SET host=?, username=?, password=?`,
+		VALUES ($1, $2, $3, $4) 
+		ON CONFLICT(discord_id) DO UPDATE SET host=$5, username=$6, password=$7`,
 		discordID, req.Host, req.Username, req.Password,
 		req.Host, req.Username, req.Password,
 	)
@@ -1128,14 +1128,14 @@ func (s *Server) handleApiFtpSend(w http.ResponseWriter, r *http.Request) {
 
 	var dlType, name string
 	var downloadID, clientIndex int
-	err := s.db.QueryRow("SELECT type, download_id, client_index, name FROM download_history WHERE (token = ? OR link_token = ?) AND discord_id = ?", req.Token, discordID).Scan(&dlType, &downloadID, &clientIndex, &name)
+	err := s.db.QueryRow("SELECT type, download_id, client_index, name FROM download_history WHERE (token = $1 OR link_token = $2) AND discord_id = $3", req.Token, discordID).Scan(&dlType, &downloadID, &clientIndex, &name)
 	if err != nil {
 		jsonError(w, http.StatusNotFound, "Download not found")
 		return
 	}
 
 	var host, username, password string
-	err = s.db.QueryRow("SELECT host, username, password FROM user_ftp_configs WHERE discord_id = ?", discordID).Scan(&host, &username, &password)
+	err = s.db.QueryRow("SELECT host, username, password FROM user_ftp_configs WHERE discord_id = $1", discordID).Scan(&host, &username, &password)
 	if err != nil || host == "" {
 		jsonError(w, http.StatusBadRequest, "FTP is not configured")
 		return
@@ -1220,7 +1220,7 @@ func (s *Server) handleV1UserProfile(w http.ResponseWriter, r *http.Request) {
 	monthly := s.GetUserMonthlySize(discordID)
 
 	var host, username, password string
-	err := s.db.QueryRow("SELECT host, username, password FROM user_ftp_configs WHERE discord_id = ?", discordID).Scan(&host, &username, &password)
+	err := s.db.QueryRow("SELECT host, username, password FROM user_ftp_configs WHERE discord_id = $1", discordID).Scan(&host, &username, &password)
 	if err != nil && err != sql.ErrNoRows {
 		jsonError(w, http.StatusInternalServerError, "Database error")
 		return
@@ -1258,14 +1258,14 @@ func (s *Server) handleV1UserFtp(w http.ResponseWriter, r *http.Request) {
 
 	if req.Password == "" {
 		var existingPassword string
-		s.db.QueryRow("SELECT password FROM user_ftp_configs WHERE discord_id = ?", discordID).Scan(&existingPassword)
+		s.db.QueryRow("SELECT password FROM user_ftp_configs WHERE discord_id = $1", discordID).Scan(&existingPassword)
 		req.Password = existingPassword
 	}
 
 	_, err := s.db.Exec(`
 		INSERT INTO user_ftp_configs (discord_id, host, username, password) 
-		VALUES (?, ?, ?, ?) 
-		ON CONFLICT(discord_id) DO UPDATE SET host=?, username=?, password=?`,
+		VALUES ($1, $2, $3, $4) 
+		ON CONFLICT(discord_id) DO UPDATE SET host=$5, username=$6, password=$7`,
 		discordID, req.Host, req.Username, req.Password,
 		req.Host, req.Username, req.Password,
 	)
@@ -1299,14 +1299,14 @@ func (s *Server) handleV1FtpSend(w http.ResponseWriter, r *http.Request) {
 
 	var dlType, name string
 	var downloadID, clientIndex int
-	err := s.db.QueryRow("SELECT type, download_id, client_index, name FROM download_history WHERE (token = ? OR link_token = ?) AND discord_id = ?", req.Token, discordID).Scan(&dlType, &downloadID, &clientIndex, &name)
+	err := s.db.QueryRow("SELECT type, download_id, client_index, name FROM download_history WHERE (token = $1 OR link_token = $2) AND discord_id = $3", req.Token, discordID).Scan(&dlType, &downloadID, &clientIndex, &name)
 	if err != nil {
 		jsonError(w, http.StatusNotFound, "Download not found")
 		return
 	}
 
 	var host, username, password string
-	err = s.db.QueryRow("SELECT host, username, password FROM user_ftp_configs WHERE discord_id = ?", discordID).Scan(&host, &username, &password)
+	err = s.db.QueryRow("SELECT host, username, password FROM user_ftp_configs WHERE discord_id = $1", discordID).Scan(&host, &username, &password)
 	if err != nil || host == "" {
 		jsonError(w, http.StatusBadRequest, "FTP is not configured")
 		return
@@ -1428,7 +1428,7 @@ func (s *Server) handleApiUserCloud(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method == http.MethodGet {
 		var google, dropbox, onedrive, gofile, onefichier, pixeldrain string
-		err := s.db.QueryRow("SELECT google_token, dropbox_token, onedrive_token, gofile_token, onefichier_token, pixeldrain_token FROM user_cloud_configs WHERE discord_id = ?", discordID).Scan(&google, &dropbox, &onedrive, &gofile, &onefichier, &pixeldrain)
+		err := s.db.QueryRow("SELECT google_token, dropbox_token, onedrive_token, gofile_token, onefichier_token, pixeldrain_token FROM user_cloud_configs WHERE discord_id = $1", discordID).Scan(&google, &dropbox, &onedrive, &gofile, &onefichier, &pixeldrain)
 		if err != nil && err != sql.ErrNoRows {
 			jsonError(w, http.StatusInternalServerError, "Database error")
 			return
@@ -1454,14 +1454,14 @@ func (s *Server) handleApiUserCloud(w http.ResponseWriter, r *http.Request) {
 
 		_, err := s.db.Exec(`
 			INSERT INTO user_cloud_configs (discord_id, google_token, dropbox_token, onedrive_token, gofile_token, onefichier_token, pixeldrain_token) 
-			VALUES (?, ?, ?, ?, ?, ?, ?)
+			VALUES ($1, $2, $3, $4, $5, $6, $7)
 			ON CONFLICT(discord_id) DO UPDATE SET 
-				google_token=excluded.google_token,
-				dropbox_token=excluded.dropbox_token,
-				onedrive_token=excluded.onedrive_token,
-				gofile_token=excluded.gofile_token,
-				onefichier_token=excluded.onefichier_token,
-				pixeldrain_token=excluded.pixeldrain_token
+				google_token=EXCLUDED.google_token,
+				dropbox_token=EXCLUDED.dropbox_token,
+				onedrive_token=EXCLUDED.onedrive_token,
+				gofile_token=EXCLUDED.gofile_token,
+				onefichier_token=EXCLUDED.onefichier_token,
+				pixeldrain_token=EXCLUDED.pixeldrain_token
 		`, discordID, req["google"], req["dropbox"], req["onedrive"], req["gofile"], req["onefichier"], req["pixeldrain"])
 		
 		if err != nil {
@@ -1510,7 +1510,7 @@ func (s *Server) handleApiIntegration(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var token string
-	err := s.db.QueryRow(fmt.Sprintf("SELECT %s FROM user_cloud_configs WHERE discord_id = ?", dbField), discordID).Scan(&token)
+	err := s.db.QueryRow(fmt.Sprintf("SELECT %s FROM user_cloud_configs WHERE discord_id = $1", dbField), discordID).Scan(&token)
 	if err != nil || token == "" {
 		jsonError(w, http.StatusForbidden, "API token for this provider is not configured. Please set it in your Profile.")
 		return
@@ -1533,7 +1533,7 @@ func (s *Server) handleApiIntegration(w http.ResponseWriter, r *http.Request) {
 	var dlType string
 	var downloadID int
 	var clientIndex int
-	err = s.db.QueryRow("SELECT type, download_id, client_index FROM download_history WHERE (token = ? OR link_token = ?) AND discord_id = ?", historyToken, discordID).Scan(&dlType, &downloadID, &clientIndex)
+	err = s.db.QueryRow("SELECT type, download_id, client_index FROM download_history WHERE (token = $1 OR link_token = $2) AND discord_id = $3", historyToken, discordID).Scan(&dlType, &downloadID, &clientIndex)
 	if err != nil {
 		jsonError(w, http.StatusNotFound, "Download not found")
 		return
@@ -1599,7 +1599,7 @@ func (s *Server) handleV1UserCloud(w http.ResponseWriter, r *http.Request) {
 		}
 		
 		var existingGoogle, existingDropbox, existingOnedrive, existingGofile, existingOnefichier, existingPixeldrain string
-		s.db.QueryRow("SELECT google_token, dropbox_token, onedrive_token, gofile_token, onefichier_token, pixeldrain_token FROM user_cloud_configs WHERE discord_id = ?", discordID).Scan(&existingGoogle, &existingDropbox, &existingOnedrive, &existingGofile, &existingOnefichier, &existingPixeldrain)
+		s.db.QueryRow("SELECT google_token, dropbox_token, onedrive_token, gofile_token, onefichier_token, pixeldrain_token FROM user_cloud_configs WHERE discord_id = $1", discordID).Scan(&existingGoogle, &existingDropbox, &existingOnedrive, &existingGofile, &existingOnefichier, &existingPixeldrain)
 		
 		if config.Google == "" { config.Google = existingGoogle }
 		if config.Dropbox == "" { config.Dropbox = existingDropbox }
@@ -1610,14 +1610,14 @@ func (s *Server) handleV1UserCloud(w http.ResponseWriter, r *http.Request) {
 
 		_, err := s.db.Exec(`
 			INSERT INTO user_cloud_configs (discord_id, google_token, dropbox_token, onedrive_token, gofile_token, onefichier_token, pixeldrain_token) 
-			VALUES (?, ?, ?, ?, ?, ?, ?)
+			VALUES ($1, $2, $3, $4, $5, $6, $7)
 			ON CONFLICT(discord_id) DO UPDATE SET 
-				google_token = excluded.google_token,
-				dropbox_token = excluded.dropbox_token,
-				onedrive_token = excluded.onedrive_token,
-				gofile_token = excluded.gofile_token,
-				onefichier_token = excluded.onefichier_token,
-				pixeldrain_token = excluded.pixeldrain_token
+				google_token = EXCLUDED.google_token,
+				dropbox_token = EXCLUDED.dropbox_token,
+				onedrive_token = EXCLUDED.onedrive_token,
+				gofile_token = EXCLUDED.gofile_token,
+				onefichier_token = EXCLUDED.onefichier_token,
+				pixeldrain_token = EXCLUDED.pixeldrain_token
 		`, discordID, config.Google, config.Dropbox, config.OneDrive, config.Gofile, config.Onefichier, config.Pixeldrain)
 		
 		if err != nil {
@@ -1661,7 +1661,7 @@ func (s *Server) handleV1Integration(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var token string
-	err := s.db.QueryRow(fmt.Sprintf("SELECT %s FROM user_cloud_configs WHERE discord_id = ?", dbField), discordID).Scan(&token)
+	err := s.db.QueryRow(fmt.Sprintf("SELECT %s FROM user_cloud_configs WHERE discord_id = $1", dbField), discordID).Scan(&token)
 	if err != nil || token == "" {
 		jsonError(w, http.StatusForbidden, "API token for this provider is not configured. Please set it in your Profile.")
 		return
@@ -1684,7 +1684,7 @@ func (s *Server) handleV1Integration(w http.ResponseWriter, r *http.Request) {
 	var dlType string
 	var downloadID int
 	var clientIndex int
-	err = s.db.QueryRow("SELECT type, download_id, client_index FROM download_history WHERE (token = ? OR link_token = ?) AND discord_id = ?", historyToken, discordID).Scan(&dlType, &downloadID, &clientIndex)
+	err = s.db.QueryRow("SELECT type, download_id, client_index FROM download_history WHERE (token = $1 OR link_token = $2) AND discord_id = $3", historyToken, discordID).Scan(&dlType, &downloadID, &clientIndex)
 	if err != nil {
 		jsonError(w, http.StatusNotFound, "Download not found")
 		return
@@ -1770,9 +1770,9 @@ func (s *Server) regenerateLinkInternal(w http.ResponseWriter, r *http.Request, 
 	var err error
 	
 	if isAdmin {
-		err = s.db.QueryRow("SELECT type, download_id, client_index, link_token FROM download_history WHERE token = ? LIMIT 1", req.Token).Scan(&downloadType, &downloadID, &clientIndex, &oldLinkToken)
+		err = s.db.QueryRow("SELECT type, download_id, client_index, link_token FROM download_history WHERE token = $1 LIMIT 1", req.Token).Scan(&downloadType, &downloadID, &clientIndex, &oldLinkToken)
 	} else {
-		err = s.db.QueryRow("SELECT type, download_id, client_index, link_token FROM download_history WHERE (token = ? OR link_token = ?) AND discord_id = ? LIMIT 1", req.Token, discordID).Scan(&downloadType, &downloadID, &clientIndex, &oldLinkToken)
+		err = s.db.QueryRow("SELECT type, download_id, client_index, link_token FROM download_history WHERE (token = $1 OR link_token = $2) AND discord_id = $3 LIMIT 1", req.Token, discordID).Scan(&downloadType, &downloadID, &clientIndex, &oldLinkToken)
 	}
 
 	if err != nil {
@@ -1791,10 +1791,10 @@ func (s *Server) regenerateLinkInternal(w http.ResponseWriter, r *http.Request, 
 	}
 
 	// Remove old link
-	tx.Exec("DELETE FROM download_links WHERE token = ?", oldLinkToken)
+	tx.Exec("DELETE FROM download_links WHERE token = $1", oldLinkToken)
 	
 	// Insert new link
-	_, err = tx.Exec("INSERT INTO download_links (token, type, download_id, client_index) VALUES (?, ?, ?, ?)", newLinkToken, downloadType, downloadID, clientIndex)
+	_, err = tx.Exec("INSERT INTO download_links (token, type, download_id, client_index) VALUES ($1, $2, $3, $4)", newLinkToken, downloadType, downloadID, clientIndex)
 	if err != nil {
 		tx.Rollback()
 		jsonError(w, http.StatusInternalServerError, "Failed to regenerate link")
@@ -1803,9 +1803,9 @@ func (s *Server) regenerateLinkInternal(w http.ResponseWriter, r *http.Request, 
 
 	// Update history
 	if isAdmin {
-		_, err = tx.Exec("UPDATE download_history SET link_token = ? WHERE token = ?", newLinkToken, req.Token)
+		_, err = tx.Exec("UPDATE download_history SET link_token = $1 WHERE token = $2", newLinkToken, req.Token)
 	} else {
-		_, err = tx.Exec("UPDATE download_history SET link_token = ? WHERE (token = ? OR link_token = ?) AND discord_id = ?", newLinkToken, req.Token, discordID)
+		_, err = tx.Exec("UPDATE download_history SET link_token = $1 WHERE (token = $2 OR link_token = $3) AND discord_id = $4", newLinkToken, req.Token, discordID)
 	}
 	
 	if err != nil {
