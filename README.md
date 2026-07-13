@@ -17,25 +17,28 @@ A Discord bot that integrates with the TorBox API, allowing you to manage torren
   - Direct downloads from supported hosters (Mega, Rapidgator, etc.)
   - Check available hosters
   
-- **Search**
-  - Search for movies, TV shows, and anime by title
-  - Search torrents directly
-  - Information about quality, subtitles, and cache status
+- **Search & Discovery**
+  - Advanced media search via TMDB and AniList for movies, TV shows, and anime
+  - AIOStreams integration for high-quality cached torrent discovery
+  - Search torrents directly with information about quality, subtitles, and cache status
   
+- **Cloud Exports & Integrations**
+  - Push completed files directly to **Google Drive, Dropbox, OneDrive, Gofile, 1Fichier, and PixelDrain**
+  - Built-in **FTP** push support
+  - Saves your personal bandwidth by moving files cloud-to-cloud directly from TorBox
+
 - **Management**
-  - List all active downloads
-  - Check detailed download status
-  - Support for multiple API keys with automatic fallback
+  - List all active downloads and check their detailed status
+  - Support for **multiple Torbox API keys** with automatic fallback & load balancing
   - Cache-only mode for instant downloads
 
-- **Web Dashboard** *(optional)*
+- **Web Dashboard & Extension** *(optional)*
+  - **Disbox Web Extension**: Control your downloads natively from your browser via our companion extension
   - Sign in with Discord OAuth2
-  - Add torrents and web downloads from a browser
-  - Browse download history
-  - Links open a built-in file browser with media viewer
-  - **Admin Dashboard**: Moderation tools, global download history, feature toggles (e.g. enable/disable Search Torrents), and interactive user profiles
-  - **Access Control**: Built-in Whitelist/Blacklist toggle system to restrict bot access to specific users
-  - **Settings**: Toggle public API access, set rate limits, and configure AIOStreams search
+  - Add torrents and web downloads via a clean UI
+  - **Admin Dashboard**: Moderation tools, global download history, feature toggles, and interactive user profiles
+  - **Access Control**: Built-in Whitelist/Blacklist system to restrict bot access
+  - **Settings**: Toggle public API access, set per-user data limits, and configure integrations
 
 - **Proxy & File Browser**
   - Persistent download links that survive server restarts
