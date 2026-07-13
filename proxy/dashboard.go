@@ -300,7 +300,7 @@ func (s *Server) handleApiHistory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := s.db.Query("SELECT token, link_token, name, type, created_at FROM download_history WHERE discord_id = $1 AND deleted = 0 ORDER BY created_at DESC", id)
+	rows, err := s.db.Query("SELECT token, link_token, name, type, created_at FROM download_history WHERE discord_id = $1 AND deleted = false ORDER BY created_at DESC", id)
 	if err != nil {
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
@@ -389,7 +389,7 @@ func (s *Server) handleApiAdminHistory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := s.db.Query("SELECT discord_id, discord_username, discord_avatar, token, link_token, name, type, created_at FROM download_history WHERE deleted = 0 ORDER BY created_at DESC")
+	rows, err := s.db.Query("SELECT discord_id, discord_username, discord_avatar, token, link_token, name, type, created_at FROM download_history WHERE deleted = false ORDER BY created_at DESC")
 	if err != nil {
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
@@ -796,7 +796,7 @@ func (s *Server) handleApiAdminUserProfile(w http.ResponseWriter, r *http.Reques
 	}
 
 	// 3. Get History and Metrics
-	rows, err := s.db.Query("SELECT token, name, type, size, created_at FROM download_history WHERE discord_id = $1 AND deleted = 0 ORDER BY created_at DESC", targetDiscordID)
+	rows, err := s.db.Query("SELECT token, name, type, size, created_at FROM download_history WHERE discord_id = $1 AND deleted = false ORDER BY created_at DESC", targetDiscordID)
 	if err != nil {
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return

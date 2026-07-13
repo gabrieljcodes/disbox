@@ -492,7 +492,7 @@ func (s *Server) handleV1History(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rows, err := s.db.Query(
-		"SELECT token, link_token, name, type, created_at FROM download_history WHERE discord_id = $1 AND deleted = 0 ORDER BY created_at DESC LIMIT 100",
+		"SELECT token, link_token, name, type, created_at FROM download_history WHERE discord_id = $1 AND deleted = false ORDER BY created_at DESC LIMIT 100",
 		discordID,
 	)
 	if err != nil {
@@ -614,7 +614,7 @@ func (s *Server) removeDownloadInternal(w http.ResponseWriter, token, discordID 
 		}
 	}
 
-	s.db.Exec("UPDATE download_history SET deleted = 1 WHERE token = $1 OR link_token = $2", token)
+	s.db.Exec("UPDATE download_history SET deleted = true WHERE token = $1 OR link_token = $2", token)
 	s.db.Exec("DELETE FROM download_links WHERE token = $1", token)
 
 	s.mu.Lock()
