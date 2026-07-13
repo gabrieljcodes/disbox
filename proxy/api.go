@@ -103,7 +103,7 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 			activeToken = item.LinkToken
 		}
 		result = append(result, HistoryItem{
-			Token:       item.Token,
+			Token:       activeToken,
 			LinkToken:   item.LinkToken,
 			Name:        item.Name,
 			Type:        item.Type,
@@ -1072,11 +1072,15 @@ func (s *Server) handleAdminHistory(w http.ResponseWriter, r *http.Request) {
 
 	var result []AdminHistoryItem
 	for _, item := range items {
+		activeToken := item.Token
+		if item.LinkToken != "" {
+			activeToken = item.LinkToken
+		}
 		result = append(result, AdminHistoryItem{
 			DiscordID:      item.DiscordID,
 			DiscordUsername: item.DiscordUsername,
 			DiscordAvatar:  item.DiscordAvatar,
-			Token:          item.Token,
+			Token:          activeToken,
 			LinkToken:      item.LinkToken,
 			Name:           item.Name,
 			Type:           item.Type,
