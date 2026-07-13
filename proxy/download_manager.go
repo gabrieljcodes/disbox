@@ -226,27 +226,22 @@ func (dm *DownloadManager) RefreshActiveCount() {
 					validIDs[fmt.Sprintf("webdl_%d", w.ID)] = true
 				}
 
-				rows, err := dm.server.db.Query("SELECT token, type, download_id FROM download_history WHERE client_index = $1 AND deleted = false", cIndex)
+				results, err := dm.server.store.GetNonDeletedHistory(cIndex)
 				if err != nil {
 					return
 				}
-				defer rows.Close()
 
 				var toDelete []string
-				for rows.Next() {
-					var token, dlType string
-					var downloadID int
-					if err := rows.Scan(&token, &dlType, &downloadID); err == nil {
-						key := fmt.Sprintf("%s_%d", dlType, downloadID)
-						if !validIDs[key] {
-							toDelete = append(toDelete, token)
-						}
+				for _, r := range results {
+					key := fmt.Sprintf("%s_%d", r.Type, r.DownloadID)
+					if !validIDs[key] {
+						toDelete = append(toDelete, r.Token)
 					}
 				}
 
 				for _, token := range toDelete {
-					dm.server.db.Exec("UPDATE download_history SET deleted = true WHERE token = $1", token)
-					dm.server.db.Exec("DELETE FROM download_links WHERE token = $1", token)
+					dm.server.store.MarkDeleted(token)
+					dm.server.store.DeleteDownloadLink(token)
 					
 					dm.server.mu.Lock()
 					delete(dm.server.downloads, token)
@@ -435,7 +430,7 @@ func (dm *DownloadManager) executeDownload(qd *QueuedDownload) error {
 		err = e
 		clientIndex = cIdx
 		if err == nil && !apiResp.Success {
-			err = fmt.Errorf(apiResp.Detail)
+			err = fmt.Errorf("%s", apiResp.Detail)
 		} else if err == nil {
 			data, _ := apiResp.Data.(map[string]interface{})
 			id, _ := data["torrent_id"].(float64)
@@ -450,7 +445,7 @@ func (dm *DownloadManager) executeDownload(qd *QueuedDownload) error {
 		err = e
 		clientIndex = cIdx
 		if err == nil && !apiResp.Success {
-			err = fmt.Errorf(apiResp.Detail)
+			err = fmt.Errorf("%s", apiResp.Detail)
 		} else if err == nil {
 			data, _ := apiResp.Data.(map[string]interface{})
 			id, _ := data["torrent_id"].(float64)
@@ -465,7 +460,7 @@ func (dm *DownloadManager) executeDownload(qd *QueuedDownload) error {
 		err = e
 		clientIndex = cIdx
 		if err == nil && !apiResp.Success {
-			err = fmt.Errorf(apiResp.Detail)
+			err = fmt.Errorf("%s", apiResp.Detail)
 		} else if err == nil {
 			data, _ := apiResp.Data.(map[string]interface{})
 			id, _ := data["webdownload_id"].(float64)

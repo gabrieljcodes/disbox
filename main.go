@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"log"
 	"os"
 	"os/signal"
@@ -9,6 +10,8 @@ import (
 	"torbox-discord-bot/config"
 	"torbox-discord-bot/proxy"
 	"torbox-discord-bot/torbox"
+	
+	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
 func main() {
@@ -24,7 +27,13 @@ func main() {
 		log.Fatalf("Failed to initialize Torbox client pool: %v", err)
 	}
 
-	proxyServer, err := proxy.NewServer(cfg.ProxyBaseURL, cfg.ProxyPort, cfg.DatabaseURL, torboxClientPool, cfg.DiscordClientID, cfg.DiscordClientSecret, cfg.DiscordBotToken, cfg.AdminUsers, cfg.CacheOnly, cfg.AdminAPIEnabled)
+	db, err := sql.Open("pgx", cfg.DatabaseURL)
+	if err != nil {
+		log.Fatalf("Failed to open database: %v", err)
+	}
+	defer db.Close()
+
+	proxyServer, err := proxy.NewServer(cfg, torboxClientPool, db)
 	if err != nil {
 		log.Fatalf("Failed to initialize proxy server: %v", err)
 	}

@@ -2,7 +2,6 @@ package proxy
 
 import (
 	"crypto/rand"
-	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -37,33 +36,6 @@ func jsonError(w http.ResponseWriter, status int, msg string) {
 	json.NewEncoder(w).Encode(apiResponse{Success: false, Error: msg})
 }
 
-// ─── API Token Auth ───
-
-// getAPIUser validates a Bearer token from the Authorization header
-// and returns the discord_id associated with it. Updates last_used_at.
-func (s *Server) getAPIUser(r *http.Request) (discordID string, ok bool) {
-	auth := r.Header.Get("Authorization")
-	if !strings.HasPrefix(auth, "Bearer ") {
-		return "", false
-	}
-	token := strings.TrimPrefix(auth, "Bearer ")
-	if token == "" {
-		return "", false
-	}
-
-	err := s.db.QueryRow("SELECT discord_id FROM api_tokens WHERE token = $1", token).Scan(&discordID)
-	if err != nil {
-		return "", false
-	}
-
-	// Update last_used_at in the background
-	go func() {
-		s.db.Exec("UPDATE api_tokens SET last_used_at = CURRENT_TIMESTAMP WHERE token = $1", token)
-	}()
-
-	return discordID, true
-}
-
 func generateAPIToken() string {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
@@ -72,242 +44,155 @@ func generateAPIToken() string {
 	return "dbx_" + hex.EncodeToString(b)
 }
 
-// ─── Token Management (session-authenticated, used by dashboard) ───
+// ─── Unified Handlers (session + token auth via resolveUser) ───
 
-func (s *Server) handleApiTokens(w http.ResponseWriter, r *http.Request) {
-	switch r.Method {
-	case http.MethodGet:
-		s.handleApiTokensList(w, r)
-	case http.MethodPost:
-		s.handleApiTokensCreate(w, r)
-	default:
-		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
-	}
-}
-
-func (s *Server) handleApiTokensList(w http.ResponseWriter, r *http.Request) {
-	discordID, _, _, ok := s.getSessionUser(r)
-	if !ok {
-		jsonError(w, http.StatusUnauthorized, "Unauthorized")
-		return
-	}
-
-	rows, err := s.db.Query(
-		"SELECT token, name, created_at, last_used_at FROM api_tokens WHERE discord_id = $1 ORDER BY created_at DESC",
-		discordID,
-	)
-	if err != nil {
-		jsonError(w, http.StatusInternalServerError, "Database error")
-		return
-	}
-	defer rows.Close()
-
-	type TokenInfo struct {
-		Token      string  `json:"token"`
-		Name       string  `json:"name"`
-		CreatedAt  string  `json:"created_at"`
-		LastUsedAt *string `json:"last_used_at"`
-	}
-
-	var tokens []TokenInfo
-	for rows.Next() {
-		var t TokenInfo
-		var lastUsed *string
-		if err := rows.Scan(&t.Token, &t.Name, &t.CreatedAt, &lastUsed); err == nil {
-			t.LastUsedAt = lastUsed
-			// Mask the token: show prefix + first 8 chars + ...
-			if len(t.Token) > 12 {
-				t.Token = t.Token[:12] + "..."
-			}
-			tokens = append(tokens, t)
-		}
-	}
-
-	if tokens == nil {
-		tokens = []TokenInfo{}
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(tokens)
-}
-
-func (s *Server) handleApiTokensCreate(w http.ResponseWriter, r *http.Request) {
-	discordID, _, _, ok := s.getSessionUser(r)
-	if !ok {
-		jsonError(w, http.StatusUnauthorized, "Unauthorized")
-		return
-	}
-
-	var req struct {
-		Name string `json:"name"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || strings.TrimSpace(req.Name) == "" {
-		jsonError(w, http.StatusBadRequest, "Token name is required")
-		return
-	}
-
-	name := strings.TrimSpace(req.Name)
-	if len(name) > 64 {
-		name = name[:64]
-	}
-
-	// Limit tokens per user
-	var count int
-	s.db.QueryRow("SELECT COUNT(*) FROM api_tokens WHERE discord_id = $1", discordID).Scan(&count)
-	if count >= 10 {
-		jsonError(w, http.StatusBadRequest, "Maximum of 10 API tokens per user")
-		return
-	}
-
-	token := generateAPIToken()
-	_, err := s.db.Exec(
-		"INSERT INTO api_tokens (token, discord_id, name) VALUES ($1, $2, $3)",
-		token, discordID, name,
-	)
-	if err != nil {
-		log.Printf("Failed to create API token: %v", err)
-		jsonError(w, http.StatusInternalServerError, "Failed to create token")
-		return
-	}
-
-	log.Printf("API token created for user %s: %s (%s)", discordID, name, token[:12]+"...")
-
-	// Return the FULL token — this is the only time it's shown
-	jsonOK(w, map[string]string{
-		"token": token,
-		"name":  name,
-	})
-}
-
-func (s *Server) handleApiTokenRevoke(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
-		return
-	}
-
-	discordID, _, _, ok := s.getSessionUser(r)
-	if !ok {
-		jsonError(w, http.StatusUnauthorized, "Unauthorized")
-		return
-	}
-
-	var req struct {
-		Token string `json:"token"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Token == "" {
-		jsonError(w, http.StatusBadRequest, "Token is required")
-		return
-	}
-
-	// Support revoking by masked token (prefix match) or full token
-	var result int64
-	if strings.HasSuffix(req.Token, "...") {
-		prefix := strings.TrimSuffix(req.Token, "...")
-		res, err := s.db.Exec("DELETE FROM api_tokens WHERE token LIKE $1 AND discord_id = $2", prefix+"%", discordID)
-		if err == nil {
-			result, _ = res.RowsAffected()
-		}
-	} else {
-		res, err := s.db.Exec("DELETE FROM api_tokens WHERE token = $1 AND discord_id = $2", req.Token, discordID)
-		if err == nil {
-			result, _ = res.RowsAffected()
-		}
-	}
-
-	if result == 0 {
-		jsonError(w, http.StatusNotFound, "Token not found")
-		return
-	}
-
-	log.Printf("API token revoked for user %s", discordID)
-	jsonOK(w, map[string]string{"message": "Token revoked"})
-}
-
-// ─── Public API v1 (token-authenticated) ───
-
-func (s *Server) checkV1PublicAccess(w http.ResponseWriter, r *http.Request) (string, bool) {
-	discordID, ok := s.getAPIUser(r)
-	if !ok {
-		jsonError(w, http.StatusUnauthorized, "Invalid or missing API token. Use Authorization: Bearer <token>")
-		return "", false
-	}
-
-	if s.IsAdmin(discordID) {
-		return discordID, true
-	}
-
-	if s.GetSetting("public_api_enabled", "true") != "true" {
-		jsonError(w, http.StatusForbidden, "Public API is currently disabled by administrators")
-		return "", false
-	}
-
-	if !s.CheckRateLimit(discordID) {
-		jsonError(w, http.StatusTooManyRequests, "Rate limit exceeded. Please wait before making another request.")
-		return "", false
-	}
-
-	return discordID, true
-}
-
-func (s *Server) handleV1Me(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
 
-	discordID, ok := s.checkV1PublicAccess(w, r)
+	discordID, ok := s.resolveUser(w, r)
 	if !ok {
 		return
 	}
 
-	// Look up user info from sessions or history
-	var username, avatar string
-	err := s.db.QueryRow("SELECT discord_username, discord_avatar FROM user_sessions WHERE discord_id = $1 LIMIT 1", discordID).
-		Scan(&username, &avatar)
-	if err != nil {
-		username = discordID
-		avatar = ""
-	}
+	username, avatar := s.getUserDetails(discordID)
 
-	jsonOK(w, map[string]string{
-		"id":         discordID,
-		"username":   username,
-		"avatar_url": avatar,
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"id":             discordID,
+		"username":       username,
+		"avatar_url":     avatar,
+		"is_admin":       s.IsAdmin(discordID),
+		"search_enabled": s.store.GetSetting("search_enabled", "true") == "true",
 	})
 }
 
+func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	discordID, ok := s.resolveUser(w, r)
+	if !ok {
+		return
+	}
+
+	items, err := s.store.GetUserHistory(discordID)
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, "Database error")
+		return
+	}
+
+	type HistoryItem struct {
+		Token       string `json:"token"`
+		LinkToken   string `json:"link_token"`
+		Name        string `json:"name"`
+		Type        string `json:"type"`
+		CreatedAt   string `json:"created_at"`
+		BrowseURL   string `json:"browse_url"`
+		DownloadURL string `json:"download_url"`
+	}
+
+	var result []HistoryItem
+	for _, item := range items {
+		activeToken := item.Token
+		if item.LinkToken != "" {
+			activeToken = item.LinkToken
+		}
+		result = append(result, HistoryItem{
+			Token:       item.Token,
+			LinkToken:   item.LinkToken,
+			Name:        item.Name,
+			Type:        item.Type,
+			CreatedAt:   item.CreatedAt,
+			BrowseURL:   fmt.Sprintf("%s/browse/%s", s.baseURL, activeToken),
+			DownloadURL: fmt.Sprintf("%s/dl/%s", s.baseURL, activeToken),
+		})
+	}
+	if result == nil {
+		result = []HistoryItem{}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(result)
+}
+
+func (s *Server) handleProgress(w http.ResponseWriter, r *http.Request) {
+	_, ok := s.resolveUser(w, r)
+	if !ok {
+		return
+	}
+
+	tokens := r.URL.Query().Get("tokens")
+	if tokens == "" {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{})
+		return
+	}
+
+	tokenList := strings.Split(tokens, ",")
+	results := make(map[string]interface{})
+
+	for _, token := range tokenList {
+		token = strings.TrimSpace(token)
+		if token == "" {
+			continue
+		}
+
+		s.mu.RLock()
+		entry, exists := s.downloads[token]
+		s.mu.RUnlock()
+
+		if !exists {
+			continue
+		}
+
+		cacheKey := fmt.Sprintf("%d_%s_%d", entry.ClientIndex, entry.Type, entry.ID)
+		prog, found := s.downloadManager.GetProgress(cacheKey)
+		if found {
+			results[token] = prog
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(results)
+}
+
 func (s *Server) checkGBLimit(discordID string) error {
-	limitStr := s.GetSetting("user_gb_limit", "0")
+	limitStr := s.store.GetSetting("user_gb_limit", "0")
 	if limitStr == "0" || limitStr == "" {
 		return nil
 	}
-	
+
 	if s.IsAdmin(discordID) {
 		return nil
 	}
-	
+
 	limitGB, err := strconv.ParseInt(limitStr, 10, 64)
 	if err != nil || limitGB <= 0 {
 		return nil
 	}
-	
+
 	limitBytes := limitGB * 1024 * 1024 * 1024
-	monthlyBytes := s.GetUserMonthlySize(discordID)
-	
+	monthlyBytes := s.store.GetUserMonthlySize(discordID)
+
 	if monthlyBytes >= limitBytes {
 		return fmt.Errorf("You have exceeded the maximum monthly download limit of %d GB set by the admin.", limitGB)
 	}
-	
+
 	return nil
 }
 
-func (s *Server) handleV1AddTorrent(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleAddTorrent(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
 
-	discordID, ok := s.checkV1PublicAccess(w, r)
+	discordID, ok := s.resolveUser(w, r)
 	if !ok {
 		return
 	}
@@ -325,16 +210,12 @@ func (s *Server) handleV1AddTorrent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var discordUsername, discordAvatar string
-	if errUser := s.db.QueryRow("SELECT discord_username, discord_avatar FROM user_sessions WHERE discord_id = $1 LIMIT 1", discordID).Scan(&discordUsername, &discordAvatar); errUser != nil {
-		discordUsername = "API User"
-		discordAvatar = ""
-	}
+	username, avatar := s.getUserDetails(discordID)
 
 	qd := &QueuedDownload{
 		DiscordID: discordID,
-		Username:  discordUsername,
-		Avatar:    discordAvatar,
+		Username:  username,
+		Avatar:    avatar,
 		Type:      "torrent",
 		Link:      req.Link,
 		CacheOnly: false,
@@ -354,13 +235,13 @@ func (s *Server) handleV1AddTorrent(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) handleV1AddTorrentFile(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleAddTorrentFile(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
 
-	discordID, ok := s.checkV1PublicAccess(w, r)
+	discordID, ok := s.resolveUser(w, r)
 	if !ok {
 		return
 	}
@@ -370,7 +251,6 @@ func (s *Server) handleV1AddTorrentFile(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Parse multipart form (max 10MB)
 	if err := r.ParseMultipartForm(10 << 20); err != nil {
 		jsonError(w, http.StatusBadRequest, "Failed to parse upload. Max file size is 10MB.")
 		return
@@ -383,34 +263,29 @@ func (s *Server) handleV1AddTorrentFile(w http.ResponseWriter, r *http.Request) 
 	}
 	defer file.Close()
 
-	// Validate file extension
 	fileName := header.Filename
 	if !strings.HasSuffix(strings.ToLower(fileName), ".torrent") {
 		jsonError(w, http.StatusBadRequest, "Only .torrent files are accepted")
 		return
 	}
 
-	// Read file data
 	fileData, err := io.ReadAll(file)
 	if err != nil {
 		jsonError(w, http.StatusInternalServerError, "Failed to read file")
 		return
 	}
 
-	var discordUsername, discordAvatar string
-	if errUser := s.db.QueryRow("SELECT discord_username, discord_avatar FROM user_sessions WHERE discord_id = $1 LIMIT 1", discordID).Scan(&discordUsername, &discordAvatar); errUser != nil {
-		discordUsername = "API User"
-		discordAvatar = ""
-	}
+	username, avatar := s.getUserDetails(discordID)
+	cacheOnly := s.store.GetSetting("cache_only", "false") == "true"
 
 	qd := &QueuedDownload{
 		DiscordID: discordID,
-		Username:  discordUsername,
-		Avatar:    discordAvatar,
+		Username:  username,
+		Avatar:    avatar,
 		Type:      "torrent_file",
 		FileData:  fileData,
 		FileName:  fileName,
-		CacheOnly: false,
+		CacheOnly: cacheOnly,
 	}
 
 	qd, err = s.downloadManager.Submit(qd)
@@ -427,13 +302,13 @@ func (s *Server) handleV1AddTorrentFile(w http.ResponseWriter, r *http.Request) 
 	})
 }
 
-func (s *Server) handleV1AddWebdl(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleAddWebdl(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
 
-	discordID, ok := s.checkV1PublicAccess(w, r)
+	discordID, ok := s.resolveUser(w, r)
 	if !ok {
 		return
 	}
@@ -451,16 +326,12 @@ func (s *Server) handleV1AddWebdl(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var discordUsername, discordAvatar string
-	if errUser := s.db.QueryRow("SELECT discord_username, discord_avatar FROM user_sessions WHERE discord_id = $1 LIMIT 1", discordID).Scan(&discordUsername, &discordAvatar); errUser != nil {
-		discordUsername = "API User"
-		discordAvatar = ""
-	}
+	username, avatar := s.getUserDetails(discordID)
 
 	qd := &QueuedDownload{
 		DiscordID: discordID,
-		Username:  discordUsername,
-		Avatar:    discordAvatar,
+		Username:  username,
+		Avatar:    avatar,
 		Type:      "webdl",
 		Link:      req.Link,
 		CacheOnly: false,
@@ -480,89 +351,13 @@ func (s *Server) handleV1AddWebdl(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) handleV1History(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
-		return
-	}
-
-	discordID, ok := s.checkV1PublicAccess(w, r)
-	if !ok {
-		return
-	}
-
-	rows, err := s.db.Query(
-		"SELECT token, link_token, name, type, created_at FROM download_history WHERE discord_id = $1 AND deleted = false ORDER BY created_at DESC LIMIT 100",
-		discordID,
-	)
-	if err != nil {
-		jsonError(w, http.StatusInternalServerError, "Database error")
-		return
-	}
-	defer rows.Close()
-
-	type HistoryItem struct {
-		Token       string `json:"token"`
-		LinkToken   string `json:"link_token"`
-		Name        string `json:"name"`
-		Type        string `json:"type"`
-		CreatedAt   string `json:"created_at"`
-		BrowseURL   string `json:"browse_url"`
-		DownloadURL string `json:"download_url"`
-	}
-
-	var items []HistoryItem
-	for rows.Next() {
-		var item HistoryItem
-		if err := rows.Scan(&item.Token, &item.LinkToken, &item.Name, &item.Type, &item.CreatedAt); err == nil {
-			activeToken := item.Token
-			if item.LinkToken != "" {
-				activeToken = item.LinkToken
-			}
-			item.BrowseURL = fmt.Sprintf("%s/browse/%s", s.baseURL, activeToken)
-			item.DownloadURL = fmt.Sprintf("%s/dl/%s", s.baseURL, activeToken)
-			items = append(items, item)
-		}
-	}
-
-	if items == nil {
-		items = []HistoryItem{}
-	}
-
-	jsonOK(w, items)
-}
-
-func (s *Server) handleApiRemoveDownload(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleRemoveDownload(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
 
-	discordID, _, _, ok := s.getSessionUser(r)
-	if !ok {
-		jsonError(w, http.StatusUnauthorized, "Unauthorized")
-		return
-	}
-	isAdmin := s.IsAdmin(discordID)
-
-	var req struct {
-		Token string `json:"token"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Token == "" {
-		jsonError(w, http.StatusBadRequest, "Invalid payload")
-		return
-	}
-
-	s.removeDownloadInternal(w, req.Token, discordID, isAdmin)
-}
-
-func (s *Server) handleV1RemoveDownload(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
-		return
-	}
-
-	discordID, ok := s.checkV1PublicAccess(w, r)
+	discordID, ok := s.resolveUser(w, r)
 	if !ok {
 		return
 	}
@@ -576,97 +371,577 @@ func (s *Server) handleV1RemoveDownload(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	s.removeDownloadInternal(w, req.Token, discordID, isAdmin)
-}
-
-func (s *Server) removeDownloadInternal(w http.ResponseWriter, token, discordID string, isAdmin bool) {
-	var dlType string
-	var downloadID int
-	var clientIndex int
-
-	var err error
-	if isAdmin {
-		err = s.db.QueryRow("SELECT type, download_id, client_index FROM download_history WHERE token = $1 OR link_token = $2", token, token).Scan(&dlType, &downloadID, &clientIndex)
-	} else {
-		err = s.db.QueryRow("SELECT type, download_id, client_index FROM download_history WHERE (token = $1 OR link_token = $2) AND discord_id = $3", token, token, discordID).Scan(&dlType, &downloadID, &clientIndex)
-	}
+	dlType, downloadID, clientIndex, err := s.store.FindDownloadForRemoval(req.Token, discordID, isAdmin)
 	if err != nil {
 		jsonError(w, http.StatusNotFound, "Download not found or you don't have permission")
 		return
 	}
 
-	if s.GetSetting("remove_from_torbox_on_delete", "true") == "true" {
-		client := s.clientPool.GetClient(clientIndex)
-		var apiErr error
-		var resp *torbox.APIResponse
-		if dlType == "torrent" {
-			resp, apiErr = client.ControlTorrent(downloadID, "delete", false)
-		} else if dlType == "webdl" {
-			resp, apiErr = client.ControlWebDownload(downloadID, "delete", false)
-		}
-
-		if apiErr != nil {
-			log.Printf("Failed to delete %s %d from TorBox: %v", dlType, downloadID, apiErr)
-			// We still proceed to remove it locally even if TorBox deletion fails,
-			// or maybe we shouldn't? Usually, user wants it gone from their list.
-		} else if resp != nil && !resp.Success {
-			log.Printf("Failed to delete %s %d from TorBox: %s", dlType, downloadID, resp.Detail)
+	if s.store.GetSetting("remove_from_torbox_on_delete", "true") == "true" {
+		adapter := s.getAdapterForType(dlType, clientIndex)
+		if adapter != nil {
+			resp, apiErr := adapter.Control(downloadID, "delete", false)
+			if apiErr != nil {
+				log.Printf("Failed to delete %s %d from TorBox: %v", dlType, downloadID, apiErr)
+			} else if resp != nil && !resp.Success {
+				log.Printf("Failed to delete %s %d from TorBox: %s", dlType, downloadID, resp.Detail)
+			}
 		}
 	}
 
-	s.db.Exec("UPDATE download_history SET deleted = true WHERE token = $1 OR link_token = $2", token, token)
-	s.db.Exec("DELETE FROM download_links WHERE token = $1", token)
+	s.store.MarkDeleted(req.Token)
+	s.store.DeleteDownloadLink(req.Token)
 
 	s.mu.Lock()
-	delete(s.downloads, token)
+	delete(s.downloads, req.Token)
 	s.mu.Unlock()
 
 	jsonOK(w, map[string]string{"message": "Download removed"})
 }
 
-func (s *Server) checkV1Admin(w http.ResponseWriter, r *http.Request) (string, bool) {
-	if !s.adminAPIEnabled {
-		jsonError(w, http.StatusForbidden, "Admin API is currently disabled by configuration")
-		return "", false
-	}
-	discordID, ok := s.getAPIUser(r)
-	if !ok || !s.IsAdmin(discordID) {
-		jsonError(w, http.StatusUnauthorized, "Unauthorized or not an admin")
-		return "", false
-	}
-	return discordID, true
-}
-
-func (s *Server) handleApiMagnetToFile(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleRegenerate(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
 
-	_, _, _, ok := s.getSessionUser(r)
+	discordID, ok := s.resolveUser(w, r)
 	if !ok {
-		jsonError(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+	isAdmin := s.IsAdmin(discordID)
+
+	var req struct {
+		Token string `json:"token"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Token == "" {
+		jsonError(w, http.StatusBadRequest, "Invalid payload")
 		return
 	}
 
-	s.magnetToFileInternal(w, r)
+	downloadType, oldLinkToken, downloadID, clientIndex, err := s.store.FindDownloadForRegenerate(req.Token, discordID, isAdmin)
+	if err != nil {
+		jsonError(w, http.StatusNotFound, "File not found or you don't have permission")
+		return
+	}
+
+	newLinkToken := generateToken()
+
+	if err := s.store.RegenerateLink(oldLinkToken, newLinkToken, downloadType, downloadID, clientIndex, req.Token, discordID, isAdmin); err != nil {
+		jsonError(w, http.StatusInternalServerError, "Failed to regenerate link")
+		return
+	}
+
+	s.mu.Lock()
+	delete(s.downloads, oldLinkToken)
+	s.downloads[newLinkToken] = &DownloadEntry{
+		Type:        downloadType,
+		ID:          downloadID,
+		ClientIndex: clientIndex,
+	}
+	s.mu.Unlock()
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success":        true,
+		"new_link_token": newLinkToken,
+	})
 }
 
-func (s *Server) handleV1MagnetToFile(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleQueueStatus(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	_, ok := s.resolveUser(w, r)
+	if !ok {
+		return
+	}
+
+	status := s.downloadManager.Status()
+	jsonOK(w, map[string]interface{}{
+		"total_capacity":           status.TotalCapacity,
+		"active_jobs":              status.ActiveJobs,
+		"queued_jobs":              status.QueuedJobs,
+		"available_slots":          status.TotalCapacity - status.ActiveJobs,
+		"global_bandwidth_limit":   status.GlobalBandwidthLimit,
+		"global_bandwidth_used":    status.GlobalBandwidthUsed,
+	})
+}
+
+// ─── Tokens ───
+
+func (s *Server) handleTokens(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		s.handleTokensList(w, r)
+	case http.MethodPost:
+		s.handleTokensCreate(w, r)
+	default:
+		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+	}
+}
+
+func (s *Server) handleTokensList(w http.ResponseWriter, r *http.Request) {
+	discordID, ok := s.resolveUser(w, r)
+	if !ok {
+		return
+	}
+
+	tokens, err := s.store.ListAPITokens(discordID)
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, "Database error")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(tokens)
+}
+
+func (s *Server) handleTokensCreate(w http.ResponseWriter, r *http.Request) {
+	discordID, ok := s.resolveUser(w, r)
+	if !ok {
+		return
+	}
+
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || strings.TrimSpace(req.Name) == "" {
+		jsonError(w, http.StatusBadRequest, "Token name is required")
+		return
+	}
+
+	name := strings.TrimSpace(req.Name)
+	if len(name) > 64 {
+		name = name[:64]
+	}
+
+	if s.store.CountAPITokens(discordID) >= 10 {
+		jsonError(w, http.StatusBadRequest, "Maximum of 10 API tokens per user")
+		return
+	}
+
+	token := generateAPIToken()
+	if err := s.store.CreateAPIToken(token, discordID, name); err != nil {
+		log.Printf("Failed to create API token: %v", err)
+		jsonError(w, http.StatusInternalServerError, "Failed to create token")
+		return
+	}
+
+	log.Printf("API token created for user %s: %s (%s)", discordID, name, token[:12]+"...")
+
+	jsonOK(w, map[string]string{
+		"token": token,
+		"name":  name,
+	})
+}
+
+func (s *Server) handleTokenRevoke(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
 
-	_, ok := s.checkV1PublicAccess(w, r)
+	discordID, ok := s.resolveUser(w, r)
 	if !ok {
 		return
 	}
 
-	s.magnetToFileInternal(w, r)
+	var req struct {
+		Token string `json:"token"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Token == "" {
+		jsonError(w, http.StatusBadRequest, "Token is required")
+		return
+	}
+
+	isMasked := strings.HasSuffix(req.Token, "...")
+	result, err := s.store.RevokeAPIToken(req.Token, discordID, isMasked)
+	if err != nil || result == 0 {
+		jsonError(w, http.StatusNotFound, "Token not found")
+		return
+	}
+
+	log.Printf("API token revoked for user %s", discordID)
+	jsonOK(w, map[string]string{"message": "Token revoked"})
 }
 
-func (s *Server) magnetToFileInternal(w http.ResponseWriter, r *http.Request) {
+// ─── User Profile & FTP ───
+
+func (s *Server) handleUserProfile(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	discordID, ok := s.resolveUser(w, r)
+	if !ok {
+		return
+	}
+
+	total := s.store.GetUserTotalSize(discordID)
+	monthly := s.store.GetUserMonthlySize(discordID)
+
+	host, username, password, _ := s.store.GetFTPConfig(discordID)
+
+	jsonOK(w, map[string]interface{}{
+		"total_downloaded":   total,
+		"monthly_downloaded": monthly,
+		"ftp_host":           host,
+		"ftp_username":       username,
+		"has_ftp_password":   password != "",
+	})
+}
+
+func (s *Server) handleUserFtp(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	discordID, ok := s.resolveUser(w, r)
+	if !ok {
+		return
+	}
+
+	var req struct {
+		Host     string `json:"host"`
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, http.StatusBadRequest, "Invalid JSON")
+		return
+	}
+
+	if req.Password == "" {
+		_, _, existingPassword, _ := s.store.GetFTPConfig(discordID)
+		req.Password = existingPassword
+	}
+
+	if err := s.store.SaveFTPConfig(discordID, req.Host, req.Username, req.Password); err != nil {
+		jsonError(w, http.StatusInternalServerError, "Failed to save FTP config")
+		return
+	}
+
+	jsonOK(w, map[string]string{"message": "FTP settings saved"})
+}
+
+func (s *Server) handleFtpSend(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	discordID, ok := s.resolveUser(w, r)
+	if !ok {
+		return
+	}
+
+	var req struct {
+		Token  string `json:"token"`
+		FileID *int   `json:"file_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, http.StatusBadRequest, "Invalid JSON")
+		return
+	}
+
+	dlType, name, downloadID, clientIndex, err := s.store.FindDownloadForFTP(req.Token, discordID)
+	if err != nil {
+		jsonError(w, http.StatusNotFound, "Download not found")
+		return
+	}
+
+	host, username, password, err := s.store.GetFTPConfig(discordID)
+	if err != nil || host == "" {
+		jsonError(w, http.StatusBadRequest, "FTP is not configured")
+		return
+	}
+
+	fileID := -1
+	if req.FileID != nil {
+		fileID = *req.FileID
+	}
+
+	go s.uploadToFTP(host, username, password, dlType, downloadID, clientIndex, name, fileID)
+
+	jsonOK(w, map[string]string{"message": "FTP upload started in background"})
+}
+
+func (s *Server) uploadToFTP(host, username, password, dlType string, downloadID, clientIndex int, filename string, fileID int) {
+	adapter := s.getAdapterForType(dlType, clientIndex)
+	if adapter == nil {
+		log.Printf("FTP Upload failed: unknown download type %s", dlType)
+		return
+	}
+
+	downloadURL, err := adapter.RequestURL(downloadID, fileID)
+	if err != nil {
+		log.Printf("FTP Upload failed to get URL: %v", err)
+		return
+	}
+
+	resp, err := http.Get(downloadURL)
+	if err != nil {
+		log.Printf("FTP Upload failed to fetch file: %v", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	if !strings.Contains(host, ":") {
+		host += ":21"
+	}
+
+	c, err := ftp.Dial(host, ftp.DialWithTimeout(5*time.Second))
+	if err != nil {
+		log.Printf("FTP Upload failed to connect: %v", err)
+		return
+	}
+	defer c.Quit()
+
+	if err := c.Login(username, password); err != nil {
+		log.Printf("FTP Upload failed to login: %v", err)
+		return
+	}
+
+	if err := c.Stor(filename, resp.Body); err != nil {
+		log.Printf("FTP Upload failed to store file: %v", err)
+		return
+	}
+
+	log.Printf("FTP Upload successful: %s sent to %s", filename, host)
+}
+
+// ─── Hosters ───
+
+func (s *Server) getAggregatedHosters() ([]torbox.HosterInfo, error) {
+	pool := s.clientPool
+	aggregated := make(map[int]*torbox.HosterInfo)
+
+	for i := 0; i < pool.GetClientCount(); i++ {
+		client := pool.GetClient(i)
+		hosters, err := client.GetHosters()
+		if err != nil {
+			log.Printf("Failed to fetch hosters from client %d: %v", i, err)
+			continue
+		}
+		for _, h := range hosters {
+			if existing, ok := aggregated[h.ID]; ok {
+				if existing.DailyLinkLimit == 0 || h.DailyLinkLimit == 0 {
+					existing.DailyLinkLimit = 0
+				} else {
+					existing.DailyLinkLimit += h.DailyLinkLimit
+				}
+				if existing.DailyBandwidthLimit == 0 || h.DailyBandwidthLimit == 0 {
+					existing.DailyBandwidthLimit = 0
+				} else {
+					existing.DailyBandwidthLimit += h.DailyBandwidthLimit
+				}
+				existing.DailyLinkUsed += h.DailyLinkUsed
+				existing.DailyBandwidthUsed += h.DailyBandwidthUsed
+				if h.Status {
+					existing.Status = true
+				}
+			} else {
+				clone := h
+				aggregated[h.ID] = &clone
+			}
+		}
+	}
+
+	if len(aggregated) == 0 {
+		return nil, fmt.Errorf("could not fetch hosters from any TorBox client")
+	}
+
+	var result []torbox.HosterInfo
+	for _, h := range aggregated {
+		result = append(result, *h)
+	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].ID < result[j].ID
+	})
+	return result, nil
+}
+
+func (s *Server) handleHosters(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	_, ok := s.resolveUser(w, r)
+	if !ok {
+		return
+	}
+
+	hosters, err := s.getAggregatedHosters()
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	jsonOK(w, hosters)
+}
+
+// ─── Cloud Config ───
+
+func (s *Server) handleUserCloud(w http.ResponseWriter, r *http.Request) {
+	discordID, ok := s.resolveUser(w, r)
+	if !ok {
+		return
+	}
+
+	if r.Method == http.MethodGet {
+		config, err := s.store.GetCloudConfig(discordID)
+		if err != nil {
+			jsonError(w, http.StatusInternalServerError, "Database error")
+			return
+		}
+		jsonOK(w, map[string]string{
+			"google":     config.Google,
+			"dropbox":    config.Dropbox,
+			"onedrive":   config.OneDrive,
+			"gofile":     config.Gofile,
+			"onefichier": config.Onefichier,
+			"pixeldrain": config.Pixeldrain,
+		})
+		return
+	}
+
+	if r.Method == http.MethodPost {
+		var req CloudConfig
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			jsonError(w, http.StatusBadRequest, "Invalid JSON")
+			return
+		}
+
+		existing, _ := s.store.GetCloudConfig(discordID)
+		if req.Google == "" { req.Google = existing.Google }
+		if req.Dropbox == "" { req.Dropbox = existing.Dropbox }
+		if req.OneDrive == "" { req.OneDrive = existing.OneDrive }
+		if req.Gofile == "" { req.Gofile = existing.Gofile }
+		if req.Onefichier == "" { req.Onefichier = existing.Onefichier }
+		if req.Pixeldrain == "" { req.Pixeldrain = existing.Pixeldrain }
+
+		if err := s.store.SaveCloudConfig(discordID, req); err != nil {
+			jsonError(w, http.StatusInternalServerError, "Failed to save cloud config")
+			return
+		}
+
+		jsonOK(w, map[string]string{"message": "Cloud configurations updated"})
+		return
+	}
+
+	jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+}
+
+func (s *Server) handleIntegration(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	discordID, ok := s.resolveUser(w, r)
+	if !ok {
+		return
+	}
+
+	provider := strings.TrimPrefix(r.URL.Path, "/v1/integration/")
+	if provider == "" || strings.Contains(provider, "/") {
+		jsonError(w, http.StatusBadRequest, "Invalid provider")
+		return
+	}
+
+	validProviders := map[string]string{
+		"googledrive": "google_token",
+		"dropbox":     "dropbox_token",
+		"onedrive":    "onedrive_token",
+		"gofile":      "gofile_token",
+		"1fichier":    "onefichier_token",
+		"pixeldrain":  "pixeldrain_token",
+	}
+
+	dbField, valid := validProviders[provider]
+	if !valid {
+		jsonError(w, http.StatusBadRequest, "Unsupported provider")
+		return
+	}
+
+	token, err := s.store.GetCloudProviderToken(discordID, dbField)
+	if err != nil || token == "" {
+		jsonError(w, http.StatusForbidden, "API token for this provider is not configured. Please set it in your Profile.")
+		return
+	}
+
+	var req map[string]interface{}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, http.StatusBadRequest, "Invalid JSON")
+		return
+	}
+
+	req[dbField] = token
+
+	historyToken, _ := req["token"].(string)
+	if historyToken == "" {
+		jsonError(w, http.StatusBadRequest, "token is required")
+		return
+	}
+
+	dlType, downloadID, clientIndex, err := s.store.FindDownloadForExport(historyToken, discordID)
+	if err != nil {
+		jsonError(w, http.StatusNotFound, "Download not found")
+		return
+	}
+
+	req["id"] = downloadID
+	if dlType == "webdl" {
+		req["type"] = "webdownload"
+	} else {
+		req["type"] = dlType
+	}
+	delete(req, "token")
+
+	if _, ok := req["zip"]; !ok {
+		req["zip"] = false
+	}
+	if _, ok := req["file_id"]; !ok {
+		req["file_id"] = 0
+	}
+
+	client := s.clientPool.GetClient(clientIndex)
+	resp, err := client.UploadToCloud(provider, req)
+	if err != nil {
+		log.Printf("[Cloud] Request to Torbox failed: %v", err)
+		jsonError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	if !resp.Success {
+		log.Printf("[Cloud] Torbox rejected %s upload: %s (error: %s)", provider, resp.Detail, resp.Error)
+	} else {
+		log.Printf("[Cloud] Successfully requested %s upload", provider)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}
+
+// ─── Magnet / Export ───
+
+func (s *Server) handleMagnetToFile(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	_, ok := s.resolveUser(w, r)
+	if !ok {
+		return
+	}
+
 	var req struct {
 		Magnet string `json:"magnet"`
 	}
@@ -699,36 +974,17 @@ func (s *Server) magnetToFileInternal(w http.ResponseWriter, r *http.Request) {
 	io.Copy(w, resp.Body)
 }
 
-func (s *Server) handleApiExportData(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleExportData(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
 
-	discordID, _, _, ok := s.getSessionUser(r)
-	if !ok {
-		jsonError(w, http.StatusUnauthorized, "Unauthorized")
-		return
-	}
-
-	s.exportDataInternal(w, r, discordID)
-}
-
-func (s *Server) handleV1ExportData(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
-		return
-	}
-
-	discordID, ok := s.checkV1PublicAccess(w, r)
+	discordID, ok := s.resolveUser(w, r)
 	if !ok {
 		return
 	}
 
-	s.exportDataInternal(w, r, discordID)
-}
-
-func (s *Server) exportDataInternal(w http.ResponseWriter, r *http.Request, discordID string) {
 	token := r.URL.Query().Get("token")
 	exportType := r.URL.Query().Get("type")
 
@@ -737,11 +993,7 @@ func (s *Server) exportDataInternal(w http.ResponseWriter, r *http.Request, disc
 		return
 	}
 
-	var dlType string
-	var downloadID int
-	var clientIndex int
-
-	err := s.db.QueryRow("SELECT type, download_id, client_index FROM download_history WHERE (token = $1 OR link_token = $2) AND discord_id = $3", token, token, discordID).Scan(&dlType, &downloadID, &clientIndex)
+	dlType, downloadID, clientIndex, err := s.store.FindDownloadForExport(token, discordID)
 	if err != nil {
 		jsonError(w, http.StatusNotFound, "Download not found or you don't have permission")
 		return
@@ -753,9 +1005,6 @@ func (s *Server) exportDataInternal(w http.ResponseWriter, r *http.Request, disc
 	}
 
 	client := s.clientPool.GetClient(clientIndex)
-	
-	// Since TorBox's native ExportData fails with `null` for cached torrents,
-	// we will manually construct the magnet or use MagnetToFile endpoint instead.
 	info, err := client.GetTorrentInfo(downloadID)
 	if err != nil {
 		jsonError(w, http.StatusInternalServerError, "Failed to fetch torrent info")
@@ -778,7 +1027,6 @@ func (s *Server) exportDataInternal(w http.ResponseWriter, r *http.Request, disc
 		return
 	}
 
-	// For type=file, TorBox's MagnetToFile returns the `.torrent` binary directly.
 	resp, err := client.MagnetToFile(magnet)
 	if err != nil {
 		jsonError(w, http.StatusInternalServerError, "Failed to communicate with TorBox API")
@@ -797,43 +1045,66 @@ func (s *Server) exportDataInternal(w http.ResponseWriter, r *http.Request, disc
 	io.Copy(w, resp.Body)
 }
 
-func (s *Server) handleV1AdminAccessGet(w http.ResponseWriter, r *http.Request) {
+// ─── Admin Handlers ───
+
+func (s *Server) handleAdminHistory(w http.ResponseWriter, r *http.Request) {
+	_, ok := s.resolveAdmin(w, r)
+	if !ok {
+		return
+	}
+
+	items, err := s.store.GetAdminHistory()
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, "Database error")
+		return
+	}
+
+	type AdminHistoryItem struct {
+		DiscordID       string `json:"discord_id"`
+		DiscordUsername  string `json:"discord_username"`
+		DiscordAvatar   string `json:"discord_avatar"`
+		Token           string `json:"token"`
+		LinkToken       string `json:"link_token"`
+		Name            string `json:"name"`
+		Type            string `json:"type"`
+		CreatedAt       string `json:"created_at"`
+	}
+
+	var result []AdminHistoryItem
+	for _, item := range items {
+		result = append(result, AdminHistoryItem{
+			DiscordID:      item.DiscordID,
+			DiscordUsername: item.DiscordUsername,
+			DiscordAvatar:  item.DiscordAvatar,
+			Token:          item.Token,
+			LinkToken:      item.LinkToken,
+			Name:           item.Name,
+			Type:           item.Type,
+			CreatedAt:      item.CreatedAt,
+		})
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(result)
+}
+
+func (s *Server) handleAdminAccessGet(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
 
-	if _, ok := s.checkV1Admin(w, r); !ok {
+	_, ok := s.resolveAdmin(w, r)
+	if !ok {
 		return
 	}
 
-	var whitelistEnabled, blacklistEnabled string
-	s.db.QueryRow("SELECT value FROM access_settings WHERE key = 'whitelist_enabled'").Scan(&whitelistEnabled)
-	s.db.QueryRow("SELECT value FROM access_settings WHERE key = 'blacklist_enabled'").Scan(&blacklistEnabled)
+	whitelistEnabled, blacklistEnabled := s.store.GetAccessSettings()
 
-	type AccessUser struct {
-		DiscordID string `json:"discord_id"`
-		Type      string `json:"type"`
-		AddedBy   string `json:"added_by"`
-		AddedAt   string `json:"added_at"`
-	}
-
-	rows, err := s.db.Query("SELECT discord_id, type, added_by, added_at FROM access_list ORDER BY added_at DESC")
+	users, err := s.store.ListAccessUsers()
 	if err != nil {
 		jsonError(w, http.StatusInternalServerError, "Database error")
 		return
-	}
-	defer rows.Close()
-
-	var users []AccessUser
-	for rows.Next() {
-		var u AccessUser
-		if err := rows.Scan(&u.DiscordID, &u.Type, &u.AddedBy, &u.AddedAt); err == nil {
-			users = append(users, u)
-		}
-	}
-	if users == nil {
-		users = []AccessUser{}
 	}
 
 	jsonOK(w, map[string]interface{}{
@@ -843,13 +1114,14 @@ func (s *Server) handleV1AdminAccessGet(w http.ResponseWriter, r *http.Request) 
 	})
 }
 
-func (s *Server) handleV1AdminAccessCheck(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleAdminAccessCheck(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
 
-	if _, ok := s.checkV1Admin(w, r); !ok {
+	_, ok := s.resolveAdmin(w, r)
+	if !ok {
 		return
 	}
 
@@ -859,53 +1131,91 @@ func (s *Server) handleV1AdminAccessCheck(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	var accessType string
-	err := s.db.QueryRow("SELECT type FROM access_list WHERE discord_id = $1", targetID).Scan(&accessType)
-	if err == sql.ErrNoRows {
-		jsonOK(w, map[string]interface{}{
-			"discord_id": targetID,
-			"status": "none",
-		})
-		return
-	} else if err != nil {
-		jsonError(w, http.StatusInternalServerError, "Database error")
-		return
-	}
-
+	accessType := s.store.GetAccessType(targetID)
 	jsonOK(w, map[string]interface{}{
 		"discord_id": targetID,
-		"status": accessType,
+		"status":     accessType,
 	})
 }
 
-func (s *Server) handleV1AdminAccessAdd(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleAdminAccessToggle(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
 
-	adminID, ok := s.checkV1Admin(w, r)
+	_, ok := s.resolveAdmin(w, r)
+	if !ok {
+		return
+	}
+
+	var req struct {
+		ListType string `json:"list_type"`
+		Enabled  bool   `json:"enabled"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || (req.ListType != "whitelist" && req.ListType != "blacklist") {
+		jsonError(w, http.StatusBadRequest, "Invalid payload. Required: list_type, enabled")
+		return
+	}
+
+	s.store.ToggleAccessList(req.ListType, req.Enabled)
+	val := "false"
+	if req.Enabled {
+		val = "true"
+	}
+	jsonOK(w, map[string]string{"message": req.ListType + " set to " + val})
+}
+
+func (s *Server) handleAdminAccessAdd(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	adminID, ok := s.resolveAdmin(w, r)
 	if !ok {
 		return
 	}
 
 	var req struct {
 		DiscordID string `json:"discord_id"`
-		Type      string `json:"type"` // "whitelist" or "blacklist"
+		Type      string `json:"type"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.DiscordID == "" || (req.Type != "whitelist" && req.Type != "blacklist") {
 		jsonError(w, http.StatusBadRequest, "Invalid payload. Required: discord_id, type (whitelist or blacklist)")
 		return
 	}
 
-	var adminName string
-	s.db.QueryRow("SELECT discord_username FROM user_sessions WHERE discord_id = $1 ORDER BY created_at DESC LIMIT 1", adminID).Scan(&adminName)
-	if adminName == "" {
-		adminName = "API Admin"
+	adminName, _ := s.getUserDetails(adminID)
+
+	// Fetch target user details from Discord
+	targetUsername := ""
+	targetAvatar := ""
+	if s.discordBotToken != "" {
+		reqUser, err := http.NewRequest("GET", "https://discord.com/api/v10/users/"+req.DiscordID, nil)
+		if err == nil {
+			reqUser.Header.Set("Authorization", "Bot "+s.discordBotToken)
+			client := &http.Client{Timeout: 5 * time.Second}
+			respUser, err := client.Do(reqUser)
+			if err == nil {
+				defer respUser.Body.Close()
+				if respUser.StatusCode == http.StatusOK {
+					var userRes struct {
+						Username string `json:"username"`
+						Avatar   string `json:"avatar"`
+					}
+					if err := json.NewDecoder(respUser.Body).Decode(&userRes); err == nil {
+						targetUsername = userRes.Username
+						if userRes.Avatar != "" {
+							targetAvatar = fmt.Sprintf("https://cdn.discordapp.com/avatars/%s/%s.png", req.DiscordID, userRes.Avatar)
+						}
+					}
+				}
+			}
+		}
 	}
 
-	_, err := s.db.Exec("INSERT INTO access_list (discord_id, type, added_by) VALUES ($1, $2, $3) ON CONFLICT(discord_id) DO UPDATE SET type = $4, added_by = $5", req.DiscordID, req.Type, adminName, req.Type, adminName)
-	if err != nil {
+	if err := s.store.AddToAccessList(req.DiscordID, targetUsername, targetAvatar, req.Type, adminName); err != nil {
 		jsonError(w, http.StatusInternalServerError, "Database error")
 		return
 	}
@@ -913,13 +1223,14 @@ func (s *Server) handleV1AdminAccessAdd(w http.ResponseWriter, r *http.Request) 
 	jsonOK(w, map[string]string{"message": "User added to " + req.Type})
 }
 
-func (s *Server) handleV1AdminAccessRemove(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleAdminAccessRemove(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
 
-	if _, ok := s.checkV1Admin(w, r); !ok {
+	_, ok := s.resolveAdmin(w, r)
+	if !ok {
 		return
 	}
 
@@ -931,904 +1242,173 @@ func (s *Server) handleV1AdminAccessRemove(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	s.db.Exec("DELETE FROM access_list WHERE discord_id = $1", req.DiscordID)
-
+	s.store.RemoveFromAccessList(req.DiscordID)
 	jsonOK(w, map[string]string{"message": "User removed from access list"})
 }
 
-func (s *Server) handleV1AdminAccessToggle(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
+func (s *Server) handleAdminUserProfile(w http.ResponseWriter, r *http.Request) {
+	_, ok := s.resolveAdmin(w, r)
+	if !ok {
+		return
+	}
+
+	targetDiscordID := r.URL.Query().Get("discord_id")
+	if targetDiscordID == "" {
+		jsonError(w, http.StatusBadRequest, "Missing discord_id")
+		return
+	}
+
+	accessType := s.store.GetAccessType(targetDiscordID)
+	username, avatar := s.store.GetUserProfile(targetDiscordID)
+	history, totalSize, totalDownloads, err := s.store.GetAdminUserHistory(targetDiscordID)
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, "Database error")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"discord_id":       targetDiscordID,
+		"discord_username": username,
+		"discord_avatar":   avatar,
+		"access_type":      accessType,
+		"total_downloads":  totalDownloads,
+		"total_size":       totalSize,
+		"monthly_size":     s.store.GetUserMonthlySize(targetDiscordID),
+		"history":          history,
+	})
+}
+
+// ─── Admin Settings ───
+
+func (s *Server) handleAdminSettingsGet(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
 		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
 
-	if _, ok := s.checkV1Admin(w, r); !ok {
+	_, ok := s.resolveAdmin(w, r)
+	if !ok {
 		return
 	}
 
-	var req struct {
-		ListType string `json:"list_type"` // "whitelist" or "blacklist"
-		Enabled  bool   `json:"enabled"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || (req.ListType != "whitelist" && req.ListType != "blacklist") {
-		jsonError(w, http.StatusBadRequest, "Invalid payload. Required: list_type, enabled")
-		return
-	}
-
-	key := "whitelist_enabled"
-	if req.ListType == "blacklist" {
-		key = "blacklist_enabled"
-	}
-
-	val := "false"
-	if req.Enabled {
-		val = "true"
-	}
-
-	s.db.Exec("INSERT INTO access_settings (key, value) VALUES ($1, $2) ON CONFLICT(key) DO UPDATE SET value = $3", key, val, val)
-	
-	if req.Enabled {
-		otherKey := "blacklist_enabled"
-		if req.ListType == "blacklist" {
-			otherKey = "whitelist_enabled"
+	keys := s.clientPool.GetKeys()
+	maskedKeys := make([]string, len(keys))
+	for i, k := range keys {
+		if len(k) > 8 {
+			maskedKeys[i] = k[:4] + "..." + k[len(k)-4:]
+		} else {
+			maskedKeys[i] = "..."
 		}
-		s.db.Exec("INSERT INTO access_settings (key, value) VALUES ($1, 'false') ON CONFLICT(key) DO UPDATE SET value = 'false'", otherKey)
 	}
 
-	jsonOK(w, map[string]string{"message": req.ListType + " set to " + val})
-}
-
-func (s *Server) handleApiQueueStatus(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
-		return
-	}
-
-	discordID, _, _, ok := s.getSessionUser(r)
-	if !ok {
-		jsonError(w, http.StatusUnauthorized, "Unauthorized")
-		return
-	}
-	
-	s.serveQueueStatus(w, discordID)
-}
-
-func (s *Server) handleV1QueueStatus(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
-		return
-	}
-
-	discordID, ok := s.checkV1PublicAccess(w, r)
-	if !ok {
-		return
-	}
-	
-	s.serveQueueStatus(w, discordID)
-}
-
-func (s *Server) serveQueueStatus(w http.ResponseWriter, discordID string) {
-	status := s.downloadManager.Status()
-	
-	// Format for the frontend/API
 	jsonOK(w, map[string]interface{}{
-		"total_capacity": status.TotalCapacity,
-		"active_jobs":    status.ActiveJobs,
-		"queued_jobs":    status.QueuedJobs,
-		"available_slots": status.TotalCapacity - status.ActiveJobs,
-		"global_bandwidth_limit": status.GlobalBandwidthLimit,
-		"global_bandwidth_used":  status.GlobalBandwidthUsed,
+		"cache_only":                   s.store.GetSetting("cache_only", "false") == "true",
+		"public_api_enabled":           s.store.GetSetting("public_api_enabled", "true") == "true",
+		"user_gb_limit":                s.store.GetSetting("user_gb_limit", "0"),
+		"admin_api_enabled":            s.adminAPIEnabled,
+		"search_enabled":               s.store.GetSetting("search_enabled", "true") == "true",
+		"public_api_delay_ms":          s.store.GetSetting("public_api_delay_ms", "0"),
+		"torbox_keys":                  maskedKeys,
+		"aiostreams_url":               s.store.GetSetting("aiostreams_url", "https://aiostreamsfortheweebs.midnightignite.me"),
+		"aiostreams_uuid":              s.store.GetSetting("aiostreams_uuid", ""),
+		"aiostreams_password":          s.store.GetSetting("aiostreams_password", ""),
+		"tmdb_api_key":                 s.store.GetSetting("tmdb_api_key", ""),
+		"remove_from_torbox_on_delete": s.store.GetSetting("remove_from_torbox_on_delete", "true") == "true",
+		"max_concurrent_per_user":      s.store.GetSetting("max_concurrent_per_user", "0"),
 	})
 }
 
-// ─── User Profile & FTP ───
-
-type UserProfileResponse struct {
-	TotalDownloaded   int64  `json:"total_downloaded"`
-	MonthlyDownloaded int64  `json:"monthly_downloaded"`
-	FTPHost           string `json:"ftp_host"`
-	FTPUsername       string `json:"ftp_username"`
-	HasFTPPassword    bool   `json:"has_ftp_password"`
-}
-
-func (s *Server) handleApiUserProfile(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
-		return
-	}
-
-	discordID, _, _, ok := s.getSessionUser(r)
-	if !ok {
-		jsonError(w, http.StatusUnauthorized, "Unauthorized")
-		return
-	}
-
-	total := s.GetUserTotalSize(discordID)
-	monthly := s.GetUserMonthlySize(discordID)
-
-	var host, username, password string
-	err := s.db.QueryRow("SELECT host, username, password FROM user_ftp_configs WHERE discord_id = $1", discordID).Scan(&host, &username, &password)
-	if err != nil && err != sql.ErrNoRows {
-		jsonError(w, http.StatusInternalServerError, "Database error")
-		return
-	}
-
-	jsonOK(w, UserProfileResponse{
-		TotalDownloaded:   total,
-		MonthlyDownloaded: monthly,
-		FTPHost:           host,
-		FTPUsername:       username,
-		HasFTPPassword:    password != "",
-	})
-}
-
-func (s *Server) handleApiUserFtp(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleAdminSettingsUpdate(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
 
-	discordID, _, _, ok := s.getSessionUser(r)
-	if !ok {
-		jsonError(w, http.StatusUnauthorized, "Unauthorized")
-		return
-	}
-
-	var req struct {
-		Host     string `json:"host"`
-		Username string `json:"username"`
-		Password string `json:"password"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		jsonError(w, http.StatusBadRequest, "Invalid JSON")
-		return
-	}
-
-	if req.Password == "" {
-		var existingPassword string
-		s.db.QueryRow("SELECT password FROM user_ftp_configs WHERE discord_id = $1", discordID).Scan(&existingPassword)
-		req.Password = existingPassword
-	}
-
-	_, err := s.db.Exec(`
-		INSERT INTO user_ftp_configs (discord_id, host, username, password) 
-		VALUES ($1, $2, $3, $4) 
-		ON CONFLICT(discord_id) DO UPDATE SET host=$5, username=$6, password=$7`,
-		discordID, req.Host, req.Username, req.Password,
-		req.Host, req.Username, req.Password,
-	)
-	if err != nil {
-		jsonError(w, http.StatusInternalServerError, "Failed to save FTP config")
-		return
-	}
-
-	jsonOK(w, map[string]string{"message": "FTP settings saved"})
-}
-
-func (s *Server) handleApiFtpSend(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
-		return
-	}
-
-	discordID, _, _, ok := s.getSessionUser(r)
-	if !ok {
-		jsonError(w, http.StatusUnauthorized, "Unauthorized")
-		return
-	}
-
-	var req struct {
-		Token  string `json:"token"`
-		FileID *int   `json:"file_id"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		jsonError(w, http.StatusBadRequest, "Invalid JSON")
-		return
-	}
-
-	var dlType, name string
-	var downloadID, clientIndex int
-	err := s.db.QueryRow("SELECT type, download_id, client_index, name FROM download_history WHERE (token = $1 OR link_token = $2) AND discord_id = $3", req.Token, req.Token, discordID).Scan(&dlType, &downloadID, &clientIndex, &name)
-	if err != nil {
-		jsonError(w, http.StatusNotFound, "Download not found")
-		return
-	}
-
-	var host, username, password string
-	err = s.db.QueryRow("SELECT host, username, password FROM user_ftp_configs WHERE discord_id = $1", discordID).Scan(&host, &username, &password)
-	if err != nil || host == "" {
-		jsonError(w, http.StatusBadRequest, "FTP is not configured")
-		return
-	}
-
-	fileID := -1
-	if req.FileID != nil {
-		fileID = *req.FileID
-	}
-
-	go s.uploadToFTP(host, username, password, dlType, downloadID, clientIndex, name, fileID)
-
-	jsonOK(w, map[string]string{"message": "FTP upload started in background"})
-}
-
-func (s *Server) uploadToFTP(host, username, password, dlType string, downloadID, clientIndex int, filename string, fileID int) {
-	client := s.clientPool.GetClient(clientIndex)
-	if client == nil {
-		log.Printf("FTP Upload failed: invalid client index %d", clientIndex)
-		return
-	}
-
-	var downloadURL string
-	var err error
-	if dlType == "webdl" {
-		downloadURL, err = client.RequestWebDownloadURL(downloadID, fileID)
-	} else {
-		downloadURL, err = client.RequestDownloadURL(downloadID, fileID)
-	}
-	if err != nil {
-		log.Printf("FTP Upload failed to get URL: %v", err)
-		return
-	}
-
-	resp, err := http.Get(downloadURL)
-	if err != nil {
-		log.Printf("FTP Upload failed to fetch file: %v", err)
-		return
-	}
-	defer resp.Body.Close()
-
-	if !strings.Contains(host, ":") {
-		host += ":21"
-	}
-
-	c, err := ftp.Dial(host, ftp.DialWithTimeout(5*time.Second))
-	if err != nil {
-		log.Printf("FTP Upload failed to connect: %v", err)
-		return
-	}
-	defer c.Quit()
-
-	err = c.Login(username, password)
-	if err != nil {
-		log.Printf("FTP Upload failed to login: %v", err)
-		return
-	}
-
-	err = c.Stor(filename, resp.Body)
-	if err != nil {
-		log.Printf("FTP Upload failed to store file: %v", err)
-		return
-	}
-
-	log.Printf("FTP Upload successful: %s sent to %s", filename, host)
-}
-
-// ─── V1 Public API: User Profile & FTP ───
-
-func (s *Server) handleV1UserProfile(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
-		return
-	}
-
-	discordID, ok := s.checkV1PublicAccess(w, r)
-	if !ok {
-		return
-	}
-
-	total := s.GetUserTotalSize(discordID)
-	monthly := s.GetUserMonthlySize(discordID)
-
-	var host, username, password string
-	err := s.db.QueryRow("SELECT host, username, password FROM user_ftp_configs WHERE discord_id = $1", discordID).Scan(&host, &username, &password)
-	if err != nil && err != sql.ErrNoRows {
-		jsonError(w, http.StatusInternalServerError, "Database error")
-		return
-	}
-
-	jsonOK(w, UserProfileResponse{
-		TotalDownloaded:   total,
-		MonthlyDownloaded: monthly,
-		FTPHost:           host,
-		FTPUsername:       username,
-		HasFTPPassword:    password != "",
-	})
-}
-
-func (s *Server) handleV1UserFtp(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
-		return
-	}
-
-	discordID, ok := s.checkV1PublicAccess(w, r)
+	_, ok := s.resolveAdmin(w, r)
 	if !ok {
 		return
 	}
 
 	var req struct {
-		Host     string `json:"host"`
-		Username string `json:"username"`
-		Password string `json:"password"`
+		Key   string `json:"key"`
+		Value string `json:"value"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		jsonError(w, http.StatusBadRequest, "Invalid JSON")
-		return
-	}
-
-	if req.Password == "" {
-		var existingPassword string
-		s.db.QueryRow("SELECT password FROM user_ftp_configs WHERE discord_id = $1", discordID).Scan(&existingPassword)
-		req.Password = existingPassword
-	}
-
-	_, err := s.db.Exec(`
-		INSERT INTO user_ftp_configs (discord_id, host, username, password) 
-		VALUES ($1, $2, $3, $4) 
-		ON CONFLICT(discord_id) DO UPDATE SET host=$5, username=$6, password=$7`,
-		discordID, req.Host, req.Username, req.Password,
-		req.Host, req.Username, req.Password,
-	)
-	if err != nil {
-		jsonError(w, http.StatusInternalServerError, "Failed to save FTP config")
-		return
-	}
-
-	jsonOK(w, map[string]string{"message": "FTP settings saved"})
-}
-
-func (s *Server) handleV1FtpSend(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
-		return
-	}
-
-	discordID, ok := s.checkV1PublicAccess(w, r)
-	if !ok {
-		return
-	}
-
-	var req struct {
-		Token  string `json:"token"`
-		FileID *int   `json:"file_id"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		jsonError(w, http.StatusBadRequest, "Invalid JSON")
-		return
-	}
-
-	var dlType, name string
-	var downloadID, clientIndex int
-	err := s.db.QueryRow("SELECT type, download_id, client_index, name FROM download_history WHERE (token = $1 OR link_token = $2) AND discord_id = $3", req.Token, req.Token, discordID).Scan(&dlType, &downloadID, &clientIndex, &name)
-	if err != nil {
-		jsonError(w, http.StatusNotFound, "Download not found")
-		return
-	}
-
-	var host, username, password string
-	err = s.db.QueryRow("SELECT host, username, password FROM user_ftp_configs WHERE discord_id = $1", discordID).Scan(&host, &username, &password)
-	if err != nil || host == "" {
-		jsonError(w, http.StatusBadRequest, "FTP is not configured")
-		return
-	}
-
-	fileID := -1
-	if req.FileID != nil {
-		fileID = *req.FileID
-	}
-
-	go s.uploadToFTP(host, username, password, dlType, downloadID, clientIndex, name, fileID)
-
-	jsonOK(w, map[string]string{"message": "FTP upload started in background"})
-}
-
-func (s *Server) getAggregatedHosters() ([]torbox.HosterInfo, error) {
-	pool := s.clientPool
-	
-	aggregated := make(map[int]*torbox.HosterInfo)
-	
-	for i := 0; i < pool.GetClientCount(); i++ {
-		client := pool.GetClient(i)
-		hosters, err := client.GetHosters()
-		if err != nil {
-			log.Printf("Failed to fetch hosters from client %d: %v", i, err)
-			continue
-		}
-		
-		for _, h := range hosters {
-			if existing, ok := aggregated[h.ID]; ok {
-				if existing.DailyLinkLimit == 0 || h.DailyLinkLimit == 0 {
-					existing.DailyLinkLimit = 0
-				} else {
-					existing.DailyLinkLimit += h.DailyLinkLimit
-				}
-				
-				if existing.DailyBandwidthLimit == 0 || h.DailyBandwidthLimit == 0 {
-					existing.DailyBandwidthLimit = 0
-				} else {
-					existing.DailyBandwidthLimit += h.DailyBandwidthLimit
-				}
-				
-				existing.DailyLinkUsed += h.DailyLinkUsed
-				existing.DailyBandwidthUsed += h.DailyBandwidthUsed
-				
-				if h.Status {
-					existing.Status = true
-				}
-			} else {
-				clone := h
-				aggregated[h.ID] = &clone
-			}
-		}
-	}
-	
-	if len(aggregated) == 0 {
-		return nil, fmt.Errorf("could not fetch hosters from any TorBox client")
-	}
-	
-	var result []torbox.HosterInfo
-	for _, h := range aggregated {
-		result = append(result, *h)
-	}
-	
-	sort.Slice(result, func(i, j int) bool {
-		return result[i].ID < result[j].ID
-	})
-	
-	return result, nil
-}
-
-func (s *Server) handleApiHosters(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
-		return
-	}
-	
-	_, _, _, ok := s.getSessionUser(r)
-	if !ok {
-		jsonError(w, http.StatusUnauthorized, "Unauthorized")
-		return
-	}
-	
-	hosters, err := s.getAggregatedHosters()
-	if err != nil {
-		jsonError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	
-	jsonOK(w, hosters)
-}
-
-func (s *Server) handleV1Hosters(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
-		return
-	}
-	
-	_, ok := s.checkV1PublicAccess(w, r)
-	if !ok {
-		return
-	}
-	
-	hosters, err := s.getAggregatedHosters()
-	if err != nil {
-		jsonError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	
-	jsonOK(w, hosters)
-}
-
-func (s *Server) handleApiUserCloud(w http.ResponseWriter, r *http.Request) {
-	discordID, _, _, ok := s.getSessionUser(r)
-	if !ok {
-		jsonError(w, http.StatusUnauthorized, "Unauthorized")
-		return
-	}
-
-	if r.Method == http.MethodGet {
-		var google, dropbox, onedrive, gofile, onefichier, pixeldrain string
-		err := s.db.QueryRow("SELECT google_token, dropbox_token, onedrive_token, gofile_token, onefichier_token, pixeldrain_token FROM user_cloud_configs WHERE discord_id = $1", discordID).Scan(&google, &dropbox, &onedrive, &gofile, &onefichier, &pixeldrain)
-		if err != nil && err != sql.ErrNoRows {
-			jsonError(w, http.StatusInternalServerError, "Database error")
-			return
-		}
-		
-		jsonOK(w, map[string]string{
-			"google": google,
-			"dropbox": dropbox,
-			"onedrive": onedrive,
-			"gofile": gofile,
-			"onefichier": onefichier,
-			"pixeldrain": pixeldrain,
-		})
-		return
-	}
-
-	if r.Method == http.MethodPost {
-		var req map[string]string
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			jsonError(w, http.StatusBadRequest, "Invalid JSON")
-			return
-		}
-
-		_, err := s.db.Exec(`
-			INSERT INTO user_cloud_configs (discord_id, google_token, dropbox_token, onedrive_token, gofile_token, onefichier_token, pixeldrain_token) 
-			VALUES ($1, $2, $3, $4, $5, $6, $7)
-			ON CONFLICT(discord_id) DO UPDATE SET 
-				google_token=EXCLUDED.google_token,
-				dropbox_token=EXCLUDED.dropbox_token,
-				onedrive_token=EXCLUDED.onedrive_token,
-				gofile_token=EXCLUDED.gofile_token,
-				onefichier_token=EXCLUDED.onefichier_token,
-				pixeldrain_token=EXCLUDED.pixeldrain_token
-		`, discordID, req["google"], req["dropbox"], req["onedrive"], req["gofile"], req["onefichier"], req["pixeldrain"])
-		
-		if err != nil {
-			jsonError(w, http.StatusInternalServerError, "Failed to save config")
-			return
-		}
-		
-		jsonOK(w, map[string]string{"message": "Settings saved"})
-		return
-	}
-
-	jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
-}
-
-func (s *Server) handleApiIntegration(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
-		return
-	}
-
-	discordID, _, _, ok := s.getSessionUser(r)
-	if !ok {
-		jsonError(w, http.StatusUnauthorized, "Unauthorized")
-		return
-	}
-
-	provider := strings.TrimPrefix(r.URL.Path, "/api/integration/")
-	if provider == "" || strings.Contains(provider, "/") {
-		jsonError(w, http.StatusBadRequest, "Invalid provider")
-		return
-	}
-	
-	validProviders := map[string]string{
-		"googledrive": "google_token",
-		"dropbox": "dropbox_token",
-		"onedrive": "onedrive_token",
-		"gofile": "gofile_token",
-		"1fichier": "onefichier_token",
-		"pixeldrain": "pixeldrain_token",
-	}
-	
-	dbField, ok := validProviders[provider]
-	if !ok {
-		jsonError(w, http.StatusBadRequest, "Unsupported provider")
-		return
-	}
-
-	var token string
-	err := s.db.QueryRow(fmt.Sprintf("SELECT %s FROM user_cloud_configs WHERE discord_id = $1", dbField), discordID).Scan(&token)
-	if err != nil || token == "" {
-		jsonError(w, http.StatusForbidden, "API token for this provider is not configured. Please set it in your Profile.")
-		return
-	}
-
-	var req map[string]interface{}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		jsonError(w, http.StatusBadRequest, "Invalid JSON")
-		return
-	}
-
-	req[dbField] = token
-
-	historyToken, ok := req["token"].(string)
-	if !ok || historyToken == "" {
-		jsonError(w, http.StatusBadRequest, "token is required")
-		return
-	}
-
-	var dlType string
-	var downloadID int
-	var clientIndex int
-	err = s.db.QueryRow("SELECT type, download_id, client_index FROM download_history WHERE (token = $1 OR link_token = $2) AND discord_id = $3", historyToken, historyToken, discordID).Scan(&dlType, &downloadID, &clientIndex)
-	if err != nil {
-		jsonError(w, http.StatusNotFound, "Download not found")
-		return
-	}
-	
-	req["id"] = downloadID
-	if dlType == "webdl" {
-		req["type"] = "webdownload"
-	} else {
-		req["type"] = dlType
-	}
-	delete(req, "token")
-	
-	if _, ok := req["zip"]; !ok {
-		req["zip"] = false
-	}
-	
-	if _, ok := req["file_id"]; !ok {
-		req["file_id"] = 0
-	}
-
-	client := s.clientPool.GetClient(clientIndex)
-	resp, err := client.UploadToCloud(provider, req)
-	if err != nil {
-		log.Printf("[Cloud] Request to Torbox failed: %v", err)
-		jsonError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	if !resp.Success {
-		log.Printf("[Cloud] Torbox rejected %s upload: %s (error: %s)", provider, resp.Detail, resp.Error)
-	} else {
-		log.Printf("[Cloud] Successfully requested %s upload", provider)
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
-}
-
-func (s *Server) handleV1UserCloud(w http.ResponseWriter, r *http.Request) {
-	discordID, ok := s.checkV1PublicAccess(w, r)
-	if !ok {
-		return
-	}
-
-	if r.Method == http.MethodGet {
-		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
-		return
-	}
-
-	if r.Method == http.MethodPost {
-		var config struct {
-			Google     string `json:"google"`
-			Dropbox    string `json:"dropbox"`
-			OneDrive   string `json:"onedrive"`
-			Gofile     string `json:"gofile"`
-			Onefichier string `json:"onefichier"`
-			Pixeldrain string `json:"pixeldrain"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&config); err != nil {
-			jsonError(w, http.StatusBadRequest, "Invalid JSON")
-			return
-		}
-		
-		var existingGoogle, existingDropbox, existingOnedrive, existingGofile, existingOnefichier, existingPixeldrain string
-		s.db.QueryRow("SELECT google_token, dropbox_token, onedrive_token, gofile_token, onefichier_token, pixeldrain_token FROM user_cloud_configs WHERE discord_id = $1", discordID).Scan(&existingGoogle, &existingDropbox, &existingOnedrive, &existingGofile, &existingOnefichier, &existingPixeldrain)
-		
-		if config.Google == "" { config.Google = existingGoogle }
-		if config.Dropbox == "" { config.Dropbox = existingDropbox }
-		if config.OneDrive == "" { config.OneDrive = existingOnedrive }
-		if config.Gofile == "" { config.Gofile = existingGofile }
-		if config.Onefichier == "" { config.Onefichier = existingOnefichier }
-		if config.Pixeldrain == "" { config.Pixeldrain = existingPixeldrain }
-
-		_, err := s.db.Exec(`
-			INSERT INTO user_cloud_configs (discord_id, google_token, dropbox_token, onedrive_token, gofile_token, onefichier_token, pixeldrain_token) 
-			VALUES ($1, $2, $3, $4, $5, $6, $7)
-			ON CONFLICT(discord_id) DO UPDATE SET 
-				google_token = EXCLUDED.google_token,
-				dropbox_token = EXCLUDED.dropbox_token,
-				onedrive_token = EXCLUDED.onedrive_token,
-				gofile_token = EXCLUDED.gofile_token,
-				onefichier_token = EXCLUDED.onefichier_token,
-				pixeldrain_token = EXCLUDED.pixeldrain_token
-		`, discordID, config.Google, config.Dropbox, config.OneDrive, config.Gofile, config.Onefichier, config.Pixeldrain)
-		
-		if err != nil {
-			jsonError(w, http.StatusInternalServerError, "Failed to save cloud config")
-			return
-		}
-		
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"success": true, "message": "Cloud configurations updated"})
-		return
-	}
-
-	jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
-}
-
-func (s *Server) handleV1Integration(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
-		return
-	}
-
-	discordID, ok := s.checkV1PublicAccess(w, r)
-	if !ok {
-		return
-	}
-
-	provider := strings.TrimPrefix(r.URL.Path, "/v1/integration/")
-	validProviders := map[string]string{
-		"googledrive": "google_token",
-		"dropbox":     "dropbox_token",
-		"onedrive":    "onedrive_token",
-		"gofile":      "gofile_token",
-		"1fichier":    "onefichier_token",
-		"pixeldrain":  "pixeldrain_token",
-	}
-	
-	dbField, ok := validProviders[provider]
-	if !ok {
-		jsonError(w, http.StatusBadRequest, "Unsupported provider")
-		return
-	}
-
-	var token string
-	err := s.db.QueryRow(fmt.Sprintf("SELECT %s FROM user_cloud_configs WHERE discord_id = $1", dbField), discordID).Scan(&token)
-	if err != nil || token == "" {
-		jsonError(w, http.StatusForbidden, "API token for this provider is not configured. Please set it in your Profile.")
-		return
-	}
-
-	var req map[string]interface{}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		jsonError(w, http.StatusBadRequest, "Invalid JSON")
-		return
-	}
-
-	req[dbField] = token
-
-	historyToken, ok := req["token"].(string)
-	if !ok || historyToken == "" {
-		jsonError(w, http.StatusBadRequest, "token is required")
-		return
-	}
-
-	var dlType string
-	var downloadID int
-	var clientIndex int
-	err = s.db.QueryRow("SELECT type, download_id, client_index FROM download_history WHERE (token = $1 OR link_token = $2) AND discord_id = $3", historyToken, historyToken, discordID).Scan(&dlType, &downloadID, &clientIndex)
-	if err != nil {
-		jsonError(w, http.StatusNotFound, "Download not found")
-		return
-	}
-	
-	req["id"] = downloadID
-	if dlType == "webdl" {
-		req["type"] = "webdownload"
-	} else {
-		req["type"] = dlType
-	}
-	delete(req, "token")
-	
-	if _, ok := req["zip"]; !ok {
-		req["zip"] = false
-	}
-	
-	if _, ok := req["file_id"]; !ok {
-		req["file_id"] = 0
-	}
-
-	client := s.clientPool.GetClient(clientIndex)
-	resp, err := client.UploadToCloud(provider, req)
-	if err != nil {
-		log.Printf("[Cloud] Request to Torbox failed: %v", err)
-		jsonError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	if !resp.Success {
-		log.Printf("[Cloud] Torbox rejected %s upload: %s (error: %s)", provider, resp.Detail, resp.Error)
-	} else {
-		log.Printf("[Cloud] Successfully requested %s upload", provider)
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
-}
-
-func (s *Server) handleApiRegenerate(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
-		return
-	}
-
-	discordID, _, _, ok := s.getSessionUser(r)
-	if !ok {
-		jsonError(w, http.StatusUnauthorized, "Unauthorized")
-		return
-	}
-	isAdmin := s.IsAdmin(discordID)
-
-	s.regenerateLinkInternal(w, r, discordID, isAdmin)
-}
-
-func (s *Server) handleV1Regenerate(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
-		return
-	}
-
-	discordID, ok := s.checkV1PublicAccess(w, r)
-	if !ok {
-		return
-	}
-	isAdmin := s.IsAdmin(discordID)
-
-	s.regenerateLinkInternal(w, r, discordID, isAdmin)
-}
-
-func (s *Server) regenerateLinkInternal(w http.ResponseWriter, r *http.Request, discordID string, isAdmin bool) {
-	var req struct {
-		Token string `json:"token"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Token == "" {
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Key == "" {
 		jsonError(w, http.StatusBadRequest, "Invalid payload")
 		return
 	}
 
-	// Find the file in history to ensure ownership
-	var downloadType, oldLinkToken string
-	var downloadID, clientIndex int
-	var err error
-	
-	if isAdmin {
-		err = s.db.QueryRow("SELECT type, download_id, client_index, link_token FROM download_history WHERE token = $1 LIMIT 1", req.Token).Scan(&downloadType, &downloadID, &clientIndex, &oldLinkToken)
+	allowedKeys := map[string]bool{
+		"cache_only": true, "public_api_enabled": true, "user_gb_limit": true,
+		"search_enabled": true, "public_api_delay_ms": true,
+		"aiostreams_url": true, "aiostreams_uuid": true, "aiostreams_password": true,
+		"tmdb_api_key": true, "remove_from_torbox_on_delete": true, "max_concurrent_per_user": true,
+	}
+
+	if !allowedKeys[req.Key] {
+		jsonError(w, http.StatusBadRequest, "Invalid setting key")
+		return
+	}
+
+	if err := s.store.SetSetting(req.Key, req.Value); err != nil {
+		jsonError(w, http.StatusInternalServerError, "Failed to save setting")
+		return
+	}
+
+	jsonOK(w, map[string]string{"message": "Setting updated"})
+}
+
+func (s *Server) handleAdminTorboxKeys(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	_, ok := s.resolveAdmin(w, r)
+	if !ok {
+		return
+	}
+
+	var req struct {
+		Action string `json:"action"`
+		Key    string `json:"key"`
+		Index  int    `json:"index"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, http.StatusBadRequest, "Invalid payload")
+		return
+	}
+
+	currentKeys := s.clientPool.GetKeys()
+
+	if req.Action == "add" {
+		if strings.TrimSpace(req.Key) == "" {
+			jsonError(w, http.StatusBadRequest, "Key is required")
+			return
+		}
+		currentKeys = append(currentKeys, strings.TrimSpace(req.Key))
+	} else if req.Action == "remove" {
+		if req.Index < 0 || req.Index >= len(currentKeys) {
+			jsonError(w, http.StatusBadRequest, "Invalid index")
+			return
+		}
+		if len(currentKeys) <= 1 {
+			jsonError(w, http.StatusBadRequest, "Cannot remove the last API key")
+			return
+		}
+		currentKeys = append(currentKeys[:req.Index], currentKeys[req.Index+1:]...)
 	} else {
-		err = s.db.QueryRow("SELECT type, download_id, client_index, link_token FROM download_history WHERE (token = $1 OR link_token = $2) AND discord_id = $3 LIMIT 1", req.Token, req.Token, discordID).Scan(&downloadType, &downloadID, &clientIndex, &oldLinkToken)
-	}
-
-	if err != nil {
-		jsonError(w, http.StatusNotFound, "File not found or you don't have permission")
+		jsonError(w, http.StatusBadRequest, "Invalid action")
 		return
 	}
 
-	// Generate new link token
-	newLinkToken := generateToken()
-
-	// Update DB
-	tx, err := s.db.Begin()
-	if err != nil {
-		jsonError(w, http.StatusInternalServerError, "Database error")
+	keysStr := strings.Join(currentKeys, ",")
+	if err := s.store.SetSetting("torbox_api_keys", keysStr); err != nil {
+		jsonError(w, http.StatusInternalServerError, "Failed to save to database")
 		return
 	}
 
-	// Remove old link
-	tx.Exec("DELETE FROM download_links WHERE token = $1", oldLinkToken)
-	
-	// Insert new link
-	_, err = tx.Exec("INSERT INTO download_links (token, type, download_id, client_index) VALUES ($1, $2, $3, $4)", newLinkToken, downloadType, downloadID, clientIndex)
-	if err != nil {
-		tx.Rollback()
-		jsonError(w, http.StatusInternalServerError, "Failed to regenerate link")
-		return
-	}
-
-	// Update history
-	if isAdmin {
-		_, err = tx.Exec("UPDATE download_history SET link_token = $1 WHERE token = $2", newLinkToken, req.Token)
-	} else {
-		_, err = tx.Exec("UPDATE download_history SET link_token = $1 WHERE (token = $2 OR link_token = $3) AND discord_id = $4", newLinkToken, req.Token, discordID)
-	}
-	
-	if err != nil {
-		tx.Rollback()
-		jsonError(w, http.StatusInternalServerError, "Failed to update history")
-		return
-	}
-
-	tx.Commit()
-
-	// Update in-memory mapping
-	s.mu.Lock()
-	delete(s.downloads, oldLinkToken)
-	s.downloads[newLinkToken] = &DownloadEntry{
-		Type:        downloadType,
-		ID:          downloadID,
-		ClientIndex: clientIndex,
-	}
-	s.mu.Unlock()
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"success": true,
-		"new_link_token": newLinkToken,
-	})
+	s.clientPool.UpdateKeys(currentKeys)
+	jsonOK(w, map[string]string{"message": "Keys updated successfully"})
 }

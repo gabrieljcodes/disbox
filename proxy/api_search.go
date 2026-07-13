@@ -10,37 +10,18 @@ import (
 	"time"
 )
 
-func (s *Server) handleApiSearch(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
 
-	_, _, _, ok := s.getSessionUser(r)
-	if !ok {
-		jsonError(w, http.StatusUnauthorized, "Unauthorized")
-		return
-	}
-
-	s.coreSearch(w, r)
-}
-
-func (s *Server) handleV1Search(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
-		return
-	}
-
-	_, ok := s.checkV1PublicAccess(w, r)
+	_, ok := s.resolveUser(w, r)
 	if !ok {
 		return
 	}
 
-	s.coreSearch(w, r)
-}
-
-func (s *Server) coreSearch(w http.ResponseWriter, r *http.Request) {
-	if s.GetSetting("search_enabled", "true") != "true" {
+	if s.store.GetSetting("search_enabled", "true") != "true" {
 		jsonError(w, http.StatusForbidden, "Search functionality is disabled by the administrator")
 		return
 	}
@@ -59,9 +40,9 @@ func (s *Server) coreSearch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Fetch AIOStreams settings
-	url := s.GetSetting("aiostreams_url", "")
-	uuid := s.GetSetting("aiostreams_uuid", "")
-	password := s.GetSetting("aiostreams_password", "")
+	url := s.store.GetSetting("aiostreams_url", "")
+	uuid := s.store.GetSetting("aiostreams_uuid", "")
+	password := s.store.GetSetting("aiostreams_password", "")
 
 	if url == "" {
 		jsonError(w, http.StatusInternalServerError, "AIOStreams URL is not configured. Please contact the administrator.")
@@ -73,7 +54,7 @@ func (s *Server) coreSearch(w http.ResponseWriter, r *http.Request) {
 		parts := strings.Split(query, ":")
 		if len(parts) >= 2 {
 			tmdbID := parts[1]
-			tmdbKey := s.GetSetting("tmdb_api_key", "")
+			tmdbKey := s.store.GetSetting("tmdb_api_key", "")
 			if tmdbKey != "" {
 				tmdbEndpoint := "movie"
 				if searchType == "series" || searchType == "tv" {

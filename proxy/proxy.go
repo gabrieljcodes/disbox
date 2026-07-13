@@ -17,6 +17,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"torbox-discord-bot/config"
 	"torbox-discord-bot/torbox"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -70,6 +71,8 @@ type DownloadEntry struct {
 	ClientIndex int
 }
 
+// Server is a thin routing and lifecycle struct.
+// Business logic lives behind seams: Store (DB), DownloadManager (queue), adapters (torbox).
 type Server struct {
 	baseURL             string
 	port                string
@@ -77,122 +80,72 @@ type Server struct {
 	downloads           map[string]*DownloadEntry
 	mu                  sync.RWMutex
 	httpServer          *http.Server
-	db                  *sql.DB
+	store               *Store
 	discordClientID     string
 	discordClientSecret string
 	discordBotToken     string
 	adminUsers          []string
 	adminAPIEnabled     bool
-	
-	apiRateLimits       map[string]time.Time
-	apiRateLimitsMu     sync.Mutex
-	
-	downloadManager     *DownloadManager
+
+	apiRateLimits   map[string]time.Time
+	apiRateLimitsMu sync.Mutex
+
+	downloadManager *DownloadManager
 }
 
-func NewServer(baseURL, port, databaseURL string, clientPool *torbox.ClientPool, discordClientID, discordClientSecret, discordBotToken string, adminUsers []string, cacheOnly bool, adminAPIEnabled bool) (*Server, error) {
-	db, err := sql.Open("pgx", databaseURL)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open PostgreSQL database: %w", err)
-	}
+// NewServer accepts a Config struct, a ClientPool, and an open database connection.
+// The constructor reads what it needs from config; callers don't thread individual values.
+func NewServer(cfg *config.Config, clientPool *torbox.ClientPool, db *sql.DB) (*Server, error) {
+	st := NewStore(db)
 
-	// Create table if it doesn't exist
-	if _, err := db.Exec(`
-		CREATE TABLE IF NOT EXISTS download_links (
-			token TEXT PRIMARY KEY,
-			type TEXT NOT NULL,
-			download_id INTEGER NOT NULL,
-			client_index INTEGER NOT NULL,
-			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-		);
-		CREATE TABLE IF NOT EXISTS user_sessions (
-			session_token TEXT PRIMARY KEY,
-			discord_id TEXT NOT NULL,
-			discord_username TEXT NOT NULL,
-			discord_avatar TEXT NOT NULL,
-			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-		);
-		CREATE TABLE IF NOT EXISTS download_history (
-			id SERIAL PRIMARY KEY,
-			discord_id TEXT NOT NULL,
-			discord_username TEXT DEFAULT '',
-			discord_avatar TEXT DEFAULT '',
-			token TEXT NOT NULL,
-			link_token TEXT DEFAULT '',
-			name TEXT NOT NULL,
-			type TEXT NOT NULL,
-			download_id INTEGER NOT NULL,
-			client_index INTEGER NOT NULL,
-			size BIGINT DEFAULT 0,
-			deleted BOOLEAN DEFAULT false,
-			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-		);
-		CREATE TABLE IF NOT EXISTS api_tokens (
-			token TEXT PRIMARY KEY,
-			discord_id TEXT NOT NULL,
-			name TEXT NOT NULL,
-			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-			last_used_at TIMESTAMP
-		);
-		CREATE TABLE IF NOT EXISTS access_settings (
-			key TEXT PRIMARY KEY,
-			value TEXT NOT NULL
-		);
-		CREATE TABLE IF NOT EXISTS access_list (
-			discord_id TEXT PRIMARY KEY,
-			discord_username TEXT DEFAULT '',
-			discord_avatar TEXT DEFAULT '',
-			type TEXT NOT NULL,
-			added_by TEXT NOT NULL,
-			added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-		);
-		CREATE TABLE IF NOT EXISTS user_ftp_configs (
-			discord_id TEXT PRIMARY KEY,
-			host TEXT NOT NULL,
-			username TEXT NOT NULL,
-			password TEXT NOT NULL
-		);
-		CREATE TABLE IF NOT EXISTS user_cloud_configs (
-			discord_id TEXT PRIMARY KEY,
-			google_token TEXT DEFAULT '',
-			dropbox_token TEXT DEFAULT '',
-			onedrive_token TEXT DEFAULT '',
-			gofile_token TEXT DEFAULT '',
-			onefichier_token TEXT DEFAULT '',
-			pixeldrain_token TEXT DEFAULT ''
-		);
-	`); err != nil {
-		db.Close()
+	if err := st.CreateTables(); err != nil {
 		return nil, fmt.Errorf("failed to create tables: %w", err)
 	}
 
 	s := &Server{
-		baseURL:             strings.TrimRight(baseURL, "/"),
-		port:                port,
+		baseURL:             strings.TrimRight(cfg.ProxyBaseURL, "/"),
+		port:                cfg.ProxyPort,
 		clientPool:          clientPool,
 		downloads:           make(map[string]*DownloadEntry),
-		db:                  db,
-		discordClientID:     discordClientID,
-		discordClientSecret: discordClientSecret,
-		discordBotToken:     discordBotToken,
-		adminUsers:          adminUsers,
-		adminAPIEnabled:     adminAPIEnabled,
+		store:               st,
+		discordClientID:     cfg.DiscordClientID,
+		discordClientSecret: cfg.DiscordClientSecret,
+		discordBotToken:     cfg.DiscordBotToken,
+		adminUsers:          cfg.AdminUsers,
+		adminAPIEnabled:     cfg.AdminAPIEnabled,
 		apiRateLimits:       make(map[string]time.Time),
 	}
 
-	// Initialize default settings if missing
-	s.initDefaultSettings(clientPool, cacheOnly)
+	// Initialize default settings, syncing DB keys to client pool
+	st.InitDefaultSettings(clientPool.GetKeys(), cfg.CacheOnly)
+	if storedKeys := st.GetStoredKeys(); len(storedKeys) > 0 {
+		clientPool.UpdateKeys(storedKeys)
+	}
 
 	// Initialize DownloadManager
 	s.downloadManager = NewDownloadManager(s)
 
 	// Load existing links from database into memory
-	if err := s.loadFromDB(); err != nil {
-		db.Close()
+	downloads, err := st.LoadDownloadLinks()
+	if err != nil {
 		return nil, fmt.Errorf("failed to load existing links from database: %w", err)
 	}
+	s.downloads = downloads
+	log.Printf("Loaded %d proxy links from database", len(downloads))
 
 	mux := http.NewServeMux()
+	s.registerRoutes(mux)
+
+	s.httpServer = &http.Server{
+		Addr:    ":" + s.port,
+		Handler: mux,
+	}
+
+	return s, nil
+}
+
+func (s *Server) registerRoutes(mux *http.ServeMux) {
+	// Static / content routes
 	mux.HandleFunc("/dl/", s.handleDownload)
 	mux.HandleFunc("/view/", s.handleView)
 	mux.HandleFunc("/browse/", s.handleBrowse)
@@ -223,113 +176,59 @@ func NewServer(baseURL, port, databaseURL string, clientPool *torbox.ClientPool,
 		http.NotFound(w, r)
 	})
 
-	if discordClientID != "" && discordClientSecret != "" {
+	if s.discordClientID != "" && s.discordClientSecret != "" {
+		// Dashboard UI routes
 		mux.HandleFunc("/dashboard", s.handleDashboard)
 		mux.HandleFunc("/hosters", s.handleHostersPage)
 		mux.HandleFunc("/auth/login", s.handleAuthLogin)
 		mux.HandleFunc("/auth/callback", s.handleAuthCallback)
 		mux.HandleFunc("/auth/logout", s.handleAuthLogout)
-		mux.HandleFunc("/api/me", s.handleApiMe)
-		mux.HandleFunc("/api/history", s.handleApiHistory)
-		mux.HandleFunc("/api/progress", s.handleApiProgress)
-		mux.HandleFunc("/api/add-torrent", s.handleApiAddTorrent)
-		mux.HandleFunc("/api/add-torrent-file", s.handleApiAddTorrentFile)
-		mux.HandleFunc("/api/add-webdl", s.handleApiAddWebdl)
-		mux.HandleFunc("/api/torrents/magnettofile", s.handleApiMagnetToFile)
-		mux.HandleFunc("/api/torrents/exportdata", s.handleApiExportData)
-		mux.HandleFunc("/api/search", s.handleApiSearch)
-		mux.HandleFunc("/api/tmdb/search", s.handleApiTMDBSearch)
-		mux.HandleFunc("/api/anilist/search", s.handleApiAniListSearch)
-		mux.HandleFunc("/api/tokens", s.handleApiTokens)
-		mux.HandleFunc("/api/tokens/revoke", s.handleApiTokenRevoke)
-		mux.HandleFunc("/api/admin/history", s.handleApiAdminHistory)
-		mux.HandleFunc("/api/admin/access", s.handleApiAdminAccessGet)
-		mux.HandleFunc("/api/admin/access/toggle", s.handleApiAdminAccessToggle)
-		mux.HandleFunc("/api/admin/access/add", s.handleApiAdminAccessAdd)
-		mux.HandleFunc("/api/admin/access/remove", s.handleApiAdminAccessRemove)
-		mux.HandleFunc("/api/admin/user", s.handleApiAdminUserProfile)
-		mux.HandleFunc("/api/remove-download", s.handleApiRemoveDownload)
-		mux.HandleFunc("/api/regenerate", s.handleApiRegenerate)
-		mux.HandleFunc("/api/queue-status", s.handleApiQueueStatus)
-		mux.HandleFunc("/api/user/profile", s.handleApiUserProfile)
-		mux.HandleFunc("/api/user/ftp", s.handleApiUserFtp)
-		mux.HandleFunc("/api/ftp/send", s.handleApiFtpSend)
-		mux.HandleFunc("/api/hosters", s.handleApiHosters)
-		mux.HandleFunc("/api/user/cloud", s.handleApiUserCloud)
-		mux.HandleFunc("/api/integration/", s.handleApiIntegration)
-		
-		// Admin Settings
-		mux.HandleFunc("/api/admin/settings", s.handleApiAdminSettingsGet)
-		mux.HandleFunc("/api/admin/settings/update", s.handleApiAdminSettingsUpdate)
-		mux.HandleFunc("/api/admin/torbox/keys", s.handleApiAdminTorboxKeys)
+
+		// Redirect legacy /api/* to /v1/*
+		mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
+			newPath := "/v1/" + strings.TrimPrefix(r.URL.Path, "/api/")
+			if r.URL.RawQuery != "" {
+				newPath += "?" + r.URL.RawQuery
+			}
+			http.Redirect(w, r, newPath, http.StatusTemporaryRedirect)
+		})
 	}
 
-	// Public API (token-authenticated, always registered)
-	mux.HandleFunc("/v1/me", s.handleV1Me)
-	mux.HandleFunc("/v1/add-torrent", s.handleV1AddTorrent)
-	mux.HandleFunc("/v1/add-torrent-file", s.handleV1AddTorrentFile)
-	mux.HandleFunc("/v1/add-webdl", s.handleV1AddWebdl)
-	mux.HandleFunc("/v1/torrents/magnettofile", s.handleV1MagnetToFile)
-	mux.HandleFunc("/v1/torrents/exportdata", s.handleV1ExportData)
-	mux.HandleFunc("/v1/remove-download", s.handleV1RemoveDownload)
-	mux.HandleFunc("/v1/regenerate", s.handleV1Regenerate)
-	mux.HandleFunc("/v1/history", s.handleV1History)
-	mux.HandleFunc("/v1/queue-status", s.handleV1QueueStatus)
-	mux.HandleFunc("/v1/search", s.handleV1Search)
-	mux.HandleFunc("/v1/tmdb/search", s.handleV1TMDBSearch)
-	mux.HandleFunc("/v1/anilist/search", s.handleV1AniListSearch)
-	mux.HandleFunc("/v1/user/profile", s.handleV1UserProfile)
-	mux.HandleFunc("/v1/user/ftp", s.handleV1UserFtp)
-	mux.HandleFunc("/v1/ftp/send", s.handleV1FtpSend)
-	mux.HandleFunc("/v1/hosters", s.handleV1Hosters)
-	mux.HandleFunc("/v1/user/cloud", s.handleV1UserCloud)
-	mux.HandleFunc("/v1/integration/", s.handleV1Integration)
-	
-	// Public API Admin Routes
-	mux.HandleFunc("/v1/admin/access", s.handleV1AdminAccessGet)
-	mux.HandleFunc("/v1/admin/access/check", s.handleV1AdminAccessCheck)
-	mux.HandleFunc("/v1/admin/access/add", s.handleV1AdminAccessAdd)
-	mux.HandleFunc("/v1/admin/access/remove", s.handleV1AdminAccessRemove)
-	mux.HandleFunc("/v1/admin/access/toggle", s.handleV1AdminAccessToggle)
+	// ─── Unified v1 API (session + token auth) ───
+	mux.HandleFunc("/v1/me", s.handleMe)
+	mux.HandleFunc("/v1/history", s.handleHistory)
+	mux.HandleFunc("/v1/progress", s.handleProgress)
+	mux.HandleFunc("/v1/add-torrent", s.handleAddTorrent)
+	mux.HandleFunc("/v1/add-torrent-file", s.handleAddTorrentFile)
+	mux.HandleFunc("/v1/add-webdl", s.handleAddWebdl)
+	mux.HandleFunc("/v1/torrents/magnettofile", s.handleMagnetToFile)
+	mux.HandleFunc("/v1/torrents/exportdata", s.handleExportData)
+	mux.HandleFunc("/v1/search", s.handleSearch)
+	mux.HandleFunc("/v1/tmdb/search", s.handleTMDBSearch)
+	mux.HandleFunc("/v1/anilist/search", s.handleAniListSearch)
+	mux.HandleFunc("/v1/tokens", s.handleTokens)
+	mux.HandleFunc("/v1/tokens/revoke", s.handleTokenRevoke)
+	mux.HandleFunc("/v1/remove-download", s.handleRemoveDownload)
+	mux.HandleFunc("/v1/regenerate", s.handleRegenerate)
+	mux.HandleFunc("/v1/queue-status", s.handleQueueStatus)
+	mux.HandleFunc("/v1/user/profile", s.handleUserProfile)
+	mux.HandleFunc("/v1/user/ftp", s.handleUserFtp)
+	mux.HandleFunc("/v1/ftp/send", s.handleFtpSend)
+	mux.HandleFunc("/v1/hosters", s.handleHosters)
+	mux.HandleFunc("/v1/user/cloud", s.handleUserCloud)
+	mux.HandleFunc("/v1/integration/", s.handleIntegration)
 
-	s.httpServer = &http.Server{
-		Addr:    ":" + port,
-		Handler: mux,
-	}
-
-	return s, nil
-}
-
-func (s *Server) loadFromDB() error {
-	rows, err := s.db.Query("SELECT token, type, download_id, client_index FROM download_links")
-	if err != nil {
-		return fmt.Errorf("failed to query download_links: %w", err)
-	}
-	defer rows.Close()
-
-	count := 0
-	for rows.Next() {
-		var token, dlType string
-		var id, clientIndex int
-
-		if err := rows.Scan(&token, &dlType, &id, &clientIndex); err != nil {
-			return fmt.Errorf("failed to scan row: %w", err)
-		}
-
-		s.downloads[token] = &DownloadEntry{
-			Type:        dlType,
-			ID:          id,
-			ClientIndex: clientIndex,
-		}
-		count++
-	}
-
-	if err := rows.Err(); err != nil {
-		return fmt.Errorf("error iterating rows: %w", err)
-	}
-
-	log.Printf("Loaded %d proxy links from database", count)
-	return nil
+	// Admin routes
+	mux.HandleFunc("/v1/admin/history", s.handleAdminHistory)
+	mux.HandleFunc("/v1/admin/access", s.handleAdminAccessGet)
+	mux.HandleFunc("/v1/admin/access/toggle", s.handleAdminAccessToggle)
+	mux.HandleFunc("/v1/admin/access/add", s.handleAdminAccessAdd)
+	mux.HandleFunc("/v1/admin/access/remove", s.handleAdminAccessRemove)
+	mux.HandleFunc("/v1/admin/access/check", s.handleAdminAccessCheck)
+	mux.HandleFunc("/v1/admin/user", s.handleAdminUserProfile)
+	mux.HandleFunc("/v1/admin/settings", s.handleAdminSettingsGet)
+	mux.HandleFunc("/v1/admin/settings/update", s.handleAdminSettingsUpdate)
+	mux.HandleFunc("/v1/admin/torbox/keys", s.handleAdminTorboxKeys)
 }
 
 func (s *Server) Start() error {
@@ -345,27 +244,81 @@ func (s *Server) Stop() {
 	if err := s.httpServer.Shutdown(context.Background()); err != nil {
 		log.Printf("Error shutting down proxy server: %v", err)
 	}
-	if err := s.db.Close(); err != nil {
-		log.Printf("Error closing database: %v", err)
-	}
 }
 
+// ─── Unified Auth ───
+
+// resolveUser tries session cookie first, then Bearer token.
+// Returns the discord user ID and whether auth succeeded.
+// Handles rate limiting and access control for token-authenticated requests.
+func (s *Server) resolveUser(w http.ResponseWriter, r *http.Request) (discordID string, ok bool) {
+	// Try session cookie first
+	if cookie, err := r.Cookie("disbox_session"); err == nil {
+		id, _, _, valid := s.store.GetSessionUser(cookie.Value)
+		if valid {
+			return id, true
+		}
+	}
+
+	// Try Bearer token
+	auth := r.Header.Get("Authorization")
+	if strings.HasPrefix(auth, "Bearer ") {
+		token := strings.TrimPrefix(auth, "Bearer ")
+		if token != "" {
+			id, valid := s.store.GetAPIUser(token)
+			if valid {
+				// Rate limit check for token-auth users (not admins)
+				if !s.IsAdmin(id) {
+					if s.store.GetSetting("public_api_enabled", "true") != "true" {
+						jsonError(w, http.StatusForbidden, "Public API is currently disabled by administrators")
+						return "", false
+					}
+					if !s.CheckRateLimit(id) {
+						jsonError(w, http.StatusTooManyRequests, "Rate limit exceeded. Please wait before making another request.")
+						return "", false
+					}
+				}
+				return id, true
+			}
+		}
+	}
+
+	jsonError(w, http.StatusUnauthorized, "Unauthorized")
+	return "", false
+}
+
+// resolveAdmin is like resolveUser but also requires admin privileges.
+func (s *Server) resolveAdmin(w http.ResponseWriter, r *http.Request) (discordID string, ok bool) {
+	id, authed := s.resolveUser(w, r)
+	if !authed {
+		return "", false
+	}
+	if !s.IsAdmin(id) {
+		jsonError(w, http.StatusForbidden, "Admin access required")
+		return "", false
+	}
+	return id, true
+}
+
+// getUserDetails returns username and avatar for a discord user, fetched from session data.
+func (s *Server) getUserDetails(discordID string) (username, avatar string) {
+	username, avatar = s.store.GetUserInfoFromSession(discordID)
+	if username == "" {
+		username = "API User"
+	}
+	return
+}
+
+// ─── Download Registration ───
+
 // RegisterDownload creates a permanent proxy token for a download and returns the full proxy URL.
-// The token is persisted in SQLite so it survives server restarts.
 func (s *Server) RegisterDownload(downloadType string, id int, clientIndex int) string {
 	token := generateToken()
 
-	// Save to database first
-	_, err := s.db.Exec(
-		"INSERT INTO download_links (token, type, download_id, client_index) VALUES ($1, $2, $3, $4)",
-		token, downloadType, id, clientIndex,
-	)
-	if err != nil {
+	if err := s.store.SaveDownloadLink(token, downloadType, id, clientIndex); err != nil {
 		log.Printf("Warning: failed to persist proxy link to database: %v", err)
-		// Continue anyway — link will work in memory until restart
 	}
 
-	// Save to in-memory map for fast lookups
 	s.mu.Lock()
 	s.downloads[token] = &DownloadEntry{
 		Type:        downloadType,
@@ -378,6 +331,95 @@ func (s *Server) RegisterDownload(downloadType string, id int, clientIndex int) 
 	log.Printf("Registered proxy link for %s #%d (client #%d): %s", downloadType, id, clientIndex+1, proxyURL)
 	return proxyURL
 }
+
+// GetBaseURL returns the base URL of the proxy server
+func (s *Server) GetBaseURL() string {
+	return s.baseURL
+}
+
+// RegisterDownloadWithUser registers a proxy token and also saves it to the user's history
+func (s *Server) RegisterDownloadWithUser(downloadType string, id int, clientIndex int, discordID, discordUsername, discordAvatar, name string, size int64) (string, int) {
+	status := 0
+	fileToken := generateToken()
+	linkToken := generateToken()
+
+	if discordID != "" {
+		existingLinkToken, sameUser, exists := s.store.FindExistingDownload(downloadType, id, discordID)
+		if exists {
+			if sameUser {
+				proxyURL := fmt.Sprintf("%s/dl/%s", s.baseURL, existingLinkToken)
+				return proxyURL, 1
+			}
+			status = 2
+			size = 0
+		}
+	}
+
+	if err := s.store.SaveDownloadLink(linkToken, downloadType, id, clientIndex); err != nil {
+		log.Printf("Warning: failed to persist proxy link to database: %v", err)
+	}
+
+	s.mu.Lock()
+	s.downloads[linkToken] = &DownloadEntry{
+		Type:        downloadType,
+		ID:          id,
+		ClientIndex: clientIndex,
+	}
+	s.mu.Unlock()
+
+	if discordID != "" {
+		if err := s.store.SaveHistory(discordID, discordUsername, discordAvatar, fileToken, linkToken, name, downloadType, id, clientIndex, size); err != nil {
+			log.Printf("Warning: failed to save download history: %v", err)
+		} else if size == 0 && status == 0 {
+			go s.pollDownloadSize(downloadType, id, clientIndex, fileToken)
+		}
+	}
+
+	proxyURL := fmt.Sprintf("%s/dl/%s", s.baseURL, linkToken)
+	log.Printf("Registered proxy link for %s #%d (client #%d): %s (User: %s)", downloadType, id, clientIndex+1, proxyURL, discordID)
+	return proxyURL, status
+}
+
+func (s *Server) pollDownloadSize(downloadType string, id, clientIndex int, fileToken string) {
+	for i := 0; i < 12; i++ {
+		time.Sleep(5 * time.Second)
+		adapter := s.getAdapterForType(downloadType, clientIndex)
+		if adapter == nil {
+			continue
+		}
+		info, err := adapter.GetInfo(id)
+		if err != nil || info.Size <= 0 {
+			continue
+		}
+		name := ""
+		if info.Name != "" && info.Name != "Getting info..." {
+			name = info.Name
+		}
+		s.store.UpdateHistorySize(fileToken, info.Size, name)
+		break
+	}
+}
+
+// ─── Adapter Resolution ───
+
+// getAdapter returns the correct DownloadAdapter for a download entry.
+func (s *Server) getAdapter(entry *DownloadEntry) torbox.DownloadAdapter {
+	return s.getAdapterForType(entry.Type, entry.ClientIndex)
+}
+
+func (s *Server) getAdapterForType(dlType string, clientIndex int) torbox.DownloadAdapter {
+	client := s.clientPool.GetClient(clientIndex)
+	switch dlType {
+	case "torrent":
+		return &torbox.TorrentAdapter{Client: client}
+	case "webdl":
+		return &torbox.WebDLAdapter{Client: client}
+	default:
+		return nil
+	}
+}
+
+// ─── Download Handler ───
 
 func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 	token := strings.TrimPrefix(r.URL.Path, "/dl/")
@@ -397,7 +439,6 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Parse optional file_id
 	fileID := -1
 	if fID := r.URL.Query().Get("file_id"); fID != "" {
 		if parsed, err := strconv.Atoi(fID); err == nil {
@@ -410,22 +451,14 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Request a fresh download URL from TorBox
-	client := s.clientPool.GetClient(entry.ClientIndex)
-	var downloadURL string
-	var err error
-
-	switch entry.Type {
-	case "torrent":
-		downloadURL, err = client.RequestDownloadURL(entry.ID, fileID)
-	case "webdl":
-		downloadURL, err = client.RequestWebDownloadURL(entry.ID, fileID)
-	default:
+	adapter := s.getAdapter(entry)
+	if adapter == nil {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		browserTemplate.Execute(w, BrowseData{Title: "Error", ErrorMessage: "Unknown download type."})
 		return
 	}
 
+	downloadURL, err := adapter.RequestURL(entry.ID, fileID)
 	if err != nil {
 		log.Printf("Failed to get fresh TorBox download URL for %s #%d: %v", entry.Type, entry.ID, err)
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -433,7 +466,6 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Stream the file from TorBox through our server
 	log.Printf("Proxying download for %s #%d (client #%d)", entry.Type, entry.ID, entry.ClientIndex+1)
 
 	resp, err := http.Get(downloadURL)
@@ -445,7 +477,6 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 	}
 	defer resp.Body.Close()
 
-	// Forward relevant headers from TorBox response
 	if ct := resp.Header.Get("Content-Type"); ct != "" {
 		w.Header().Set("Content-Type", ct)
 	}
@@ -458,7 +489,6 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(resp.StatusCode)
 
-	// Stream the body
 	written, err := io.Copy(w, resp.Body)
 	if err != nil {
 		log.Printf("Error streaming download for %s #%d: %v (wrote %d bytes)", entry.Type, entry.ID, err, written)
@@ -471,17 +501,9 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 func isSocialCrawler(userAgent string) bool {
 	userAgent = strings.ToLower(userAgent)
 	bots := []string{
-		"discordbot",
-		"slackbot",
-		"twitterbot",
-		"facebookexternalhit",
-		"telegrambot",
-		"whatsapp",
-		"vkshare",
-		"skypeuripreview",
-		"linkedinbot",
-		"embedly",
-		"pinterest",
+		"discordbot", "slackbot", "twitterbot", "facebookexternalhit",
+		"telegrambot", "whatsapp", "vkshare", "skypeuripreview",
+		"linkedinbot", "embedly", "pinterest",
 	}
 	for _, bot := range bots {
 		if strings.Contains(userAgent, bot) {
@@ -492,45 +514,32 @@ func isSocialCrawler(userAgent string) bool {
 }
 
 func (s *Server) handlePreview(w http.ResponseWriter, r *http.Request, entry *DownloadEntry, token string, fileID int) {
-	client := s.clientPool.GetClient(entry.ClientIndex)
+	adapter := s.getAdapter(entry)
+	if adapter == nil {
+		return
+	}
 
 	var fileName string
 	var fileSize int64
 	var fileType string = "File"
 
-	if entry.Type == "torrent" {
-		info, err := client.GetTorrentInfo(entry.ID)
-		if err == nil && info != nil {
-			if fileID >= 0 {
-				for _, f := range info.Files {
-					if f.ID == fileID {
-						fileName = f.Name
-						fileSize = f.Size
-						break
-					}
+	info, err := adapter.GetInfo(entry.ID)
+	if err == nil && info != nil {
+		if fileID >= 0 {
+			for _, f := range info.Files {
+				if f.ID == fileID {
+					fileName = f.Name
+					fileSize = f.Size
+					break
 				}
-			}
-			if fileName == "" {
-				fileName = info.Name
-				fileSize = info.Size
-				fileType = "Torrent Archive"
 			}
 		}
-	} else if entry.Type == "webdl" {
-		info, err := client.GetWebDownloadInfo(entry.ID)
-		if err == nil && info != nil {
-			if fileID >= 0 {
-				for _, f := range info.Files {
-					if f.ID == fileID {
-						fileName = f.Name
-						fileSize = f.Size
-						break
-					}
-				}
-			}
-			if fileName == "" {
-				fileName = info.Name
-				fileSize = info.Size
+		if fileName == "" {
+			fileName = info.Name
+			fileSize = info.Size
+			if entry.Type == "torrent" {
+				fileType = "Torrent Archive"
+			} else {
 				fileType = "Web Download"
 			}
 		}
@@ -548,7 +557,6 @@ func (s *Server) handlePreview(w http.ResponseWriter, r *http.Request, entry *Do
 		downloadURL += fmt.Sprintf("?file_id=%d", fileID)
 	}
 
-	// Build OG image URL with properly encoded query parameters
 	ogParams := url.Values{}
 	ogParams.Set("name", fileName)
 	ogParams.Set("size", formatBytes(fileSize))
@@ -602,7 +610,7 @@ func (s *Server) handleOgImage(w http.ResponseWriter, r *http.Request) {
 	w.Write(imgData)
 }
 
-// ─── Viewer (existing media player) ───
+// ─── Viewer ───
 
 type MediaItem struct {
 	ID          int
@@ -646,8 +654,12 @@ func (s *Server) handleView(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	client := s.clientPool.GetClient(entry.ClientIndex)
-	
+	adapter := s.getAdapter(entry)
+	if adapter == nil {
+		http.Error(w, "Unknown download type", http.StatusInternalServerError)
+		return
+	}
+
 	data := ViewerData{
 		DownloadURL: fmt.Sprintf("%s/dl/%s", s.baseURL, token),
 		BrowseURL:   fmt.Sprintf("%s/browse/%s", s.baseURL, token),
@@ -660,28 +672,14 @@ func (s *Server) handleView(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	var title string
-	var files []torbox.TorrentFile
-
-	if entry.Type == "webdl" {
-		info, err := client.GetWebDownloadInfo(entry.ID)
-		if err != nil {
-			http.Error(w, "Failed to get info", http.StatusInternalServerError)
-			return
-		}
-		title = info.Name
-		files = info.Files
-	} else if entry.Type == "torrent" {
-		info, err := client.GetTorrentInfo(entry.ID)
-		if err != nil {
-			http.Error(w, "Failed to get info", http.StatusInternalServerError)
-			return
-		}
-		title = info.Name
-		files = info.Files
+	info, err := adapter.GetInfo(entry.ID)
+	if err != nil {
+		http.Error(w, "Failed to get info", http.StatusInternalServerError)
+		return
 	}
 
-	data.Title = title
+	data.Title = info.Name
+	files := info.Files
 
 	var subs []torbox.TorrentFile
 	var mediaFiles []torbox.TorrentFile
@@ -700,7 +698,6 @@ func (s *Server) handleView(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Set active file
 	var activeFile *torbox.TorrentFile
 	if activeFileID >= 0 {
 		for _, f := range mediaFiles {
@@ -718,8 +715,7 @@ func (s *Server) handleView(w http.ResponseWriter, r *http.Request) {
 	data.ActiveType = getMediaType(activeFile.Name)
 	data.ActiveStreamURL = fmt.Sprintf("%s/dl/%s?file_id=%d", s.baseURL, token, activeFile.ID)
 	data.ActiveMime = guessMimeType(activeFile.Name)
-	
-	// Map playlist
+
 	for _, f := range mediaFiles {
 		data.MediaList = append(data.MediaList, MediaItem{
 			ID:          f.ID,
@@ -731,17 +727,15 @@ func (s *Server) handleView(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-		// Map subtitles matching active file
-		activeBaseName := getBaseName(activeFile.ShortName)
-		for _, sub := range subs {
-			// Include if the subtitle has a similar name to the video file, or if there's only 1 media file
-			if len(mediaFiles) == 1 || strings.Contains(sub.ShortName, activeBaseName) || strings.Contains(activeBaseName, getBaseName(sub.ShortName)) {
-				data.Subtitles = append(data.Subtitles, Subtitle{
-					Name: sub.ShortName,
-					URL:  fmt.Sprintf("%s/dl/%s?file_id=%d", s.baseURL, token, sub.ID),
-				})
-			}
+	activeBaseName := getBaseName(activeFile.ShortName)
+	for _, sub := range subs {
+		if len(mediaFiles) == 1 || strings.Contains(sub.ShortName, activeBaseName) || strings.Contains(activeBaseName, getBaseName(sub.ShortName)) {
+			data.Subtitles = append(data.Subtitles, Subtitle{
+				Name: sub.ShortName,
+				URL:  fmt.Sprintf("%s/dl/%s?file_id=%d", s.baseURL, token, sub.ID),
+			})
 		}
+	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := viewerTemplate.Execute(w, data); err != nil {
@@ -802,45 +796,26 @@ func (s *Server) handleBrowse(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	client := s.clientPool.GetClient(entry.ClientIndex)
-
-	var title string
-	var files []torbox.TorrentFile
-	var totalSize int64
-
-	if entry.Type == "webdl" {
-		info, err := client.GetWebDownloadInfo(entry.ID)
-		if err != nil {
-			data := BrowseData{
-				Title:        "Not Ready",
-				ErrorMessage: "This download is still processing or could not be found. Please check back later.",
-			}
-			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			data.Token = token
-			browserTemplate.Execute(w, data)
-			return
-		}
-		title = info.Name
-		files = info.Files
-		totalSize = info.Size
-	} else if entry.Type == "torrent" {
-		info, err := client.GetTorrentInfo(entry.ID)
-		if err != nil {
-			data := BrowseData{
-				Title:        "Not Ready",
-				ErrorMessage: "This download is still processing or could not be found. Please check back later.",
-			}
-			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			data.Token = token
-			browserTemplate.Execute(w, data)
-			return
-		}
-		title = info.Name
-		files = info.Files
-		totalSize = info.Size
+	adapter := s.getAdapter(entry)
+	if adapter == nil {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		browserTemplate.Execute(w, BrowseData{Title: "Error", ErrorMessage: "Unknown download type."})
+		return
 	}
 
-	if len(files) == 0 {
+	info, err := adapter.GetInfo(entry.ID)
+	if err != nil {
+		data := BrowseData{
+			Title:        "Not Ready",
+			ErrorMessage: "This download is still processing or could not be found. Please check back later.",
+			Token:        token,
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		browserTemplate.Execute(w, data)
+		return
+	}
+
+	if len(info.Files) == 0 {
 		data := BrowseData{
 			Title:        "Processing...",
 			ErrorMessage: "The files for this download are currently being prepared on Torbox. Please try again in a few moments.",
@@ -851,14 +826,14 @@ func (s *Server) handleBrowse(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := BrowseData{
-		Title:       title,
-		TotalSize:   formatBytes(totalSize),
-		FileCount:   len(files),
+		Title:       info.Name,
+		TotalSize:   formatBytes(info.Size),
+		FileCount:   len(info.Files),
 		DownloadURL: fmt.Sprintf("%s/dl/%s", s.baseURL, token),
 		Token:       token,
 	}
 
-	for _, f := range files {
+	for _, f := range info.Files {
 		cat := getFileCategory(f.Name)
 		ext := getExtension(f.Name)
 
@@ -873,12 +848,9 @@ func (s *Server) handleBrowse(w http.ResponseWriter, r *http.Request) {
 			DownloadURL: fmt.Sprintf("%s/dl/%s?file_id=%d", s.baseURL, token, f.ID),
 		}
 
-		// Add viewer URL for media files
 		if cat == "video" || cat == "image" {
 			bf.ViewerURL = fmt.Sprintf("%s/view/%s?file_id=%d", s.baseURL, token, f.ID)
 		}
-
-		// Add reader URL for text files
 		if cat == "text" {
 			bf.ReaderURL = fmt.Sprintf("%s/read/%s?file_id=%d", s.baseURL, token, f.ID)
 		}
@@ -895,10 +867,10 @@ func (s *Server) handleBrowse(w http.ResponseWriter, r *http.Request) {
 // ─── Text Reader ───
 
 type ReaderData struct {
-	FileName   string
-	FileSize   string
-	BrowseURL  string
-	ContentURL string
+	FileName    string
+	FileSize    string
+	BrowseURL   string
+	ContentURL  string
 	DownloadURL string
 }
 
@@ -930,36 +902,25 @@ func (s *Server) handleRead(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Find the file info
-	client := s.clientPool.GetClient(entry.ClientIndex)
+	adapter := s.getAdapter(entry)
+	if adapter == nil {
+		http.Error(w, "Unknown download type", http.StatusInternalServerError)
+		return
+	}
+
+	info, err := adapter.GetInfo(entry.ID)
+	if err != nil {
+		http.Error(w, "Failed to get info", http.StatusInternalServerError)
+		return
+	}
+
 	var fileName string
 	var fileSize int64
-
-	if entry.Type == "webdl" {
-		info, err := client.GetWebDownloadInfo(entry.ID)
-		if err != nil {
-			http.Error(w, "Failed to get info", http.StatusInternalServerError)
-			return
-		}
-		for _, f := range info.Files {
-			if f.ID == fileID {
-				fileName = f.ShortName
-				fileSize = f.Size
-				break
-			}
-		}
-	} else if entry.Type == "torrent" {
-		info, err := client.GetTorrentInfo(entry.ID)
-		if err != nil {
-			http.Error(w, "Failed to get info", http.StatusInternalServerError)
-			return
-		}
-		for _, f := range info.Files {
-			if f.ID == fileID {
-				fileName = f.ShortName
-				fileSize = f.Size
-				break
-			}
+	for _, f := range info.Files {
+		if f.ID == fileID {
+			fileName = f.ShortName
+			fileSize = f.Size
+			break
 		}
 	}
 
@@ -982,6 +943,97 @@ func (s *Server) handleRead(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// ─── Access Control ───
+
+// CheckAccess verifies if a discord user is allowed to use the bot/dashboard.
+func (s *Server) CheckAccess(discordID string) (bool, string) {
+	for _, admin := range s.adminUsers {
+		if admin == discordID {
+			return true, ""
+		}
+	}
+
+	whitelistEnabled, blacklistEnabled := s.store.GetAccessSettings()
+
+	listType, err := s.store.CheckAccess(discordID)
+
+	if whitelistEnabled == "true" {
+		if err == nil && listType == "whitelist" {
+			return true, ""
+		}
+		return false, "This bot is restricted to whitelisted users."
+	}
+
+	if blacklistEnabled == "true" {
+		if err == nil && listType == "blacklist" {
+			return false, "You have been blocked from using this bot."
+		}
+	}
+
+	return true, ""
+}
+
+func (s *Server) IsAdmin(discordID string) bool {
+	for _, adminID := range s.adminUsers {
+		if adminID == discordID {
+			return true
+		}
+	}
+	return false
+}
+
+// GetUserTotalSize returns the sum of sizes of all historical downloads for a user
+func (s *Server) GetUserTotalSize(discordID string) int64 {
+	return s.store.GetUserTotalSize(discordID)
+}
+
+// GetUserMonthlySize returns the sum of sizes of downloads for a user in the current month
+func (s *Server) GetUserMonthlySize(discordID string) int64 {
+	return s.store.GetUserMonthlySize(discordID)
+}
+
+// GetSetting delegates to the store
+func (s *Server) GetSetting(key, defaultVal string) string {
+	return s.store.GetSetting(key, defaultVal)
+}
+
+// SetSetting delegates to the store
+func (s *Server) SetSetting(key, val string) error {
+	return s.store.SetSetting(key, val)
+}
+
+// CheckRateLimit checks if a user is within rate limits
+func (s *Server) CheckRateLimit(discordID string) bool {
+	delayMsStr := s.store.GetSetting("public_api_delay_ms", "0")
+	if delayMsStr == "0" || delayMsStr == "" {
+		return true
+	}
+
+	if s.IsAdmin(discordID) {
+		return true
+	}
+
+	delayMs, err := strconv.Atoi(delayMsStr)
+	if err != nil || delayMs <= 0 {
+		return true
+	}
+
+	s.apiRateLimitsMu.Lock()
+	defer s.apiRateLimitsMu.Unlock()
+
+	lastTime, exists := s.apiRateLimits[discordID]
+	now := time.Now()
+
+	if exists {
+		if now.Sub(lastTime).Milliseconds() < int64(delayMs) {
+			return false
+		}
+	}
+
+	s.apiRateLimits[discordID] = now
+	return true
+}
+
 // ─── Helpers ───
 
 func getMediaType(name string) string {
@@ -998,67 +1050,36 @@ func getMediaType(name string) string {
 func getFileCategory(name string) string {
 	lower := strings.ToLower(name)
 
-	// Video
 	for _, ext := range []string{".mp4", ".mkv", ".webm", ".avi", ".mov", ".wmv", ".flv", ".m4v"} {
-		if strings.HasSuffix(lower, ext) {
-			return "video"
-		}
+		if strings.HasSuffix(lower, ext) { return "video" }
 	}
-
-	// Image
 	for _, ext := range []string{".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg", ".ico", ".tiff"} {
-		if strings.HasSuffix(lower, ext) {
-			return "image"
-		}
+		if strings.HasSuffix(lower, ext) { return "image" }
 	}
-
-	// Text
 	for _, ext := range []string{".txt", ".nfo", ".log", ".md", ".csv", ".json", ".xml", ".yml", ".yaml", ".ini", ".cfg", ".conf"} {
-		if strings.HasSuffix(lower, ext) {
-			return "text"
-		}
+		if strings.HasSuffix(lower, ext) { return "text" }
 	}
-
-	// Audio
 	for _, ext := range []string{".mp3", ".flac", ".wav", ".aac", ".ogg", ".wma", ".m4a", ".opus"} {
-		if strings.HasSuffix(lower, ext) {
-			return "audio"
-		}
+		if strings.HasSuffix(lower, ext) { return "audio" }
 	}
-
-	// Subtitle
 	for _, ext := range []string{".srt", ".vtt", ".ass", ".ssa", ".sub", ".idx"} {
-		if strings.HasSuffix(lower, ext) {
-			return "subtitle"
-		}
+		if strings.HasSuffix(lower, ext) { return "subtitle" }
 	}
-
-	// Archive
 	for _, ext := range []string{".zip", ".rar", ".7z", ".tar", ".gz", ".bz2", ".xz", ".iso"} {
-		if strings.HasSuffix(lower, ext) {
-			return "archive"
-		}
+		if strings.HasSuffix(lower, ext) { return "archive" }
 	}
-
 	return "other"
 }
 
 func getCategoryIcon(category string) string {
 	switch category {
-	case "video":
-		return "🎬"
-	case "image":
-		return "🖼️"
-	case "text":
-		return "📄"
-	case "audio":
-		return "🎵"
-	case "subtitle":
-		return "💬"
-	case "archive":
-		return "📦"
-	default:
-		return "📎"
+	case "video":    return "🎬"
+	case "image":    return "🖼️"
+	case "text":     return "📄"
+	case "audio":    return "🎵"
+	case "subtitle": return "💬"
+	case "archive":  return "📦"
+	default:         return "📎"
 	}
 }
 
@@ -1073,9 +1094,9 @@ func getExtension(name string) string {
 func guessMimeType(name string) string {
 	lower := strings.ToLower(name)
 	switch {
-	case strings.HasSuffix(lower, ".mp4"): return "video/mp4"
+	case strings.HasSuffix(lower, ".mp4"):  return "video/mp4"
 	case strings.HasSuffix(lower, ".webm"): return "video/webm"
-	case strings.HasSuffix(lower, ".mkv"): return "video/x-matroska"
+	case strings.HasSuffix(lower, ".mkv"):  return "video/x-matroska"
 	default: return ""
 	}
 }
@@ -1100,70 +1121,9 @@ func formatBytes(bytes int64) string {
 	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
 }
 
-// CheckAccess verifies if a discord user is allowed to use the bot/dashboard.
-// Returns (isAllowed, reasonIfNotAllowed)
-func (s *Server) CheckAccess(discordID string) (bool, string) {
-	// 1. Admins are always allowed
-	for _, admin := range s.adminUsers {
-		if admin == discordID {
-			return true, ""
-		}
-	}
-
-	// Read settings
-	var whitelistEnabled, blacklistEnabled string
-	s.db.QueryRow("SELECT value FROM access_settings WHERE key = 'whitelist_enabled'").Scan(&whitelistEnabled)
-	s.db.QueryRow("SELECT value FROM access_settings WHERE key = 'blacklist_enabled'").Scan(&blacklistEnabled)
-
-	// Read user list type
-	var listType string
-	err := s.db.QueryRow("SELECT type FROM access_list WHERE discord_id = $1", discordID).Scan(&listType)
-
-	// 2. Whitelist takes precedence if enabled
-	if whitelistEnabled == "true" {
-		if err == nil && listType == "whitelist" {
-			return true, ""
-		}
-		return false, "This bot is restricted to whitelisted users."
-	}
-
-	// 3. Blacklist check
-	if blacklistEnabled == "true" {
-		if err == nil && listType == "blacklist" {
-			return false, "You have been blocked from using this bot."
-		}
-	}
-
-	// Allowed by default if not blocked and whitelist is not required
-	return true, ""
-}
-
-// GetUserTotalSize returns the sum of sizes (in bytes) of all historical downloads for a user
-func (s *Server) GetUserTotalSize(discordID string) int64 {
-	var totalSize sql.NullInt64
-	err := s.db.QueryRow("SELECT SUM(size) FROM download_history WHERE discord_id = $1", discordID).Scan(&totalSize)
-	if err != nil || !totalSize.Valid {
-		return 0
-	}
-	return totalSize.Int64
-}
-
-// GetUserMonthlySize returns the sum of sizes (in bytes) of all historical downloads for a user in the current calendar month
-func (s *Server) GetUserMonthlySize(discordID string) int64 {
-	var totalSize sql.NullInt64
-	now := time.Now().UTC()
-	firstOfMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC).Format("2006-01-02 15:04:05")
-	err := s.db.QueryRow("SELECT SUM(size) FROM download_history WHERE discord_id = $1 AND created_at >= $2", discordID, firstOfMonth).Scan(&totalSize)
-	if err != nil || !totalSize.Valid {
-		return 0
-	}
-	return totalSize.Int64
-}
-
 func generateToken() string {
 	b := make([]byte, 16)
 	if _, err := rand.Read(b); err != nil {
-		// Fallback: should never happen
 		return fmt.Sprintf("%d", b)
 	}
 	return hex.EncodeToString(b)

@@ -10,37 +10,18 @@ import (
 	"time"
 )
 
-func (s *Server) handleApiTMDBSearch(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleTMDBSearch(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
 
-	_, _, _, ok := s.getSessionUser(r)
-	if !ok {
-		jsonError(w, http.StatusUnauthorized, "Unauthorized")
-		return
-	}
-
-	s.coreTMDBSearch(w, r)
-}
-
-func (s *Server) handleV1TMDBSearch(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
-		return
-	}
-
-	_, ok := s.checkV1PublicAccess(w, r)
+	_, ok := s.resolveUser(w, r)
 	if !ok {
 		return
 	}
 
-	s.coreTMDBSearch(w, r)
-}
-
-func (s *Server) coreTMDBSearch(w http.ResponseWriter, r *http.Request) {
-	if s.GetSetting("search_enabled", "true") != "true" {
+	if s.store.GetSetting("search_enabled", "true") != "true" {
 		jsonError(w, http.StatusForbidden, "Search functionality is disabled by the administrator")
 		return
 	}
@@ -58,7 +39,7 @@ func (s *Server) coreTMDBSearch(w http.ResponseWriter, r *http.Request) {
 		searchType = "movie"
 	}
 
-	tmdbKey := s.GetSetting("tmdb_api_key", "")
+	tmdbKey := s.store.GetSetting("tmdb_api_key", "")
 	if tmdbKey == "" {
 		jsonError(w, http.StatusInternalServerError, "TMDB API Key is not configured. Please ask the administrator to set it in the Global Settings.")
 		return
@@ -114,7 +95,6 @@ func (s *Server) coreTMDBSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Normalize results so they are uniform regardless of movie or tv
 	var normalized []map[string]interface{}
 	for _, res := range tmdbResp.Results {
 		id := res["id"]

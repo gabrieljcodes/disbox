@@ -484,7 +484,7 @@ func (b *Bot) handleAddTorrentFromSearch(s *discordgo.Session, i *discordgo.Inte
 			err = fmt.Errorf("⚡ Torrent not cached. Enable full downloads in settings.")
 			b.sendSearchError(s, i, err)
 		} else {
-			b.sendSearchError(s, i, fmt.Errorf(resp.Detail))
+			b.sendSearchError(s, i, fmt.Errorf("%s", resp.Detail))
 		}
 		return
 	}

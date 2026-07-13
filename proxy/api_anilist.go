@@ -11,37 +11,18 @@ import (
 	"time"
 )
 
-func (s *Server) handleApiAniListSearch(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleAniListSearch(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
 
-	_, _, _, ok := s.getSessionUser(r)
-	if !ok {
-		jsonError(w, http.StatusUnauthorized, "Unauthorized")
-		return
-	}
-
-	s.coreAniListSearch(w, r)
-}
-
-func (s *Server) handleV1AniListSearch(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
-		return
-	}
-
-	_, ok := s.checkV1PublicAccess(w, r)
+	_, ok := s.resolveUser(w, r)
 	if !ok {
 		return
 	}
 
-	s.coreAniListSearch(w, r)
-}
-
-func (s *Server) coreAniListSearch(w http.ResponseWriter, r *http.Request) {
-	if s.GetSetting("search_enabled", "true") != "true" {
+	if s.store.GetSetting("search_enabled", "true") != "true" {
 		jsonError(w, http.StatusForbidden, "Search functionality is disabled by the administrator")
 		return
 	}
@@ -146,15 +127,11 @@ func (s *Server) coreAniListSearch(w http.ResponseWriter, r *http.Request) {
 			"id":          res.ID,
 			"title":       title,
 			"year":        year,
-			"poster_path": res.CoverImage.Large, // Full URL instead of relative path
+			"poster_path": res.CoverImage.Large,
 			"overview":    res.Description,
 			"type":        "anime",
 		})
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"success": true,
-		"data":    normalized,
-	})
+	jsonOK(w, normalized)
 }
