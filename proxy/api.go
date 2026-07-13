@@ -586,9 +586,9 @@ func (s *Server) removeDownloadInternal(w http.ResponseWriter, token, discordID 
 
 	var err error
 	if isAdmin {
-		err = s.db.QueryRow("SELECT type, download_id, client_index FROM download_history WHERE token = $1 OR link_token = $2", token).Scan(&dlType, &downloadID, &clientIndex)
+		err = s.db.QueryRow("SELECT type, download_id, client_index FROM download_history WHERE token = $1 OR link_token = $2", token, token).Scan(&dlType, &downloadID, &clientIndex)
 	} else {
-		err = s.db.QueryRow("SELECT type, download_id, client_index FROM download_history WHERE (token = $1 OR link_token = $2) AND discord_id = $3", token, discordID).Scan(&dlType, &downloadID, &clientIndex)
+		err = s.db.QueryRow("SELECT type, download_id, client_index FROM download_history WHERE (token = $1 OR link_token = $2) AND discord_id = $3", token, token, discordID).Scan(&dlType, &downloadID, &clientIndex)
 	}
 	if err != nil {
 		jsonError(w, http.StatusNotFound, "Download not found or you don't have permission")
@@ -614,7 +614,7 @@ func (s *Server) removeDownloadInternal(w http.ResponseWriter, token, discordID 
 		}
 	}
 
-	s.db.Exec("UPDATE download_history SET deleted = true WHERE token = $1 OR link_token = $2", token)
+	s.db.Exec("UPDATE download_history SET deleted = true WHERE token = $1 OR link_token = $2", token, token)
 	s.db.Exec("DELETE FROM download_links WHERE token = $1", token)
 
 	s.mu.Lock()
@@ -741,7 +741,7 @@ func (s *Server) exportDataInternal(w http.ResponseWriter, r *http.Request, disc
 	var downloadID int
 	var clientIndex int
 
-	err := s.db.QueryRow("SELECT type, download_id, client_index FROM download_history WHERE (token = $1 OR link_token = $2) AND discord_id = $3", token, discordID).Scan(&dlType, &downloadID, &clientIndex)
+	err := s.db.QueryRow("SELECT type, download_id, client_index FROM download_history WHERE (token = $1 OR link_token = $2) AND discord_id = $3", token, token, discordID).Scan(&dlType, &downloadID, &clientIndex)
 	if err != nil {
 		jsonError(w, http.StatusNotFound, "Download not found or you don't have permission")
 		return
@@ -1128,7 +1128,7 @@ func (s *Server) handleApiFtpSend(w http.ResponseWriter, r *http.Request) {
 
 	var dlType, name string
 	var downloadID, clientIndex int
-	err := s.db.QueryRow("SELECT type, download_id, client_index, name FROM download_history WHERE (token = $1 OR link_token = $2) AND discord_id = $3", req.Token, discordID).Scan(&dlType, &downloadID, &clientIndex, &name)
+	err := s.db.QueryRow("SELECT type, download_id, client_index, name FROM download_history WHERE (token = $1 OR link_token = $2) AND discord_id = $3", req.Token, req.Token, discordID).Scan(&dlType, &downloadID, &clientIndex, &name)
 	if err != nil {
 		jsonError(w, http.StatusNotFound, "Download not found")
 		return
@@ -1299,7 +1299,7 @@ func (s *Server) handleV1FtpSend(w http.ResponseWriter, r *http.Request) {
 
 	var dlType, name string
 	var downloadID, clientIndex int
-	err := s.db.QueryRow("SELECT type, download_id, client_index, name FROM download_history WHERE (token = $1 OR link_token = $2) AND discord_id = $3", req.Token, discordID).Scan(&dlType, &downloadID, &clientIndex, &name)
+	err := s.db.QueryRow("SELECT type, download_id, client_index, name FROM download_history WHERE (token = $1 OR link_token = $2) AND discord_id = $3", req.Token, req.Token, discordID).Scan(&dlType, &downloadID, &clientIndex, &name)
 	if err != nil {
 		jsonError(w, http.StatusNotFound, "Download not found")
 		return
@@ -1533,7 +1533,7 @@ func (s *Server) handleApiIntegration(w http.ResponseWriter, r *http.Request) {
 	var dlType string
 	var downloadID int
 	var clientIndex int
-	err = s.db.QueryRow("SELECT type, download_id, client_index FROM download_history WHERE (token = $1 OR link_token = $2) AND discord_id = $3", historyToken, discordID).Scan(&dlType, &downloadID, &clientIndex)
+	err = s.db.QueryRow("SELECT type, download_id, client_index FROM download_history WHERE (token = $1 OR link_token = $2) AND discord_id = $3", historyToken, historyToken, discordID).Scan(&dlType, &downloadID, &clientIndex)
 	if err != nil {
 		jsonError(w, http.StatusNotFound, "Download not found")
 		return
@@ -1684,7 +1684,7 @@ func (s *Server) handleV1Integration(w http.ResponseWriter, r *http.Request) {
 	var dlType string
 	var downloadID int
 	var clientIndex int
-	err = s.db.QueryRow("SELECT type, download_id, client_index FROM download_history WHERE (token = $1 OR link_token = $2) AND discord_id = $3", historyToken, discordID).Scan(&dlType, &downloadID, &clientIndex)
+	err = s.db.QueryRow("SELECT type, download_id, client_index FROM download_history WHERE (token = $1 OR link_token = $2) AND discord_id = $3", historyToken, historyToken, discordID).Scan(&dlType, &downloadID, &clientIndex)
 	if err != nil {
 		jsonError(w, http.StatusNotFound, "Download not found")
 		return
@@ -1772,7 +1772,7 @@ func (s *Server) regenerateLinkInternal(w http.ResponseWriter, r *http.Request, 
 	if isAdmin {
 		err = s.db.QueryRow("SELECT type, download_id, client_index, link_token FROM download_history WHERE token = $1 LIMIT 1", req.Token).Scan(&downloadType, &downloadID, &clientIndex, &oldLinkToken)
 	} else {
-		err = s.db.QueryRow("SELECT type, download_id, client_index, link_token FROM download_history WHERE (token = $1 OR link_token = $2) AND discord_id = $3 LIMIT 1", req.Token, discordID).Scan(&downloadType, &downloadID, &clientIndex, &oldLinkToken)
+		err = s.db.QueryRow("SELECT type, download_id, client_index, link_token FROM download_history WHERE (token = $1 OR link_token = $2) AND discord_id = $3 LIMIT 1", req.Token, req.Token, discordID).Scan(&downloadType, &downloadID, &clientIndex, &oldLinkToken)
 	}
 
 	if err != nil {
