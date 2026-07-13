@@ -764,8 +764,7 @@
 
 
             function copyLink(url, btn) {
-                const fullUrl = window.location.origin + url;
-                navigator.clipboard.writeText(fullUrl).then(() => {
+                navigator.clipboard.writeText(url).then(() => {
                     showToast('Link Copied!', 'success');
                 });
             }
