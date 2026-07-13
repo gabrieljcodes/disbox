@@ -492,7 +492,7 @@ func (s *Server) handleV1History(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rows, err := s.db.Query(
-		"SELECT token, name, type, created_at FROM download_history WHERE discord_id = ? AND deleted = 0 ORDER BY created_at DESC LIMIT 100",
+		"SELECT token, link_token, name, type, created_at FROM download_history WHERE discord_id = ? AND deleted = 0 ORDER BY created_at DESC LIMIT 100",
 		discordID,
 	)
 	if err != nil {
@@ -503,6 +503,7 @@ func (s *Server) handleV1History(w http.ResponseWriter, r *http.Request) {
 
 	type HistoryItem struct {
 		Token       string `json:"token"`
+		LinkToken   string `json:"link_token"`
 		Name        string `json:"name"`
 		Type        string `json:"type"`
 		CreatedAt   string `json:"created_at"`
@@ -513,9 +514,13 @@ func (s *Server) handleV1History(w http.ResponseWriter, r *http.Request) {
 	var items []HistoryItem
 	for rows.Next() {
 		var item HistoryItem
-		if err := rows.Scan(&item.Token, &item.Name, &item.Type, &item.CreatedAt); err == nil {
-			item.BrowseURL = fmt.Sprintf("%s/browse/%s", s.baseURL, item.Token)
-			item.DownloadURL = fmt.Sprintf("%s/dl/%s", s.baseURL, item.Token)
+		if err := rows.Scan(&item.Token, &item.LinkToken, &item.Name, &item.Type, &item.CreatedAt); err == nil {
+			activeToken := item.Token
+			if item.LinkToken != "" {
+				activeToken = item.LinkToken
+			}
+			item.BrowseURL = fmt.Sprintf("%s/browse/%s", s.baseURL, activeToken)
+			item.DownloadURL = fmt.Sprintf("%s/dl/%s", s.baseURL, activeToken)
 			items = append(items, item)
 		}
 	}
@@ -581,9 +586,9 @@ func (s *Server) removeDownloadInternal(w http.ResponseWriter, token, discordID 
 
 	var err error
 	if isAdmin {
-		err = s.db.QueryRow("SELECT type, download_id, client_index FROM download_history WHERE token = ?", token).Scan(&dlType, &downloadID, &clientIndex)
+		err = s.db.QueryRow("SELECT type, download_id, client_index FROM download_history WHERE token = ? OR link_token = ?", token).Scan(&dlType, &downloadID, &clientIndex)
 	} else {
-		err = s.db.QueryRow("SELECT type, download_id, client_index FROM download_history WHERE token = ? AND discord_id = ?", token, discordID).Scan(&dlType, &downloadID, &clientIndex)
+		err = s.db.QueryRow("SELECT type, download_id, client_index FROM download_history WHERE (token = ? OR link_token = ?) AND discord_id = ?", token, discordID).Scan(&dlType, &downloadID, &clientIndex)
 	}
 	if err != nil {
 		jsonError(w, http.StatusNotFound, "Download not found or you don't have permission")
@@ -609,7 +614,7 @@ func (s *Server) removeDownloadInternal(w http.ResponseWriter, token, discordID 
 		}
 	}
 
-	s.db.Exec("UPDATE download_history SET deleted = 1 WHERE token = ?", token)
+	s.db.Exec("UPDATE download_history SET deleted = 1 WHERE token = ? OR link_token = ?", token)
 	s.db.Exec("DELETE FROM download_links WHERE token = ?", token)
 
 	s.mu.Lock()
@@ -736,7 +741,7 @@ func (s *Server) exportDataInternal(w http.ResponseWriter, r *http.Request, disc
 	var downloadID int
 	var clientIndex int
 
-	err := s.db.QueryRow("SELECT type, download_id, client_index FROM download_history WHERE token = ? AND discord_id = ?", token, discordID).Scan(&dlType, &downloadID, &clientIndex)
+	err := s.db.QueryRow("SELECT type, download_id, client_index FROM download_history WHERE (token = ? OR link_token = ?) AND discord_id = ?", token, discordID).Scan(&dlType, &downloadID, &clientIndex)
 	if err != nil {
 		jsonError(w, http.StatusNotFound, "Download not found or you don't have permission")
 		return
@@ -1123,7 +1128,7 @@ func (s *Server) handleApiFtpSend(w http.ResponseWriter, r *http.Request) {
 
 	var dlType, name string
 	var downloadID, clientIndex int
-	err := s.db.QueryRow("SELECT type, download_id, client_index, name FROM download_history WHERE token = ? AND discord_id = ?", req.Token, discordID).Scan(&dlType, &downloadID, &clientIndex, &name)
+	err := s.db.QueryRow("SELECT type, download_id, client_index, name FROM download_history WHERE (token = ? OR link_token = ?) AND discord_id = ?", req.Token, discordID).Scan(&dlType, &downloadID, &clientIndex, &name)
 	if err != nil {
 		jsonError(w, http.StatusNotFound, "Download not found")
 		return
@@ -1294,7 +1299,7 @@ func (s *Server) handleV1FtpSend(w http.ResponseWriter, r *http.Request) {
 
 	var dlType, name string
 	var downloadID, clientIndex int
-	err := s.db.QueryRow("SELECT type, download_id, client_index, name FROM download_history WHERE token = ? AND discord_id = ?", req.Token, discordID).Scan(&dlType, &downloadID, &clientIndex, &name)
+	err := s.db.QueryRow("SELECT type, download_id, client_index, name FROM download_history WHERE (token = ? OR link_token = ?) AND discord_id = ?", req.Token, discordID).Scan(&dlType, &downloadID, &clientIndex, &name)
 	if err != nil {
 		jsonError(w, http.StatusNotFound, "Download not found")
 		return
@@ -1528,7 +1533,7 @@ func (s *Server) handleApiIntegration(w http.ResponseWriter, r *http.Request) {
 	var dlType string
 	var downloadID int
 	var clientIndex int
-	err = s.db.QueryRow("SELECT type, download_id, client_index FROM download_history WHERE token = ? AND discord_id = ?", historyToken, discordID).Scan(&dlType, &downloadID, &clientIndex)
+	err = s.db.QueryRow("SELECT type, download_id, client_index FROM download_history WHERE (token = ? OR link_token = ?) AND discord_id = ?", historyToken, discordID).Scan(&dlType, &downloadID, &clientIndex)
 	if err != nil {
 		jsonError(w, http.StatusNotFound, "Download not found")
 		return
@@ -1592,6 +1597,16 @@ func (s *Server) handleV1UserCloud(w http.ResponseWriter, r *http.Request) {
 			jsonError(w, http.StatusBadRequest, "Invalid JSON")
 			return
 		}
+		
+		var existingGoogle, existingDropbox, existingOnedrive, existingGofile, existingOnefichier, existingPixeldrain string
+		s.db.QueryRow("SELECT google_token, dropbox_token, onedrive_token, gofile_token, onefichier_token, pixeldrain_token FROM user_cloud_configs WHERE discord_id = ?", discordID).Scan(&existingGoogle, &existingDropbox, &existingOnedrive, &existingGofile, &existingOnefichier, &existingPixeldrain)
+		
+		if config.Google == "" { config.Google = existingGoogle }
+		if config.Dropbox == "" { config.Dropbox = existingDropbox }
+		if config.OneDrive == "" { config.OneDrive = existingOnedrive }
+		if config.Gofile == "" { config.Gofile = existingGofile }
+		if config.Onefichier == "" { config.Onefichier = existingOnefichier }
+		if config.Pixeldrain == "" { config.Pixeldrain = existingPixeldrain }
 
 		_, err := s.db.Exec(`
 			INSERT INTO user_cloud_configs (discord_id, google_token, dropbox_token, onedrive_token, gofile_token, onefichier_token, pixeldrain_token) 
@@ -1669,7 +1684,7 @@ func (s *Server) handleV1Integration(w http.ResponseWriter, r *http.Request) {
 	var dlType string
 	var downloadID int
 	var clientIndex int
-	err = s.db.QueryRow("SELECT type, download_id, client_index FROM download_history WHERE token = ? AND discord_id = ?", historyToken, discordID).Scan(&dlType, &downloadID, &clientIndex)
+	err = s.db.QueryRow("SELECT type, download_id, client_index FROM download_history WHERE (token = ? OR link_token = ?) AND discord_id = ?", historyToken, discordID).Scan(&dlType, &downloadID, &clientIndex)
 	if err != nil {
 		jsonError(w, http.StatusNotFound, "Download not found")
 		return
@@ -1757,7 +1772,7 @@ func (s *Server) regenerateLinkInternal(w http.ResponseWriter, r *http.Request, 
 	if isAdmin {
 		err = s.db.QueryRow("SELECT type, download_id, client_index, link_token FROM download_history WHERE token = ? LIMIT 1", req.Token).Scan(&downloadType, &downloadID, &clientIndex, &oldLinkToken)
 	} else {
-		err = s.db.QueryRow("SELECT type, download_id, client_index, link_token FROM download_history WHERE token = ? AND discord_id = ? LIMIT 1", req.Token, discordID).Scan(&downloadType, &downloadID, &clientIndex, &oldLinkToken)
+		err = s.db.QueryRow("SELECT type, download_id, client_index, link_token FROM download_history WHERE (token = ? OR link_token = ?) AND discord_id = ? LIMIT 1", req.Token, discordID).Scan(&downloadType, &downloadID, &clientIndex, &oldLinkToken)
 	}
 
 	if err != nil {
@@ -1790,7 +1805,7 @@ func (s *Server) regenerateLinkInternal(w http.ResponseWriter, r *http.Request, 
 	if isAdmin {
 		_, err = tx.Exec("UPDATE download_history SET link_token = ? WHERE token = ?", newLinkToken, req.Token)
 	} else {
-		_, err = tx.Exec("UPDATE download_history SET link_token = ? WHERE token = ? AND discord_id = ?", newLinkToken, req.Token, discordID)
+		_, err = tx.Exec("UPDATE download_history SET link_token = ? WHERE (token = ? OR link_token = ?) AND discord_id = ?", newLinkToken, req.Token, discordID)
 	}
 	
 	if err != nil {

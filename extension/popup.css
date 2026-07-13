@@ -439,19 +439,17 @@ body {
 .dl-btn {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
-    padding: 4px 8px;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
     background: var(--bg-input);
     border: 1px solid var(--border-subtle);
-    border-radius: 4px;
+    border-radius: 6px;
     color: var(--text-secondary);
-    font-size: 10px;
-    font-weight: 600;
-    font-family: inherit;
     cursor: pointer;
     transition: var(--transition);
     text-decoration: none;
-    white-space: nowrap;
 }
 
 .dl-btn:hover {
@@ -461,8 +459,8 @@ body {
 }
 
 .dl-btn svg {
-    width: 12px;
-    height: 12px;
+    width: 14px;
+    height: 14px;
 }
 
 .dl-btn.btn-ftp {
@@ -474,6 +472,17 @@ body {
 .dl-btn.btn-ftp:hover {
     background: rgba(30, 191, 106, 0.15);
 }
+
+.dl-btn.btn-cloud {
+    background: rgba(86, 179, 255, 0.08);
+    color: var(--accent-blue);
+    border-color: rgba(86, 179, 255, 0.15);
+}
+
+.dl-btn.btn-cloud:hover {
+    background: rgba(86, 179, 255, 0.15);
+}
+
 
 .dl-btn.btn-remove {
     background: rgba(251, 113, 133, 0.08);
@@ -601,3 +610,87 @@ body {
     transform: translateX(-50%) translateY(0);
     opacity: 1;
 }
+
+/* ─── Tooltips ─── */
+[data-tooltip] { position: relative; }
+[data-tooltip]:hover::before {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%) translateY(-6px);
+    background: rgba(0, 0, 0, 0.9);
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 500;
+    white-space: nowrap;
+    z-index: 10000;
+    pointer-events: none;
+    opacity: 0;
+    animation: tooltipFadeIn 0.2s forwards;
+    border: 1px solid rgba(255,255,255,0.1);
+}
+@keyframes tooltipFadeIn {
+    to { opacity: 1; transform: translateX(-50%) translateY(-6px); }
+}
+
+/* ─── Modals ─── */
+.modal {
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    z-index: 1000; display: none; align-items: center; justify-content: center; padding: 20px;
+    animation: fadeIn 0.2s ease-out forwards;
+}
+
+.modal-content {
+    background: rgba(20, 20, 25, 0.95); border: 1px solid var(--border-subtle);
+    border-radius: var(--radius); width: 100%; max-width: 350px; position: relative;
+    box-shadow: 0 24px 48px rgba(0,0,0,0.5); overflow: hidden;
+    animation: slideUpModal 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes slideUpModal { from { opacity: 0; transform: translateY(20px) scale(0.95); } to { opacity: 1; transform: translateY(0) scale(1); } }
+
+.btn-close {
+    position: absolute; top: 12px; right: 12px; background: rgba(255,255,255,0.05); border: none;
+    color: var(--text-muted); cursor: pointer; padding: 6px; border-radius: 50%;
+    transition: var(--transition); display: flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px;
+}
+.btn-close:hover { background: rgba(255,255,255,0.15); color: #fff; }
+
+.cloud-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+}
+
+.cloud-btn {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 8px; padding: 12px 8px; border-radius: 10px; cursor: pointer;
+    transition: all 0.2s ease; border: 1px solid transparent;
+    background: rgba(255, 255, 255, 0.03); color: var(--text-secondary);
+    font-weight: 600; font-size: 11px;
+}
+.cloud-btn svg { width: 24px; height: 24px; opacity: 0.8; transition: all 0.2s ease; }
+.cloud-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.2); color: #fff; }
+.cloud-btn:hover svg { opacity: 1; transform: scale(1.1); }
+
+.cloud-btn.google:hover { background: rgba(25, 164, 99, 0.1); border-color: rgba(25, 164, 99, 0.3); }
+.cloud-btn.google svg { color: #19a463; }
+
+.cloud-btn.dropbox:hover { background: rgba(0, 97, 254, 0.1); border-color: rgba(0, 97, 254, 0.3); }
+.cloud-btn.dropbox svg { color: #0061fe; }
+
+.cloud-btn.onedrive:hover { background: rgba(0, 120, 212, 0.1); border-color: rgba(0, 120, 212, 0.3); }
+.cloud-btn.onedrive svg { color: #0078d4; }
+
+.cloud-btn.gofile:hover { background: rgba(86, 179, 255, 0.1); border-color: rgba(86, 179, 255, 0.3); }
+.cloud-btn.gofile svg { color: #56b3ff; }
+
+.cloud-btn.fichier:hover { background: rgba(230, 57, 70, 0.1); border-color: rgba(230, 57, 70, 0.3); }
+.cloud-btn.fichier svg { color: #e63946; }
+
+.cloud-btn.pixeldrain:hover { background: rgba(144, 238, 144, 0.1); border-color: rgba(144, 238, 144, 0.3); }
+.cloud-btn.pixeldrain svg { color: #90EE90; }
+

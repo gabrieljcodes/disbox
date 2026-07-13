@@ -291,25 +291,23 @@
                         </div>
                     </div>
                     <div class="dl-actions">
-                        <a href="${browseUrl}" target="_blank" class="dl-btn">
+                        <a href="${browseUrl}" target="_blank" class="dl-btn" data-tooltip="Browse">
                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-                            Browse
                         </a>
-                        <a href="${dlUrl}" target="_blank" class="dl-btn">
+                        <a href="${dlUrl}" target="_blank" class="dl-btn" data-tooltip="Download">
                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                            Download
                         </a>
-                        <button class="dl-btn btn-ftp" data-token="${item.token}" data-action="ftp">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                            FTP
-                        </button>
-                        <button class="dl-btn" data-token="${item.token}" data-url="${dlUrl}" data-action="copy">
+                        <button class="dl-btn" data-token="${item.token}" data-url="${dlUrl}" data-action="copy" data-tooltip="Copy">
                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                            Copy
                         </button>
-                        <button class="dl-btn btn-remove" data-token="${item.token}" data-action="remove">
+                        <button class="dl-btn btn-ftp" data-token="${item.token}" data-action="ftp" data-tooltip="FTP">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                        </button>
+                        <button class="dl-btn btn-cloud" data-token="${item.token}" data-action="cloud" data-tooltip="Cloud">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg>
+                        </button>
+                        <button class="dl-btn btn-remove" data-token="${item.token}" data-action="remove" data-tooltip="Remove">
                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-                            Remove
                         </button>
                     </div>
                 `;
@@ -333,6 +331,9 @@
                         });
                     } else if (action === 'ftp') {
                         sendToFtp(token, btn);
+                    } else if (action === 'cloud') {
+                        document.getElementById('cloud-target-token').value = token;
+                        document.getElementById('cloud-modal').style.display = 'flex';
                     } else if (action === 'remove') {
                         removeDownload(token, btn);
                     }
@@ -489,6 +490,66 @@
         } catch {
             showToast('Connection error', 'error');
         }
+    });
+
+    document.getElementById('btn-save-cloud').addEventListener('click', async () => {
+        const payload = {
+            google: document.getElementById('input-cloud-google').value.trim(),
+            dropbox: document.getElementById('input-cloud-dropbox').value.trim(),
+            onedrive: document.getElementById('input-cloud-onedrive').value.trim(),
+            gofile: document.getElementById('input-cloud-gofile').value.trim(),
+            onefichier: document.getElementById('input-cloud-1fichier').value.trim(),
+            pixeldrain: document.getElementById('input-cloud-pixeldrain').value.trim()
+        };
+
+        try {
+            const data = await apiFetch('/v1/user/cloud', {
+                method: 'POST',
+                body: JSON.stringify(payload),
+            });
+
+            if (data.success) {
+                showToast('Cloud settings saved', 'success');
+            } else {
+                showToast(data.error || 'Failed to save cloud settings', 'error');
+            }
+        } catch {
+            showToast('Connection error', 'error');
+        }
+    });
+
+    // ─── Cloud Modal Logic ───
+    document.getElementById('btn-close-cloud').addEventListener('click', () => {
+        document.getElementById('cloud-modal').style.display = 'none';
+    });
+
+    document.querySelectorAll('.cloud-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const provider = btn.dataset.provider;
+            const token = document.getElementById('cloud-target-token').value;
+            if (!provider || !token) return;
+
+            const originalHtml = btn.innerHTML;
+            btn.innerHTML = '<div class="spinner" style="width:20px;height:20px;margin:2px 0; border-top-color: var(--text-secondary);"></div>';
+
+            try {
+                const data = await apiFetch('/api/integration/' + provider, {
+                    method: 'POST',
+                    body: JSON.stringify({ token: token, file_id: 0, provider: provider })
+                });
+
+                if (data.success || !data.error) {
+                    showToast(`Upload to ${provider} started`, 'success');
+                    document.getElementById('cloud-modal').style.display = 'none';
+                } else {
+                    showToast(data.detail || data.error || 'Failed to send to cloud', 'error');
+                }
+            } catch (err) {
+                showToast('Connection error', 'error');
+            }
+
+            btn.innerHTML = originalHtml;
+        });
     });
 
 })();
