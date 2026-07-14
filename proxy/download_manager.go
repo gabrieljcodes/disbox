@@ -430,7 +430,7 @@ func (dm *DownloadManager) executeDownload(qd *QueuedDownload) error {
 		err = e
 		clientIndex = cIdx
 		if err == nil && !apiResp.Success {
-			err = fmt.Errorf("%s", apiResp.Detail)
+			err = torbox.FormatAPIError(apiResp)
 		} else if err == nil {
 			data, ok := apiResp.Data.(map[string]interface{})
 			if !ok {
@@ -453,7 +453,7 @@ func (dm *DownloadManager) executeDownload(qd *QueuedDownload) error {
 		err = e
 		clientIndex = cIdx
 		if err == nil && !apiResp.Success {
-			err = fmt.Errorf("%s", apiResp.Detail)
+			err = torbox.FormatAPIError(apiResp)
 		} else if err == nil {
 			data, ok := apiResp.Data.(map[string]interface{})
 			if !ok {
@@ -476,7 +476,7 @@ func (dm *DownloadManager) executeDownload(qd *QueuedDownload) error {
 		err = e
 		clientIndex = cIdx
 		if err == nil && !apiResp.Success {
-			err = fmt.Errorf("%s", apiResp.Detail)
+			err = torbox.FormatAPIError(apiResp)
 		} else if err == nil {
 			data, ok := apiResp.Data.(map[string]interface{})
 			if !ok {

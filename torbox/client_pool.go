@@ -125,9 +125,11 @@ func (p *ClientPool) doWithFallback(action func(client *Client) (*APIResponse, e
 			continue
 		}
 
-		if !resp.Success && (isActiveLimitError(resp) || isPlanLimitError(resp)) {
-			log.Printf("API key #%d reached limit or rejected size, trying next...", idx+1)
-			continue
+		if !resp.Success {
+			if isActiveLimitError(resp) || isPlanLimitError(resp) || isAuthError(resp) {
+				log.Printf("API key #%d reached limit, rejected size, or has auth error, trying next...", idx+1)
+				continue
+			}
 		}
 
 		return resp, idx, err
@@ -197,4 +199,11 @@ func isPlanLimitError(resp *APIResponse) bool {
 	}
 	
 	return false
+}
+
+func isAuthError(resp *APIResponse) bool {
+	if resp == nil || resp.Success {
+		return false
+	}
+	return resp.Error == "AUTH_ERROR" || resp.Error == "BAD_TOKEN"
 }
