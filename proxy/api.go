@@ -91,7 +91,7 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 		LinkToken   string `json:"link_token"`
 		Name        string `json:"name"`
 		Type        string `json:"type"`
-		CreatedAt   string `json:"created_at"`
+		CreatedAt   time.Time `json:"created_at"`
 		BrowseURL   string `json:"browse_url"`
 		DownloadURL string `json:"download_url"`
 	}
@@ -1067,7 +1067,7 @@ func (s *Server) handleAdminHistory(w http.ResponseWriter, r *http.Request) {
 		LinkToken       string `json:"link_token"`
 		Name            string `json:"name"`
 		Type            string `json:"type"`
-		CreatedAt       string `json:"created_at"`
+		CreatedAt       time.Time `json:"created_at"`
 	}
 
 	var result []AdminHistoryItem

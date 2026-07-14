@@ -85,6 +85,7 @@ func (st *Store) CreateTables() error {
 			pixeldrain_token TEXT DEFAULT ''
 		);
 	`)
+
 	return err
 }
 
@@ -172,10 +173,10 @@ func (st *Store) GetAPIUser(token string) (discordID string, ok bool) {
 }
 
 type TokenInfo struct {
-	Token      string  `json:"token"`
-	Name       string  `json:"name"`
-	CreatedAt  string  `json:"created_at"`
-	LastUsedAt *string `json:"last_used_at"`
+	Token      string     `json:"token"`
+	Name       string     `json:"name"`
+	CreatedAt  time.Time  `json:"created_at"`
+	LastUsedAt *time.Time `json:"last_used_at"`
 }
 
 func (st *Store) ListAPITokens(discordID string) ([]TokenInfo, error) {
@@ -191,7 +192,7 @@ func (st *Store) ListAPITokens(discordID string) ([]TokenInfo, error) {
 	var tokens []TokenInfo
 	for rows.Next() {
 		var t TokenInfo
-		var lastUsed *string
+		var lastUsed *time.Time
 		if err := rows.Scan(&t.Token, &t.Name, &t.CreatedAt, &lastUsed); err == nil {
 			t.LastUsedAt = lastUsed
 			if len(t.Token) > 12 {
@@ -252,7 +253,7 @@ type HistoryRecord struct {
 	DownloadID      int
 	ClientIndex     int
 	Size            int64
-	CreatedAt       string
+	CreatedAt       time.Time
 }
 
 func (st *Store) SaveHistory(discordID, username, avatar, token, linkToken, name, dlType string, downloadID, clientIndex int, size int64) error {
@@ -533,7 +534,7 @@ type AccessUser struct {
 	DiscordAvatar    string `json:"discord_avatar"`
 	Type            string `json:"type"`
 	AddedBy         string `json:"added_by"`
-	AddedAt         string `json:"added_at"`
+	AddedAt         time.Time `json:"added_at"`
 }
 
 func (st *Store) ListAccessUsers() ([]AccessUser, error) {
@@ -693,10 +694,10 @@ func (st *Store) GetUserProfile(discordID string) (username, avatar string) {
 
 type AdminProfileHistory struct {
 	Token     string `json:"token"`
-	Name      string `json:"name"`
-	Type      string `json:"type"`
-	Size      int64  `json:"size"`
-	CreatedAt string `json:"created_at"`
+	Name      string    `json:"name"`
+	Type      string    `json:"type"`
+	Size      int64     `json:"size"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 func (st *Store) GetAdminUserHistory(discordID string) ([]AdminProfileHistory, int64, int, error) {
