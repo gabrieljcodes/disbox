@@ -126,7 +126,48 @@ Searches for torrents on AIOStreams. For series, the query format must include s
 
 *Note: These endpoints require the API token to belong to a user listed in `ADMIN_USERS` in the `.env` file.*
 
-#### List Access Control Users
+#### Get Global Announcements
+`GET /v1/announcements`
+Returns an array of active global announcements. This endpoint is public for all authenticated users.
+
+#### **Add Global Announcement**
+Adds a new announcement banner for all users.
+
+* **URL:** `/v1/admin/announcements/add`
+* **Method:** `POST`
+* **Auth Required:** Yes (Admin only)
+* **Data Params:**
+  ```json
+  {
+      "message": "String"
+  }
+  ```
+* **Success Response:**
+  * **Code:** 200 OK
+
+#### **Remove Global Announcement**
+Removes a specific announcement.
+
+* **URL:** `/v1/admin/announcements/remove`
+* **Method:** `POST`
+* **Auth Required:** Yes (Admin only)
+* **Data Params:**
+  ```json
+  {
+      "id": "String"
+  }
+  ```
+* **Success Response:**
+  * **Code:** 200 OK
+
+#### **Clear All Announcements**
+Removes all active announcements.
+
+* **URL:** `/v1/admin/announcements/clear`
+* **Method:** `POST`
+* **Auth Required:** Yes (Admin only)
+* **Success Response:**
+  * **Code:** 200 OKUsers
 `GET /v1/admin/access`
 Returns the current whitelist/blacklist status and a list of all users in the access control list.
 

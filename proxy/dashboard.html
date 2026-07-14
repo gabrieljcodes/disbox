@@ -55,6 +55,102 @@
             pointer-events: none; z-index: 0;
         }
 
+        /* ─── Global Announcements ─── */
+        #announcements-container {
+            position: fixed;
+            top: 0; left: 0; right: 0;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            pointer-events: none; /* Let clicks pass through empty space */
+        }
+        .announcement-banner {
+            background: linear-gradient(90deg, rgba(30,191,106,0.95), rgba(94,203,165,0.95));
+            color: #000;
+            padding: 12px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-weight: 600;
+            font-size: 14px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            pointer-events: auto;
+            transition: margin-top 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease;
+            border-bottom: 1px solid rgba(255,255,255,0.2);
+        }
+        .announcement-banner.hiding {
+            opacity: 0;
+            margin-top: -50px; /* Slide out of view */
+        }
+        .announcement-text { flex: 1; text-align: center; }
+        .announcement-close {
+            background: rgba(0,0,0,0.1);
+            border: none;
+            color: #000;
+            width: 28px; height: 28px;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            transition: var(--transition);
+        }
+        .announcement-close:hover { background: rgba(0,0,0,0.2); transform: scale(1.1); }
+
+        /* ─── Dropdown Menu ─── */
+        .dropdown-container {
+            position: relative;
+            display: inline-block;
+        }
+        .dropdown-container.active {
+            z-index: 99999;
+        }
+        .dropdown-menu {
+            position: absolute;
+            top: calc(100% + 8px); right: 0;
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            padding: 8px;
+            min-width: 180px;
+            box-shadow: var(--shadow-lg);
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(-10px);
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            z-index: 100;
+            pointer-events: none;
+        }
+        .dropdown-container.active .dropdown-menu {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+            pointer-events: auto;
+        }
+        .dropdown-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 12px;
+            color: var(--text-primary);
+            text-decoration: none;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: var(--transition);
+            background: transparent;
+            border: none;
+            width: 100%;
+            text-align: left;
+        }
+        .dropdown-item:hover {
+            background: var(--bg-glass);
+            color: var(--accent-emerald);
+        }
+        .dropdown-item svg { width: 14px; height: 14px; opacity: 0.7; }
+
         /* ─── Login Page ─── */
         .login-page {
             display: none;
@@ -874,6 +970,7 @@
         </style>
 </head>
 <body>
+    <div id="announcements-container"></div>
     <!-- Login Page -->
     <div class="login-page" id="login-page">
         <div class="login-card">
@@ -1240,6 +1337,27 @@
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
                         History
                     </button>
+                    <button class="admin-subtab" data-admin-tab="announcements">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l18-5v12L3 14v-3z"></path><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"></path></svg>
+                        Announcements
+                    </button>
+                </div>
+
+                <!-- ═══ Announcements Sub-panel ═══ -->
+                <div class="admin-subpanel" id="admin-panel-announcements">
+                    <h2 style="font-size: 20px; margin-bottom: 24px; font-weight: 600;">Global Announcements</h2>
+                    <div style="background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 12px; padding: 24px;">
+                        <h3 style="font-size: 16px; margin-bottom: 16px;">Create Announcement</h3>
+                        <div style="display: flex; gap: 12px; margin-bottom: 24px;">
+                            <input type="text" id="admin-announcement-input" class="form-input" placeholder="Type announcement message here..." style="flex: 1;" autocomplete="off">
+                            <button class="btn-submit" onclick="adminCreateAnnouncement()" style="width: auto; padding: 12px 24px;">Broadcast</button>
+                        </div>
+                        <h3 style="font-size: 16px; margin-bottom: 16px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 12px; display: flex; justify-content: space-between; align-items: center;">
+                            Active Announcements
+                            <button class="btn-danger btn-sm" onclick="adminClearAnnouncements()" style="font-size: 12px; padding: 6px 12px;">Clear All</button>
+                        </h3>
+                        <div id="admin-announcements-list" style="display: flex; flex-direction: column; gap: 12px;"></div>
+                    </div>
                 </div>
 
                 <!-- ═══ Users Sub-panel ═══ -->
@@ -1528,6 +1646,7 @@
                     loadAdminHistory();
                     loadAccessList();
                     loadAdminSettings();
+                    loadAdminAnnouncements();
                 }
                 if (!user.search_enabled) {
                     document.getElementById('tab-search').style.display = 'none';
@@ -1537,6 +1656,7 @@
                 }
                 loadHistory();
                 loadGlobalStats();
+                loadAnnouncements();
             })
             .catch(() => {
                 loginPage.classList.add('visible');
@@ -1748,51 +1868,37 @@
     </style></defs><path d="m34,1H14c-2.76,0-5,2.24-5,5v3h-3c-2.76,0-5,2.24-5,5v20c0,2.76,2.24,5,5,5h20c2.76,0,5-2.24,5-5v-3h3c2.76,0,5-2.24,5-5V6c0-2.76-2.24-5-5-5Zm-5,33c0,1.65-1.35,3-3,3H6c-1.65,0-3-1.35-3-3V14c0-1.65,1.35-3,3-3h20c1.65,0,3,1.35,3,3v20Zm8-8c0,1.65-1.35,3-3,3h-3v-15c0-2.76-2.24-5-5-5h-15v-3c0-1.65,1.35-3,3-3h20c1.65,0,3,1.35,3,3v20Z"></path><g><path d="m16.71,30.36l-1.41,1.41c-1.95,1.95-5.12,1.95-7.07,0s-1.95-5.12,0-7.07l2.83-2.83c1.95-1.95,5.12-1.95,7.07,0,.39.39.39,1.02,0,1.41s-1.02.39-1.41,0c-1.17-1.17-3.07-1.17-4.24,0l-2.83,2.83c-1.17,1.17-1.17,3.07,0,4.24s3.07,1.17,4.24,0l1.41-1.41c.39-.39,1.02-.39,1.41,0s.39,1.02,0,1.41Z"></path><path d="m23.78,23.29l-2.83,2.83c-1.95,1.95-5.12,1.95-7.07,0-.39-.39-.39-1.02,0-1.41s1.02-.39,1.41,0c1.17,1.17,3.07,1.17,4.24,0l2.83-2.83c1.17-1.17,1.17-3.07,0-4.24s-3.07-1.17-4.24,0l-1.41,1.41c-.39.39-1.02.39-1.41,0s-.39-1.02,0-1.41l1.41-1.41c1.95-1.95,5.12-1.95,7.07,0s1.95,5.12,0,7.07Z"></path></g></svg>
                                 </button>
                                 
-                                <div class="dropdown">
+                                <div class="dropdown dropdown-container">
                                     <button class="btn-sm" style="background: rgba(255, 255, 255, 0.05); color: var(--text-secondary); border: 1px solid var(--border-subtle); cursor: pointer;" onclick="toggleDropdown('${item.token}', event)">
                                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
                                     </button>
-                                    <div class="dropdown-content" id="dropdown-${item.token}">
-                                        <button onclick="sendToFtp('${item.token}', this)" data-tooltip="Send to FTP">
-                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="100" height="100">
-  <style>
-    .folder { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-    .arrow { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-    .text { font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif; font-weight: 800; font-size: 4px; fill: currentColor; letter-spacing: 0.5px; }
-  </style>
+                                    <div class="dropdown-menu" id="dropdown-${item.token}">
 
-  <path class="folder" d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-  
-  <text x="5" y="16" class="text">FTP</text>
-
-  <g class="arrow" transform="translate(15, 11)">
-    <line x1="2" y1="0" x2="2" y2="5" />
-    <polyline points="0,2 2,0 4,2" />
-  </g>
-</svg>
+                                        <button class="dropdown-item" onclick="sendToFtp('${item.token}', this)">
+                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                                            Send to FTP
                                         </button>
-                                        <button onclick="openCloudModal('${item.token}')" data-tooltip="Send to Cloud">
-                                            <svg xmlns="http://www.w3.org/2000/svg" shape-rendering="geometricPrecision" text-rendering="geometricPrecision" image-rendering="optimizeQuality" fill-rule="evenodd" clip-rule="evenodd" viewBox="0 0 512 386.883" fill="currentColor"><path fill-rule="nonzero" d="M377.763 115.7c-9.42 2.733-18.532 6.86-27.591 12.155-9.256 5.41-18.373 12.031-27.649 19.629l-19.849-22.742c16.721-15.527 33.187-26.464 49.108-33.514-13.06-22.39-31.538-38.532-52.418-48.549-21.339-10.238-45.242-14.171-68.507-11.922-23.123 2.234-45.56 10.619-64.123 25.025-21.451 16.646-37.775 41.521-44.034 74.469l-1.959 10.309-10.27 1.801c-27.993 4.909-49.283 18.793-62.859 36.776-7.186 9.518-12.228 20.161-14.969 31.19-2.728 10.979-3.193 22.399-1.243 33.525 3.291 18.766 13.592 36.737 31.669 50.382 5.467 4.128 11.376 7.709 17.886 10.48 6.215 2.647 13.017 4.612 20.558 5.686h78.258v30.246h-78.827l-1.891-.178c-11.099-1.413-20.982-4.186-29.914-7.99-8.994-3.829-16.989-8.65-24.264-14.142C20.256 299.753 6.183 275.02 1.628 249.05c-2.669-15.225-2.027-30.868 1.715-45.929 3.73-15.012 10.524-29.404 20.167-42.177 16.233-21.507 40.501-38.514 71.737-46.241 9.014-35.904 28.299-63.573 53.057-82.786C171.438 13.963 199.327 3.521 228.021.748c28.551-2.76 57.975 2.11 84.339 14.758 28.095 13.479 52.661 35.696 68.986 66.815 13.827-2.201 27.042-1.521 39.42 1.5 18.862 4.603 35.493 14.611 49.212 28.159 13.36 13.193 23.994 29.797 31.216 48.001 16.814 42.377 15.209 93.978-13.361 131.996-9.299 12.37-21.252 22.45-35.572 30.468-13.811 7.735-29.884 13.593-47.949 17.787l-3.368.414h-66.346V310.4h64.727c14.501-3.496 27.297-8.212 38.168-14.299 10.794-6.045 19.62-13.396 26.238-22.2 21.842-29.066 22.745-69.34 9.463-102.815-5.698-14.359-13.999-27.371-24.363-37.605-10.007-9.882-21.906-17.126-35.154-20.36-6.654-1.625-13.721-2.248-21.145-1.705l-14.769 4.284zM205.205 265.348c-5.288 6.391-14.756 7.285-21.148 1.997-6.391-5.288-7.285-14.757-1.997-21.148l59.645-72.019c5.288-6.392 14.757-7.285 21.148-1.998a15.053 15.053 0 012.707 2.921l60.072 72.279c5.287 6.359 4.42 15.802-1.939 21.09-6.359 5.287-15.801 4.42-21.089-1.939l-34.288-41.256.202 146.628c0 8.273-6.707 14.98-14.98 14.98-8.274 0-14.981-6.707-14.981-14.98l-.202-146.582-33.15 40.027z"/></svg>
+                                        <button class="dropdown-item" onclick="openCloudModal('${item.token}')">
+                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg>
+                                            Send to Cloud
                                         </button>
-                                        <button onclick="regenerateLink('${item.token}', this)" data-tooltip="Regenerate Link">
+                                        <button class="dropdown-item" onclick="regenerateLink('${item.token}', this)">
                                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
-                                        </button>${item.type === 'torrent' ? `<button onclick="exportTorrent('${item.token}', 'file', this)" data-tooltip="Export .torrent">
-                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><polyline points="9 15 12 18 15 15"/></svg>
+                                            Regenerate Link
                                         </button>
-                                        <button onclick="exportTorrent('${item.token}', 'magnet', this)" data-tooltip="Export Magnet">
+                                        ${item.type === 'torrent' ? `
+                                        <button class="dropdown-item" onclick="exportTorrent('${item.token}', 'file', this)">
+                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><polyline points="9 15 12 18 15 15"/></svg>
+                                            Export .torrent
+                                        </button>
+                                        <button class="dropdown-item" onclick="exportTorrent('${item.token}', 'magnet', this)">
                                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-                                        </button>` : ''}<button class="danger" onclick="removeDownload('${item.token}', this)" data-tooltip="Delete">
-                                            
-<svg
-    xmlns="http://www.w3.org/2000/svg"
-    viewBox="0 0 40 40"
-    width="40"
-    height="40"
-    fill="#ef4444"
-    stroke="#ef4444">
-    <path d="m20,39C9.52,39,1,30.48,1,20S9.52,1,20,1s19,8.52,19,19-8.52,19-19,19Zm0-36C10.63,3,3,10.63,3,20s7.63,17,17,17,17-7.63,17-17S29.37,3,20,3Z"/>
-    <path d="m26.67,30.24c-.92,0-1.83-.35-2.53-1.04l-4.14-4.14-4.14,4.14c-1.39,1.39-3.66,1.39-5.05,0s-1.39-3.66,0-5.05l4.14-4.14-4.14-4.14c-1.39-1.39-1.39-3.66,0-5.05s3.66-1.39,5.05,0l4.14,4.14,4.14-4.14c1.39-1.39,3.66-1.39,5.05,0s1.39,3.66,0,5.05l-4.14,4.14,4.14,4.14c1.39,1.39,1.39,3.66,0,5.05-.7.7-1.61,1.04-2.53,1.04Zm-6.67-7.6c.26,0,.51.1.71.29l4.85,4.85c.61.61,1.61.61,2.22,0,.61-.61.61-1.61,0-2.22l-4.85-4.85c-.39-.39-.39-1.02,0-1.41l4.85-4.85c.61-.61.61-1.61,0-2.22-.61-.61-1.61-.61-2.22,0l-4.85,4.85c-.39.39-1.02.39-1.41,0l-4.85-4.85c-.61-.61-1.61-.61-2.22,0-.61.61-.61,1.61,0,2.22l4.85,4.85c.39.39.39,1.02,0,1.41l-4.85,4.85c-.61.61-.61,1.61,0,2.22.61.61,1.61.61,2.22,0l4.85-4.85c.2-.2.45-.29.71-.29Z"/>
-</svg>
+                                            Export Magnet
+                                        </button>
+                                        ` : ''}
+                                        <button class="dropdown-item" onclick="removeDownload('${item.token}', this)" style="color: #ef4444;">
+                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                                            Delete
                                         </button>
                                     </div>
                                 </div>
@@ -1824,6 +1930,56 @@
                     document.getElementById('stats-bw-limit').textContent = data.global_bandwidth_limit ? (data.global_bandwidth_limit / tb).toFixed(0) : "0";
                 }).catch(e => console.error("Failed to load queue status:", e));
         }
+
+        // ─── Global Announcements ───
+        function loadAnnouncements() {
+            fetch('/v1/announcements')
+                .then(r => r.json())
+                .then(res => {
+                    const container = document.getElementById('announcements-container');
+                    container.innerHTML = '';
+                    if (!res || !res.success || !res.data || res.data.length === 0) return;
+                    
+                    const dismissed = JSON.parse(localStorage.getItem('dismissedAnnouncements') || '[]');
+                    
+                    res.data.forEach(ann => {
+                        if (dismissed.includes(ann.id)) return;
+                        
+                        const banner = document.createElement('div');
+                        banner.className = 'announcement-banner';
+                        banner.id = 'announcement-' + ann.id;
+                        
+                        // Parse date for display
+                        const dateObj = new Date(ann.date);
+                        const dateStr = dateObj.toLocaleDateString();
+                        
+                        banner.innerHTML = `
+                            <div class="announcement-text">
+                                <span style="opacity:0.8; margin-right: 8px; font-size: 12px;">${dateStr}</span>
+                                ${ann.message}
+                            </div>
+                            <button class="announcement-close" onclick="dismissAnnouncement('${ann.id}')">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                            </button>
+                        `;
+                        container.appendChild(banner);
+                    });
+                }).catch(e => console.error("Failed to load announcements:", e));
+        }
+
+        window.dismissAnnouncement = function(id) {
+            const banner = document.getElementById('announcement-' + id);
+            if (banner) {
+                banner.classList.add('hiding');
+                setTimeout(() => banner.remove(), 400); // Wait for transition
+            }
+            
+            const dismissed = JSON.parse(localStorage.getItem('dismissedAnnouncements') || '[]');
+            if (!dismissed.includes(id)) {
+                dismissed.push(id);
+                localStorage.setItem('dismissedAnnouncements', JSON.stringify(dismissed));
+            }
+        };
 
         // ─── Profile & FTP ───
         function loadUserProfile() {
@@ -2286,6 +2442,94 @@
                     adminEmpty.style.display = '';
                 });
         }
+
+        // ─── Admin Announcements ───
+        window.loadAdminAnnouncements = function() {
+            fetch('/v1/announcements')
+                .then(r => r.json())
+                .then(res => {
+                    const list = document.getElementById('admin-announcements-list');
+                    if (!list) return;
+                    list.innerHTML = '';
+                    if (!res || res.length === 0) {
+                        list.innerHTML = '<div style="color: var(--text-muted); font-size: 13px;">No active announcements.</div>';
+                        return;
+                    }
+                    res.forEach(ann => {
+                        const dateStr = new Date(ann.created_at).toLocaleString();
+                        const el = document.createElement('div');
+                        el.style.cssText = "display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.03); padding: 12px 16px; border-radius: 8px; border: 1px solid var(--border-subtle);";
+                        el.innerHTML = `
+                            <div>
+                                <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 4px;">${dateStr}</div>
+                                <div style="font-size: 14px; color: var(--text-primary); font-weight: 500;">${ann.message}</div>
+                            </div>
+                            <button class="btn-danger btn-sm" onclick="adminRemoveAnnouncement('${ann.id}')">Remove</button>
+                        `;
+                        list.appendChild(el);
+                    });
+                }).catch(e => console.error("Failed to load admin announcements:", e));
+        };
+
+        window.adminCreateAnnouncement = function() {
+            const input = document.getElementById('admin-announcement-input');
+            const message = input.value.trim();
+            if (!message) return;
+            
+            const btn = document.querySelector('button[onclick="adminCreateAnnouncement()"]');
+            const originalHtml = btn.innerHTML;
+            btn.innerHTML = '<div class="spinner-inline"></div>';
+            btn.disabled = true;
+
+            fetch('/v1/admin/announcements/add', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message })
+            }).then(r => r.json()).then(res => {
+                btn.innerHTML = originalHtml;
+                btn.disabled = false;
+                if (res.success) {
+                    input.value = '';
+                    showToast('Announcement broadcasted', 'success');
+                    loadAdminAnnouncements();
+                    loadAnnouncements(); // Reload globally
+                } else {
+                    showToast(res.error || 'Failed to create announcement', 'error');
+                }
+            }).catch(err => {
+                btn.innerHTML = originalHtml;
+                btn.disabled = false;
+                showToast('Network error', 'error');
+            });
+        };
+
+        window.adminRemoveAnnouncement = function(id) {
+            fetch('/v1/admin/announcements/remove', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: id })
+            }).then(r => r.json()).then(res => {
+                if (res.success) {
+                    loadAdminAnnouncements();
+                    loadAnnouncements(); // Reload globally
+                } else {
+                    showToast(res.error || 'Failed to remove', 'error');
+                }
+            });
+        };
+
+        window.adminClearAnnouncements = function() {
+            if (!confirm('Clear all announcements?')) return;
+            fetch('/v1/admin/announcements/clear', { method: 'POST' })
+                .then(r => r.json()).then(res => {
+                    if (res.success) {
+                        loadAdminAnnouncements();
+                        loadAnnouncements(); // Reload globally
+                    } else {
+                        showToast(res.error || 'Failed to clear', 'error');
+                    }
+                });
+        };
 
         // ─── Type Detection ───
         let selectedTorrentFile = null;
@@ -3015,14 +3259,22 @@
 
         window.toggleDropdown = function(token, event) {
             // Close any currently open dropdowns
-            document.querySelectorAll('.dropdown-content').forEach(d => {
-                if (d.id !== 'dropdown-' + token) {
-                    d.classList.remove('show');
+            document.querySelectorAll('.dropdown-container').forEach(d => {
+                if (!d.querySelector('#dropdown-' + token)) {
+                    d.classList.remove('active');
+                    const parent = d.closest('.history-item, .grid-item');
+                    if (parent) parent.style.zIndex = '';
                 }
             });
             const d = document.getElementById('dropdown-' + token);
-            if (d) {
-                d.classList.toggle('show');
+            if (d && d.parentElement) {
+                const container = d.parentElement;
+                container.classList.toggle('active');
+                const parent = container.closest('.history-item, .grid-item');
+                if (parent) {
+                    parent.style.position = 'relative';
+                    parent.style.zIndex = container.classList.contains('active') ? '9999' : '';
+                }
             }
             if (event) {
                 event.stopPropagation();
@@ -3031,9 +3283,11 @@
 
         // Close dropdowns when clicking outside
         window.addEventListener('click', function(event) {
-            if (!event.target.closest('.dropdown')) {
-                document.querySelectorAll('.dropdown-content').forEach(d => {
-                    d.classList.remove('show');
+            if (!event.target.closest('.dropdown-container')) {
+                document.querySelectorAll('.dropdown-container').forEach(d => {
+                    d.classList.remove('active');
+                    const parent = d.closest('.history-item, .grid-item');
+                    if (parent) parent.style.zIndex = '';
                 });
             }
         });

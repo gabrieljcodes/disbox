@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"log"
 	"strings"
@@ -609,6 +610,65 @@ func (st *Store) ToggleAccessList(listType string, enabled bool) {
 			log.Printf("ToggleAccessList error for otherKey (%s): %v", otherKey, err)
 		}
 	}
+}
+
+// ─── Global Announcements ───
+
+type GlobalAnnouncement struct {
+	ID      string `json:"id"`
+	Message string `json:"message"`
+	Date    string `json:"date"`
+}
+
+func (st *Store) GetGlobalAnnouncements() []GlobalAnnouncement {
+	var val string
+	err := st.db.QueryRow("SELECT value FROM access_settings WHERE key = 'global_announcements'").Scan(&val)
+	if err != nil {
+		return []GlobalAnnouncement{}
+	}
+	var announcements []GlobalAnnouncement
+	if err := json.Unmarshal([]byte(val), &announcements); err != nil {
+		return []GlobalAnnouncement{}
+	}
+	return announcements
+}
+
+func (st *Store) AddGlobalAnnouncement(message string) {
+	announcements := st.GetGlobalAnnouncements()
+	
+	newAnn := GlobalAnnouncement{
+		ID:      fmt.Sprintf("%d", time.Now().UnixNano()),
+		Message: message,
+		Date:    time.Now().Format(time.RFC3339),
+	}
+	
+	// Add to beginning of array
+	announcements = append([]GlobalAnnouncement{newAnn}, announcements...)
+	
+	// Limit to 3 items
+	if len(announcements) > 3 {
+		announcements = announcements[:3]
+	}
+	
+	b, _ := json.Marshal(announcements)
+	st.db.Exec(`INSERT INTO access_settings ("key", "value") VALUES ('global_announcements', $1) ON CONFLICT("key") DO UPDATE SET "value" = $1`, string(b))
+}
+
+func (st *Store) RemoveGlobalAnnouncement(id string) {
+	announcements := st.GetGlobalAnnouncements()
+	var filtered []GlobalAnnouncement
+	for _, a := range announcements {
+		if a.ID != id {
+			filtered = append(filtered, a)
+		}
+	}
+	
+	b, _ := json.Marshal(filtered)
+	st.db.Exec(`INSERT INTO access_settings ("key", "value") VALUES ('global_announcements', $1) ON CONFLICT("key") DO UPDATE SET "value" = $1`, string(b))
+}
+
+func (st *Store) ClearGlobalAnnouncements() {
+	st.db.Exec(`DELETE FROM access_settings WHERE key = 'global_announcements'`)
 }
 
 // ─── User Stats ───

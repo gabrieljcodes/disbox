@@ -217,6 +217,7 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/v1/hosters", s.handleHosters)
 	mux.HandleFunc("/v1/user/cloud", s.handleUserCloud)
 	mux.HandleFunc("/v1/integration/", s.handleIntegration)
+	mux.HandleFunc("/v1/announcements", s.handleAnnouncementsGet)
 
 	// Admin routes
 	mux.HandleFunc("/v1/admin/history", s.handleAdminHistory)
@@ -229,6 +230,9 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/v1/admin/settings", s.handleAdminSettingsGet)
 	mux.HandleFunc("/v1/admin/settings/update", s.handleAdminSettingsUpdate)
 	mux.HandleFunc("/v1/admin/torbox/keys", s.handleAdminTorboxKeys)
+	mux.HandleFunc("/v1/admin/announcements/add", s.handleAdminAnnouncementsAdd)
+	mux.HandleFunc("/v1/admin/announcements/remove", s.handleAdminAnnouncementsRemove)
+	mux.HandleFunc("/v1/admin/announcements/clear", s.handleAdminAnnouncementsClear)
 }
 
 func (s *Server) Start() error {

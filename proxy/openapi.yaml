@@ -463,6 +463,59 @@ paths:
         '200':
           description: AniList Search results
 
+  /v1/announcements:
+    get:
+      summary: Get Global Announcements
+      description: Returns an array of active global announcements.
+      tags: [User]
+      responses:
+        '200':
+          description: Announcements list
+
+  /v1/admin/announcements/add:
+    post:
+      summary: Create Global Announcement
+      tags: [Admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [message]
+              properties:
+                message:
+                  type: string
+      responses:
+        '200':
+          description: Announcement created
+
+  /v1/admin/announcements/clear:
+    post:
+      summary: Clear All Global Announcements
+      tags: [Admin]
+      responses:
+        '200':
+          description: Announcements cleared
+
+  /v1/admin/announcements/remove:
+    post:
+      summary: Remove Global Announcement
+      tags: [Admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id]
+              properties:
+                id:
+                  type: string
+      responses:
+        '200':
+          description: Announcement removed
+
   /v1/admin/access:
     get:
       summary: Get access control list

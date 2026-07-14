@@ -1416,3 +1416,85 @@ func (s *Server) handleAdminTorboxKeys(w http.ResponseWriter, r *http.Request) {
 	s.clientPool.UpdateKeys(currentKeys)
 	jsonOK(w, map[string]string{"message": "Keys updated successfully"})
 }
+
+// ─── Global Announcements ───
+
+func (s *Server) handleAnnouncementsGet(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+	_, ok := s.resolveUser(w, r)
+	if !ok {
+		return
+	}
+
+	announcements := s.store.GetGlobalAnnouncements()
+	jsonOK(w, announcements)
+}
+
+func (s *Server) handleAdminAnnouncementsAdd(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+	_, ok := s.resolveAdmin(w, r)
+	if !ok {
+		return
+	}
+
+	var req struct {
+		Message string `json:"message"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+	if strings.TrimSpace(req.Message) == "" {
+		jsonError(w, http.StatusBadRequest, "Message cannot be empty")
+		return
+	}
+
+	s.store.AddGlobalAnnouncement(req.Message)
+	jsonOK(w, map[string]string{"message": "Announcement added successfully"})
+}
+
+func (s *Server) handleAdminAnnouncementsRemove(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+	_, ok := s.resolveAdmin(w, r)
+	if !ok {
+		return
+	}
+
+	var req struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+	if req.ID == "" {
+		jsonError(w, http.StatusBadRequest, "ID is required")
+		return
+	}
+
+	s.store.RemoveGlobalAnnouncement(req.ID)
+	jsonOK(w, map[string]string{"message": "Announcement removed"})
+}
+
+func (s *Server) handleAdminAnnouncementsClear(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+	_, ok := s.resolveAdmin(w, r)
+	if !ok {
+		return
+	}
+
+	s.store.ClearGlobalAnnouncements()
+	jsonOK(w, map[string]string{"message": "All announcements cleared"})
+}
