@@ -330,12 +330,17 @@ func (dm *DownloadManager) Submit(qd *QueuedDownload) (*QueuedDownload, error) {
 	dm.mu.Lock()
 	limit := dm.globalBandwidthLimit
 	used := dm.globalBandwidthUsed
+	globalSlots := dm.globalSlots
 	totalActive := 0
 	for _, count := range dm.activeCount {
 		totalActive += count
 	}
-	availableSlots := dm.globalSlots - totalActive
+	availableSlots := globalSlots - totalActive
 	dm.mu.Unlock()
+
+	if globalSlots == 0 {
+		return nil, fmt.Errorf("No Torbox API keys configured (or keys failed to decrypt). Please configure an API key in the dashboard.")
+	}
 
 	if limit > 0 && used >= limit {
 		return nil, fmt.Errorf("Global TorBox bandwidth limit exhausted for this month (%d TB used). Please try again next month.", used/(1024*1024*1024*1024))
