@@ -159,7 +159,7 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 		w.Header().Set("Content-Type", "image/png")
 		w.Write(iconTransparentBytes)
 	})
-	mux.HandleFunc("/api/docs", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/v1/docs", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Write(scalarBytes)
 	})
