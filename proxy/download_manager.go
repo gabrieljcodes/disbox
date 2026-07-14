@@ -432,13 +432,21 @@ func (dm *DownloadManager) executeDownload(qd *QueuedDownload) error {
 		if err == nil && !apiResp.Success {
 			err = fmt.Errorf("%s", apiResp.Detail)
 		} else if err == nil {
-			data, _ := apiResp.Data.(map[string]interface{})
-			id, _ := data["torrent_id"].(float64)
-			name, _ := data["name"].(string)
-			if name == "" {
-				name = "Torrent"
+			data, ok := apiResp.Data.(map[string]interface{})
+			if !ok {
+				err = fmt.Errorf("invalid API response data format")
+			} else {
+				idFloat, okID := data["torrent_id"].(float64)
+				if !okID {
+					err = fmt.Errorf("missing torrent_id in Torbox API response")
+				} else {
+					name, okName := data["name"].(string)
+					if !okName || name == "" {
+						name = "Torrent"
+					}
+					proxyLink, _ = dm.server.RegisterDownloadWithUser("torrent", int(idFloat), clientIndex, qd.DiscordID, qd.Username, qd.Avatar, name, 0)
+				}
 			}
-			proxyLink, _ = dm.server.RegisterDownloadWithUser("torrent", int(id), clientIndex, qd.DiscordID, qd.Username, qd.Avatar, name, 0)
 		}
 	} else if qd.Type == "torrent_file" {
 		apiResp, cIdx, e := dm.server.clientPool.AddTorrentFileWithFallback(qd.FileData, qd.FileName, qd.CacheOnly)
@@ -447,13 +455,21 @@ func (dm *DownloadManager) executeDownload(qd *QueuedDownload) error {
 		if err == nil && !apiResp.Success {
 			err = fmt.Errorf("%s", apiResp.Detail)
 		} else if err == nil {
-			data, _ := apiResp.Data.(map[string]interface{})
-			id, _ := data["torrent_id"].(float64)
-			name, _ := data["name"].(string)
-			if name == "" {
-				name = qd.FileName
+			data, ok := apiResp.Data.(map[string]interface{})
+			if !ok {
+				err = fmt.Errorf("invalid API response data format")
+			} else {
+				idFloat, okID := data["torrent_id"].(float64)
+				if !okID {
+					err = fmt.Errorf("missing torrent_id in Torbox API response")
+				} else {
+					name, _ := data["name"].(string)
+					if name == "" {
+						name = qd.FileName
+					}
+					proxyLink, _ = dm.server.RegisterDownloadWithUser("torrent", int(idFloat), clientIndex, qd.DiscordID, qd.Username, qd.Avatar, name, 0)
+				}
 			}
-			proxyLink, _ = dm.server.RegisterDownloadWithUser("torrent", int(id), clientIndex, qd.DiscordID, qd.Username, qd.Avatar, name, 0)
 		}
 	} else if qd.Type == "webdl" {
 		apiResp, cIdx, e := dm.server.clientPool.AddWebDownloadWithFallback(qd.Link)
@@ -462,13 +478,21 @@ func (dm *DownloadManager) executeDownload(qd *QueuedDownload) error {
 		if err == nil && !apiResp.Success {
 			err = fmt.Errorf("%s", apiResp.Detail)
 		} else if err == nil {
-			data, _ := apiResp.Data.(map[string]interface{})
-			id, _ := data["webdownload_id"].(float64)
-			name, _ := data["name"].(string)
-			if name == "" {
-				name = "Web Download"
+			data, ok := apiResp.Data.(map[string]interface{})
+			if !ok {
+				err = fmt.Errorf("invalid API response data format")
+			} else {
+				idFloat, okID := data["webdownload_id"].(float64)
+				if !okID {
+					err = fmt.Errorf("missing webdownload_id in Torbox API response")
+				} else {
+					name, _ := data["name"].(string)
+					if name == "" {
+						name = "Web Download"
+					}
+					proxyLink, _ = dm.server.RegisterDownloadWithUser("webdl", int(idFloat), clientIndex, qd.DiscordID, qd.Username, qd.Avatar, name, 0)
+				}
 			}
-			proxyLink, _ = dm.server.RegisterDownloadWithUser("webdl", int(id), clientIndex, qd.DiscordID, qd.Username, qd.Avatar, name, 0)
 		}
 	}
 
