@@ -17,7 +17,7 @@ type ClientPool struct {
 
 func NewClientPool(apiKeys []string) (*ClientPool, error) {
 	if len(apiKeys) == 0 {
-		return nil, fmt.Errorf("at least one API key is required")
+		log.Println("Initializing ClientPool with no API keys")
 	}
 
 	pool := &ClientPool{
@@ -34,7 +34,7 @@ func NewClientPool(apiKeys []string) (*ClientPool, error) {
 	}
 
 	if len(pool.clients) == 0 {
-		return nil, fmt.Errorf("no valid API keys provided")
+		log.Println("No valid API keys provided at initialization, waiting for DB update")
 	}
 
 	log.Printf("ClientPool initialized with %d API key(s)", len(pool.clients))

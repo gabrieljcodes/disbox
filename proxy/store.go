@@ -12,11 +12,19 @@ import (
 // Store concentrates all database access behind a single module.
 // Two adapters justify the seam: PostgreSQL in prod, in-memory in tests.
 type Store struct {
-	db *sql.DB
+	db            *sql.DB
+	encryptionKey []byte
 }
 
-func NewStore(db *sql.DB) *Store {
-	return &Store{db: db}
+func NewStore(db *sql.DB, encKey string) *Store {
+	var key []byte
+	if len(encKey) == 32 {
+		key = []byte(encKey)
+	}
+	return &Store{
+		db:            db,
+		encryptionKey: key,
+	}
 }
 
 // CreateTables initializes the database schema.
@@ -410,7 +418,7 @@ func (st *Store) RegenerateLink(oldLinkToken, newLinkToken, dlType string, downl
 	if isAdmin {
 		_, err = tx.Exec("UPDATE download_history SET link_token = $1 WHERE token = $2", newLinkToken, historyToken)
 	} else {
-		_, err = tx.Exec("UPDATE download_history SET link_token = $1 WHERE (token = $2 OR link_token = $3) AND discord_id = $4", newLinkToken, historyToken, discordID)
+		_, err = tx.Exec("UPDATE download_history SET link_token = $1 WHERE (token = $2 OR link_token = $3) AND discord_id = $4", newLinkToken, historyToken, historyToken, discordID)
 	}
 	if err != nil {
 		tx.Rollback()
@@ -472,7 +480,15 @@ func (st *Store) SetSetting(key, val string) error {
 	return err
 }
 
-func (st *Store) InitDefaultSettings(existingKeys []string, cacheOnly bool) {
+func (st *Store) SetEncryptedSetting(key, plaintext string) error {
+	encrypted, err := encrypt(st.encryptionKey, plaintext)
+	if err != nil {
+		return err
+	}
+	return st.SetSetting(key, encrypted)
+}
+
+func (st *Store) InitDefaultSettings(existingKeys []string) {
 	initIfMissing := func(key, val string) {
 		var dummy string
 		if err := st.db.QueryRow("SELECT value FROM access_settings WHERE key = $1", key).Scan(&dummy); err == sql.ErrNoRows {
@@ -480,17 +496,19 @@ func (st *Store) InitDefaultSettings(existingKeys []string, cacheOnly bool) {
 		}
 	}
 
-	cacheVal := "false"
-	if cacheOnly {
-		cacheVal = "true"
-	}
-	initIfMissing("cache_only", cacheVal)
+	initIfMissing("cache_only", "false")
 
 	var dummy string
 	err := st.db.QueryRow("SELECT value FROM access_settings WHERE key = 'torbox_api_keys'").Scan(&dummy)
 	if err == sql.ErrNoRows {
 		if len(existingKeys) > 0 {
-			st.SetSetting("torbox_api_keys", strings.Join(existingKeys, ","))
+			keysStr := strings.Join(existingKeys, ",")
+			encKeys, errEnc := encrypt(st.encryptionKey, keysStr)
+			if errEnc == nil {
+				st.SetSetting("torbox_api_keys", encKeys)
+			} else {
+				st.SetSetting("torbox_api_keys", keysStr) // fallback if encryption fails (e.g. no key)
+			}
 		}
 	}
 
@@ -513,6 +531,16 @@ func (st *Store) GetStoredKeys() []string {
 	if err != nil || val == "" {
 		return nil
 	}
+	
+	decryptedVal, err := decrypt(st.encryptionKey, val)
+	if err == nil && decryptedVal != "" {
+		val = decryptedVal
+	} else if err != nil {
+		// Strict decryption means if it fails to decrypt, we don't fallback to plaintext
+		log.Printf("Failed to decrypt torbox_api_keys: %v", err)
+		return nil
+	}
+
 	var keys []string
 	for _, k := range strings.Split(val, ",") {
 		if t := strings.TrimSpace(k); t != "" {
@@ -696,17 +724,25 @@ func (st *Store) GetUserMonthlySize(discordID string) int64 {
 // ─── User FTP Config ───
 
 func (st *Store) GetFTPConfig(discordID string) (host, username, password string, err error) {
-	err = st.db.QueryRow("SELECT host, username, password FROM user_ftp_configs WHERE discord_id = $1", discordID).Scan(&host, &username, &password)
+	var encPassword string
+	err = st.db.QueryRow("SELECT host, username, password FROM user_ftp_configs WHERE discord_id = $1", discordID).Scan(&host, &username, &encPassword)
+	if err == nil && encPassword != "" {
+		password, err = decrypt(st.encryptionKey, encPassword)
+	}
 	return
 }
 
 func (st *Store) SaveFTPConfig(discordID, host, username, password string) error {
-	_, err := st.db.Exec(`
+	encPassword, err := encrypt(st.encryptionKey, password)
+	if err != nil {
+		return err
+	}
+	_, err = st.db.Exec(`
 		INSERT INTO user_ftp_configs (discord_id, host, username, password)
 		VALUES ($1, $2, $3, $4)
 		ON CONFLICT(discord_id) DO UPDATE SET host=$5, username=$6, password=$7`,
-		discordID, host, username, password,
-		host, username, password,
+		discordID, host, username, encPassword,
+		host, username, encPassword,
 	)
 	return err
 }
@@ -731,11 +767,30 @@ func (st *Store) GetCloudConfig(discordID string) (CloudConfig, error) {
 	if err == sql.ErrNoRows {
 		return c, nil
 	}
-	return c, err
+	if err != nil {
+		return c, err
+	}
+	
+	if c.Google != "" { c.Google, err = decrypt(st.encryptionKey, c.Google); if err != nil { return c, err } }
+	if c.Dropbox != "" { c.Dropbox, err = decrypt(st.encryptionKey, c.Dropbox); if err != nil { return c, err } }
+	if c.OneDrive != "" { c.OneDrive, err = decrypt(st.encryptionKey, c.OneDrive); if err != nil { return c, err } }
+	if c.Gofile != "" { c.Gofile, err = decrypt(st.encryptionKey, c.Gofile); if err != nil { return c, err } }
+	if c.Onefichier != "" { c.Onefichier, err = decrypt(st.encryptionKey, c.Onefichier); if err != nil { return c, err } }
+	if c.Pixeldrain != "" { c.Pixeldrain, err = decrypt(st.encryptionKey, c.Pixeldrain); if err != nil { return c, err } }
+	
+	return c, nil
 }
 
 func (st *Store) SaveCloudConfig(discordID string, c CloudConfig) error {
-	_, err := st.db.Exec(`
+	var err error
+	if c.Google != "" { c.Google, err = encrypt(st.encryptionKey, c.Google); if err != nil { return err } }
+	if c.Dropbox != "" { c.Dropbox, err = encrypt(st.encryptionKey, c.Dropbox); if err != nil { return err } }
+	if c.OneDrive != "" { c.OneDrive, err = encrypt(st.encryptionKey, c.OneDrive); if err != nil { return err } }
+	if c.Gofile != "" { c.Gofile, err = encrypt(st.encryptionKey, c.Gofile); if err != nil { return err } }
+	if c.Onefichier != "" { c.Onefichier, err = encrypt(st.encryptionKey, c.Onefichier); if err != nil { return err } }
+	if c.Pixeldrain != "" { c.Pixeldrain, err = encrypt(st.encryptionKey, c.Pixeldrain); if err != nil { return err } }
+
+	_, err = st.db.Exec(`
 		INSERT INTO user_cloud_configs (discord_id, google_token, dropbox_token, onedrive_token, gofile_token, onefichier_token, pixeldrain_token)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		ON CONFLICT(discord_id) DO UPDATE SET
@@ -750,9 +805,12 @@ func (st *Store) SaveCloudConfig(discordID string, c CloudConfig) error {
 }
 
 func (st *Store) GetCloudProviderToken(discordID, dbField string) (string, error) {
-	var token string
-	err := st.db.QueryRow(fmt.Sprintf("SELECT %s FROM user_cloud_configs WHERE discord_id = $1", dbField), discordID).Scan(&token)
-	return token, err
+	var encToken string
+	err := st.db.QueryRow(fmt.Sprintf("SELECT %s FROM user_cloud_configs WHERE discord_id = $1", dbField), discordID).Scan(&encToken)
+	if err != nil || encToken == "" {
+		return encToken, err
+	}
+	return decrypt(st.encryptionKey, encToken)
 }
 
 // ─── Admin User Profile ───

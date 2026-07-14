@@ -22,7 +22,7 @@ func main() {
 		log.Fatalf("Failed to load configuration: %v", err)
 	}
 
-	torboxClientPool, err := torbox.NewClientPool(cfg.TorboxAPIKeys)
+	torboxClientPool, err := torbox.NewClientPool([]string{})
 	if err != nil {
 		log.Fatalf("Failed to initialize Torbox client pool: %v", err)
 	}
@@ -43,7 +43,7 @@ func main() {
 		}
 	}()
 
-	discordBot, err := bot.NewBot(cfg.DiscordBotToken, torboxClientPool, proxyServer, cfg.CacheOnly)
+	discordBot, err := bot.NewBot(cfg.DiscordBotToken, torboxClientPool, proxyServer)
 	if err != nil {
 		log.Fatalf("Failed to initialize bot: %v", err)
 	}

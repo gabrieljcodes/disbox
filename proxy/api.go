@@ -1408,8 +1408,8 @@ func (s *Server) handleAdminTorboxKeys(w http.ResponseWriter, r *http.Request) {
 	}
 
 	keysStr := strings.Join(currentKeys, ",")
-	if err := s.store.SetSetting("torbox_api_keys", keysStr); err != nil {
-		jsonError(w, http.StatusInternalServerError, "Failed to save to database")
+	if err := s.store.SetEncryptedSetting("torbox_api_keys", keysStr); err != nil {
+		jsonError(w, http.StatusInternalServerError, "Failed to encrypt and save to database")
 		return
 	}
 

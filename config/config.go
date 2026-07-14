@@ -13,13 +13,12 @@ type Config struct {
 	DiscordBotToken      string
 	DiscordClientID      string
 	DiscordClientSecret  string
-	TorboxAPIKeys        []string
 	AdminUsers           []string
-	CacheOnly            bool
 	ProxyBaseURL         string
 	ProxyPort            string
 	AdminAPIEnabled      bool
 	DatabaseURL          string
+	EncryptionKey        string
 }
 
 func LoadConfig() (*Config, error) {
@@ -41,13 +40,12 @@ func LoadConfig() (*Config, error) {
 		DiscordBotToken:     os.Getenv("DISCORD_BOT_TOKEN"),
 		DiscordClientID:     os.Getenv("DISCORD_CLIENT_ID"),
 		DiscordClientSecret: os.Getenv("DISCORD_CLIENT_SECRET"),
-		TorboxAPIKeys:       parseEnvList("TORBOX_API_KEY"),
 		AdminUsers:          parseEnvList("ADMIN_USERS"),
-		CacheOnly:           strings.ToLower(os.Getenv("CACHE_ONLY")) == "true",
 		ProxyBaseURL:        proxyBaseURL,
 		ProxyPort:           proxyPort,
 		AdminAPIEnabled:     strings.ToLower(os.Getenv("ADMIN_API_ENABLED")) != "false",
 		DatabaseURL:         os.Getenv("DATABASE_URL"),
+		EncryptionKey:       os.Getenv("ENCRYPTION_KEY"),
 	}
 
 	if cfg.DatabaseURL == "" {
@@ -57,17 +55,9 @@ func LoadConfig() (*Config, error) {
 	if cfg.DiscordBotToken == "" {
 		log.Fatal("DISCORD_BOT_TOKEN is not set")
 	}
-	if len(cfg.TorboxAPIKeys) == 0 {
-		log.Fatal("No TORBOX_API_KEY found")
-	}
 
-	log.Printf("Loaded %d Torbox API key(s)", len(cfg.TorboxAPIKeys))
 	log.Printf("Proxy server will listen on port %s", cfg.ProxyPort)
 	log.Printf("Proxy base URL: %s", cfg.ProxyBaseURL)
-	if cfg.CacheOnly {
-		log.Println("⚡ CACHE_ONLY mode enabled - only cached torrents will be added")
-		log.Println("🚫 Web downloads are disabled in CACHE_ONLY mode")
-	}
 	if cfg.DiscordClientID != "" && cfg.DiscordClientSecret != "" {
 		log.Println("🌐 Web Dashboard enabled (Discord OAuth2 configured)")
 	} else {

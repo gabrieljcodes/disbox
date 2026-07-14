@@ -22,7 +22,7 @@ type Bot struct {
 	handlers        map[string]func(s *discordgo.Session, i *discordgo.InteractionCreate)
 }
 
-func NewBot(token string, clientPool *torbox.ClientPool, proxyServer *proxy.Server, cacheOnly bool) (*Bot, error) {
+func NewBot(token string, clientPool *torbox.ClientPool, proxyServer *proxy.Server) (*Bot, error) {
 	s, err := discordgo.New("Bot " + token)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create discord session: %w", err)

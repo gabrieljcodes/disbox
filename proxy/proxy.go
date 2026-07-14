@@ -96,7 +96,7 @@ type Server struct {
 // NewServer accepts a Config struct, a ClientPool, and an open database connection.
 // The constructor reads what it needs from config; callers don't thread individual values.
 func NewServer(cfg *config.Config, clientPool *torbox.ClientPool, db *sql.DB) (*Server, error) {
-	st := NewStore(db)
+	st := NewStore(db, cfg.EncryptionKey)
 
 	if err := st.CreateTables(); err != nil {
 		return nil, fmt.Errorf("failed to create tables: %w", err)
@@ -117,7 +117,7 @@ func NewServer(cfg *config.Config, clientPool *torbox.ClientPool, db *sql.DB) (*
 	}
 
 	// Initialize default settings, syncing DB keys to client pool
-	st.InitDefaultSettings(clientPool.GetKeys(), cfg.CacheOnly)
+	st.InitDefaultSettings(clientPool.GetKeys())
 	if storedKeys := st.GetStoredKeys(); len(storedKeys) > 0 {
 		clientPool.UpdateKeys(storedKeys)
 	}
