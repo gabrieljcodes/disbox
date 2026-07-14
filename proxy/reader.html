@@ -6,7 +6,7 @@
     <title>{{.FileName}} - Text Reader</title>
     <link rel="icon" type="image/x-icon" href="/favicon.ico">
     <meta name="description" content="Read {{.FileName}}">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Share+Tech+Mono&display=swap" rel="stylesheet">
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -15,19 +15,22 @@
             --bg-editor: #0d1117;
             --bg-gutter: rgba(22, 27, 34, 0.8);
             --bg-toolbar: rgba(13, 17, 23, 0.95);
-            --border-subtle: rgba(255, 255, 255, 0.06);
-            --border-accent: rgba(30, 191, 106, 0.3);
+            --border-subtle: rgba(255, 255, 255, 0.08);
+            --border-accent: rgba(30, 191, 106, 0.4);
             --text-primary: #e6edf3;
             --text-secondary: #8b949e;
             --text-muted: #484f58;
             --text-line-num: #484f58;
-            --accent-indigo: #5ECBA5;
+            --accent-green: #1EBF6A;
+            --accent-green-light: #5ECBA5;
             --accent-emerald: #34d399;
             --accent-amber: #fbbf24;
             --gradient-primary: linear-gradient(135deg, #1EBF6A 0%, #5ECBA5 100%);
             --shadow-lg: 0 20px 40px rgba(0,0,0,0.4);
-            --radius: 10px;
+            --shadow-glow: 0 0 20px rgba(30, 191, 106, 0.15);
+            --radius: 8px;
             --transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            --font-tech: 'Share Tech Mono', monospace;
         }
 
         body {
@@ -47,9 +50,9 @@
             top: -200px;
             left: 50%;
             transform: translateX(-50%);
-            width: 600px;
-            height: 400px;
-            background: radial-gradient(ellipse, rgba(30,191,106,0.06) 0%, transparent 70%);
+            width: 800px;
+            height: 500px;
+            background: radial-gradient(ellipse, rgba(30,191,106,0.05) 0%, transparent 70%);
             pointer-events: none;
             z-index: 0;
         }
@@ -59,14 +62,14 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 12px 20px;
+            padding: 14px 24px;
             background: var(--bg-toolbar);
             border-bottom: 1px solid var(--border-subtle);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
             z-index: 10;
             flex-shrink: 0;
-            gap: 12px;
+            gap: 16px;
         }
 
         .toolbar-left {
@@ -102,12 +105,15 @@
         .btn-back svg { width: 14px; height: 14px; }
 
         .toolbar-filename {
-            font-size: 14px;
-            font-weight: 600;
-            color: var(--text-primary);
+            font-family: var(--font-tech);
+            font-size: 15px;
+            font-weight: 400;
+            color: var(--accent-green-light);
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
 
         .toolbar-right {
@@ -121,10 +127,10 @@
             display: inline-flex;
             align-items: center;
             gap: 6px;
-            padding: 7px 12px;
+            padding: 8px 14px;
             background: rgba(255,255,255,0.04);
             border: 1px solid var(--border-subtle);
-            border-radius: 8px;
+            border-radius: 6px;
             color: var(--text-secondary);
             font-size: 12px;
             font-weight: 500;
@@ -135,22 +141,25 @@
         }
 
         .toolbar-btn:hover {
-            background: rgba(255,255,255,0.08);
-            color: var(--text-primary);
+            background: rgba(30, 191, 106, 0.08);
+            color: var(--accent-green-light);
+            border-color: var(--border-accent);
         }
 
         .toolbar-btn.active {
             background: rgba(30, 191, 106, 0.12);
-            color: var(--accent-indigo);
+            color: var(--accent-green);
             border-color: var(--border-accent);
+            box-shadow: 0 0 12px rgba(30, 191, 106, 0.1);
         }
 
         .toolbar-btn svg { width: 14px; height: 14px; }
 
         .btn-copy.copied {
-            background: rgba(52, 211, 153, 0.12);
-            color: var(--accent-emerald);
-            border-color: rgba(52, 211, 153, 0.3);
+            background: rgba(30, 191, 106, 0.15);
+            color: var(--accent-green);
+            border-color: rgba(30, 191, 106, 0.4);
+            box-shadow: 0 0 12px rgba(30, 191, 106, 0.1);
         }
 
         /* ─── Info Bar ─── */

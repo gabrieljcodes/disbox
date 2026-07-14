@@ -5,44 +5,189 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{.Title}} - Web Media Player</title>
     <link rel="icon" type="image/x-icon" href="/favicon.ico">
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Google Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
     <!-- Video.js CSS -->
     <link href="https://vjs.zencdn.net/8.10.0/video-js.css" rel="stylesheet" />
     <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg-primary: #0d1117;
+            --bg-secondary: #161b22;
+            --bg-card: rgba(22, 27, 34, 0.8);
+            --bg-card-hover: rgba(30, 37, 46, 0.9);
+            --border-subtle: rgba(255, 255, 255, 0.08);
+            --border-accent: rgba(30, 191, 106, 0.4);
+            --text-primary: #e6edf3;
+            --text-secondary: #8b949e;
+            --text-muted: #484f58;
+            --accent-green: #1EBF6A;
+            --accent-green-light: #5ECBA5;
+            --accent-emerald: #34d399;
+            --gradient-primary: linear-gradient(135deg, #1EBF6A 0%, #5ECBA5 100%);
+            --shadow-lg: 0 20px 40px rgba(0,0,0,0.4);
+            --shadow-glow: 0 0 20px rgba(30, 191, 106, 0.15);
+            --radius: 8px;
+            --transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            --font-tech: 'Share Tech Mono', monospace;
+        }
+
         body {
-            font-family: 'Inter', sans-serif;
-            background-color: #0f1115;
-            color: #e2e8f0;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
         }
-        .glass-panel {
-            background: rgba(30, 41, 59, 0.7);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-            border: 1px solid rgba(255, 255, 255, 0.05);
+
+        /* ─── Navbar ─── */
+        .navbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 24px;
+            background: rgba(13, 17, 23, 0.95);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border-bottom: 1px solid var(--border-subtle);
+            z-index: 10;
+            flex-shrink: 0;
         }
-        .playlist-item {
-            transition: all 0.2s ease-in-out;
+
+        .navbar-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            min-width: 0;
+            flex: 1;
         }
-        .playlist-item:hover {
+
+        .navbar-icon {
+            font-size: 22px;
+            flex-shrink: 0;
+        }
+
+        .navbar-info {
+            min-width: 0;
+        }
+
+        .navbar-title {
+            font-family: var(--font-tech);
+            font-size: 15px;
+            font-weight: 400;
+            color: var(--accent-green-light);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            line-height: 1.3;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 300px;
+        }
+
+        @media (min-width: 768px) {
+            .navbar-title { max-width: 600px; }
+        }
+
+        .navbar-subtitle {
+            font-size: 11px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .navbar-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-shrink: 0;
+        }
+
+        .nav-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 9px 16px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 500;
+            font-family: inherit;
+            text-decoration: none;
+            transition: var(--transition);
+            cursor: pointer;
+            border: 1px solid var(--border-subtle);
+            white-space: nowrap;
+        }
+
+        .nav-btn svg { width: 15px; height: 15px; }
+
+        .nav-btn-default {
+            background: rgba(255, 255, 255, 0.04);
+            color: var(--text-secondary);
+        }
+        .nav-btn-default:hover {
+            background: rgba(255, 255, 255, 0.08);
+            color: var(--text-primary);
+            border-color: rgba(255, 255, 255, 0.15);
+        }
+
+        .nav-btn-primary {
             background: rgba(30, 191, 106, 0.1);
-            border-left-color: #1EBF6A;
+            color: var(--accent-green);
+            border-color: rgba(30, 191, 106, 0.3);
         }
-        .playlist-item.active {
-            background: rgba(30, 191, 106, 0.2);
-            border-left-color: #1EBF6A;
+        .nav-btn-primary:hover {
+            background: rgba(30, 191, 106, 0.18);
+            box-shadow: var(--shadow-glow);
         }
-        /* Custom Video.js Theme overrides */
+
+        .nav-btn .label { display: none; }
+        @media (min-width: 640px) {
+            .nav-btn .label { display: inline; }
+        }
+
+        /* ─── Main Content ─── */
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            position: relative;
+        }
+
+        @media (min-width: 768px) {
+            .main-content { flex-direction: row; }
+        }
+
+        /* ─── Player Area ─── */
+        .player-area {
+            flex: 1;
+            background: #000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 8px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        @media (min-width: 768px) {
+            .player-area { padding: 24px; }
+        }
+
+        /* ─── Video.js Overrides ─── */
         .video-js {
             width: 100%;
             height: 100%;
-            border-radius: 0.5rem;
+            border-radius: 8px;
             overflow: hidden;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05);
         }
+
         .vjs-big-play-button {
-            background-color: rgba(30, 191, 106, 0.8) !important;
+            background-color: rgba(30, 191, 106, 0.85) !important;
             border-color: transparent !important;
             border-radius: 50% !important;
             width: 80px !important;
@@ -51,53 +196,301 @@
             top: 50% !important;
             left: 50% !important;
             transform: translate(-50%, -50%) !important;
+            box-shadow: 0 0 40px rgba(30, 191, 106, 0.3) !important;
+            transition: all 0.3s ease !important;
+        }
+
+        .vjs-big-play-button:hover {
+            background-color: rgba(30, 191, 106, 1) !important;
+            box-shadow: 0 0 60px rgba(30, 191, 106, 0.5) !important;
+            transform: translate(-50%, -50%) scale(1.08) !important;
+        }
+
+        /* ─── Image Viewer ─── */
+        .image-container {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            position: relative;
+            cursor: grab;
+        }
+        .image-container:active { cursor: grabbing; }
+
+        .image-preview {
+            max-width: none;
+            transition: transform 75ms ease-out;
+            user-select: none;
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+            filter: drop-shadow(0 8px 32px rgba(0,0,0,0.5));
+        }
+
+        .img-controls {
+            position: absolute;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            background: rgba(13, 17, 23, 0.85);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            padding: 6px 12px;
+            border-radius: 100px;
+            border: 1px solid var(--border-subtle);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        .img-controls:hover, .img-controls.visible { opacity: 1; }
+
+        .img-ctrl-btn {
+            padding: 6px;
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            border-radius: 50%;
+            cursor: pointer;
+            transition: var(--transition);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .img-ctrl-btn:hover {
+            color: var(--text-primary);
+            background: rgba(255,255,255,0.08);
+        }
+        .img-ctrl-btn svg { width: 18px; height: 18px; }
+
+        .img-ctrl-zoom-text {
+            padding: 2px 8px;
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: var(--transition);
+            background: transparent;
+            border: none;
+            font-family: inherit;
+        }
+        .img-ctrl-zoom-text:hover { color: var(--text-primary); }
+
+        .img-divider {
+            width: 1px;
+            height: 18px;
+            background: var(--border-subtle);
+            margin: 0 4px;
+        }
+
+        /* ─── No Media State ─── */
+        .no-media {
+            text-align: center;
+            color: var(--text-muted);
+        }
+        .no-media-icon { font-size: 40px; display: block; margin-bottom: 8px; }
+
+        /* ─── Sidebar / Playlist ─── */
+        .sidebar {
+            width: 100%;
+            background: var(--bg-secondary);
+            border-left: none;
+            border-top: 1px solid var(--border-subtle);
+            display: flex;
+            flex-direction: column;
+            height: 240px;
+            flex-shrink: 0;
+            z-index: 10;
+        }
+
+        @media (min-width: 768px) {
+            .sidebar {
+                width: 320px;
+                height: auto;
+                border-top: none;
+                border-left: 1px solid var(--border-subtle);
+            }
+        }
+
+        @media (min-width: 1024px) {
+            .sidebar { width: 380px; }
+        }
+
+        .sidebar-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px 18px;
+            border-bottom: 1px solid var(--border-subtle);
+            flex-shrink: 0;
+        }
+
+        .sidebar-title {
+            font-family: var(--font-tech);
+            font-size: 13px;
+            color: var(--text-primary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .sidebar-count {
+            background: rgba(30, 191, 106, 0.1);
+            border: 1px solid rgba(30, 191, 106, 0.2);
+            font-size: 11px;
+            color: var(--accent-green-light);
+            padding: 3px 10px;
+            border-radius: 100px;
+            font-weight: 500;
+        }
+
+        .playlist-scroll {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px;
+        }
+
+        .playlist-row {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .playlist-item {
+            flex: 1;
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            padding: 10px 12px;
+            border-radius: 6px;
+            border-left: 3px solid transparent;
+            text-decoration: none;
+            color: inherit;
+            transition: var(--transition);
+        }
+
+        .playlist-item:hover {
+            background: rgba(30, 191, 106, 0.06);
+            border-left-color: rgba(30, 191, 106, 0.3);
+        }
+
+        .playlist-item.active {
+            background: rgba(30, 191, 106, 0.1);
+            border-left-color: var(--accent-green);
+        }
+
+        .playlist-icon {
+            flex-shrink: 0;
+            margin-top: 2px;
+        }
+
+        .playlist-icon-video { color: var(--accent-green); }
+        .playlist-icon-image { color: var(--accent-emerald); }
+
+        .playlist-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .playlist-name {
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--text-primary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .playlist-size {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+
+        .playlist-dl-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 6px;
+            margin-right: 4px;
+            border-radius: 6px;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid var(--border-subtle);
+            color: var(--text-muted);
+            text-decoration: none;
+            transition: var(--transition);
+            flex-shrink: 0;
+            opacity: 1;
+        }
+
+        @media (min-width: 768px) {
+            .playlist-dl-btn { opacity: 0; }
+            .playlist-row:hover .playlist-dl-btn { opacity: 1; }
+        }
+
+        .playlist-dl-btn:hover {
+            background: rgba(30, 191, 106, 0.15);
+            color: var(--accent-green);
+            border-color: rgba(30, 191, 106, 0.3);
+        }
+        .playlist-dl-btn svg { width: 18px; height: 18px; }
+
+        /* ─── Custom Scrollbar ─── */
+        .playlist-scroll::-webkit-scrollbar { width: 5px; }
+        .playlist-scroll::-webkit-scrollbar-track { background: transparent; }
+        .playlist-scroll::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 10px;
+        }
+        .playlist-scroll::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.15);
         }
     </style>
 </head>
-<body class="h-screen flex flex-col overflow-hidden">
+<body>
     
     <!-- Navbar -->
-    <nav class="glass-panel border-b border-slate-800 px-6 py-4 flex items-center justify-between z-10 shrink-0">
-        <div class="flex items-center space-x-3">
-            <span class="text-2xl">🎬</span>
-            <div>
-                <h1 class="text-lg font-semibold text-white tracking-tight leading-tight truncate max-w-[300px] md:max-w-xl" title="{{.Title}}">
-                    {{.Title}}
-                </h1>
-                <p class="text-xs text-slate-400">Web Media Player</p>
+    <nav class="navbar">
+        <div class="navbar-left">
+            <span class="navbar-icon">🎬</span>
+            <div class="navbar-info">
+                <h1 class="navbar-title" title="{{.Title}}">{{.Title}}</h1>
+                <p class="navbar-subtitle">Web Media Player</p>
             </div>
         </div>
-        <div class="flex items-center space-x-3">
-            <a href="{{.ActiveStreamURL}}" download class="bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium px-4 py-2 rounded-lg transition shadow-lg flex items-center space-x-2">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <div class="navbar-actions">
+            <a href="{{.ActiveStreamURL}}" download class="nav-btn nav-btn-default">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                 </svg>
-                <span class="hidden sm:inline">Download Current</span>
+                <span class="label">Download Current</span>
             </a>
-            <a href="{{.DownloadURL}}" class="bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition shadow-lg shadow-emerald-500/20 flex items-center space-x-2">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <a href="{{.DownloadURL}}" class="nav-btn nav-btn-primary">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
                 </svg>
-                <span class="hidden sm:inline">Download Full ZIP</span>
+                <span class="label">Download Full ZIP</span>
             </a>
-            <a href="{{.BrowseURL}}" class="bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium px-4 py-2 rounded-lg transition shadow-lg flex items-center space-x-2">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <a href="{{.BrowseURL}}" class="nav-btn nav-btn-default">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
                 </svg>
-                <span class="hidden sm:inline">Browse Files</span>
+                <span class="label">Browse Files</span>
             </a>
         </div>
     </nav>
 
     <!-- Main Content -->
-    <main class="flex-1 flex flex-col md:flex-row overflow-hidden relative">
+    <main class="main-content">
         
         <!-- Player Area -->
-        <div class="flex-1 bg-black flex items-center justify-center p-2 md:p-6 overflow-hidden relative">
+        <div class="player-area">
             {{if eq .ActiveType "video"}}
             <video
                 id="main-player"
-                class="video-js vjs-theme-city vjs-big-play-centered shadow-2xl ring-1 ring-white/10 rounded-xl"
+                class="video-js vjs-theme-city vjs-big-play-centered"
                 controls
                 preload="auto"
                 data-setup='{"fluid": true}'
@@ -111,31 +504,31 @@
                 </p>
             </video>
             {{else if eq .ActiveType "image"}}
-            <div id="image-container" class="w-full h-full flex items-center justify-center overflow-hidden relative cursor-grab active:cursor-grabbing">
-                <img id="image-preview" src="{{.ActiveStreamURL}}" alt="Image Preview" class="max-w-none shadow-2xl transition-transform duration-75 ease-out select-none" style="max-width: 100%; max-height: 100%; object-fit: contain;" draggable="false" />
+            <div id="image-container" class="image-container">
+                <img id="image-preview" src="{{.ActiveStreamURL}}" alt="Image Preview" class="image-preview" draggable="false" />
                 
                 <!-- Image Controls Overlay -->
-                <div class="absolute bottom-6 left-1/2 transform -translate-x-1/2 flex items-center space-x-2 bg-slate-900/80 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 opacity-0 hover:opacity-100 transition-opacity duration-300" id="img-controls">
-                    <button id="btn-prev" class="p-2 text-slate-300 hover:text-white hover:bg-white/10 rounded-full transition" title="Previous (Left Arrow)">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd" /></svg>
+                <div class="img-controls" id="img-controls">
+                    <button id="btn-prev" class="img-ctrl-btn" title="Previous (Left Arrow)">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd" /></svg>
                     </button>
-                    <div class="w-px h-5 bg-slate-700 mx-1"></div>
-                    <button id="btn-zoom-out" class="p-2 text-slate-300 hover:text-white hover:bg-white/10 rounded-full transition" title="Zoom Out">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5 10a1 1 0 011-1h8a1 1 0 110 2H6a1 1 0 01-1-1z" clip-rule="evenodd" /></svg>
+                    <div class="img-divider"></div>
+                    <button id="btn-zoom-out" class="img-ctrl-btn" title="Zoom Out">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5 10a1 1 0 011-1h8a1 1 0 110 2H6a1 1 0 01-1-1z" clip-rule="evenodd" /></svg>
                     </button>
-                    <button id="btn-zoom-reset" class="px-2 text-xs font-medium text-slate-300 hover:text-white transition" title="Reset Zoom">100%</button>
-                    <button id="btn-zoom-in" class="p-2 text-slate-300 hover:text-white hover:bg-white/10 rounded-full transition" title="Zoom In">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clip-rule="evenodd" /></svg>
+                    <button id="btn-zoom-reset" class="img-ctrl-zoom-text" title="Reset Zoom">100%</button>
+                    <button id="btn-zoom-in" class="img-ctrl-btn" title="Zoom In">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clip-rule="evenodd" /></svg>
                     </button>
-                    <div class="w-px h-5 bg-slate-700 mx-1"></div>
-                    <button id="btn-next" class="p-2 text-slate-300 hover:text-white hover:bg-white/10 rounded-full transition" title="Next (Right Arrow)">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" /></svg>
+                    <div class="img-divider"></div>
+                    <button id="btn-next" class="img-ctrl-btn" title="Next (Right Arrow)">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" /></svg>
                     </button>
                 </div>
             </div>
             {{else}}
-            <div class="text-center text-slate-400">
-                <span class="text-4xl block mb-2">📄</span>
+            <div class="no-media">
+                <span class="no-media-icon">📄</span>
                 <p>No supported media selected.</p>
             </div>
             {{end}}
@@ -143,29 +536,29 @@
 
         <!-- Sidebar / Playlist (only if there are multiple files) -->
         {{if gt (len .MediaList) 1}}
-        <aside class="w-full md:w-80 lg:w-96 glass-panel border-l border-slate-800 flex flex-col h-64 md:h-auto shrink-0 z-10">
-            <div class="p-4 border-b border-slate-800 flex justify-between items-center">
-                <h2 class="font-semibold text-slate-200">Media Files</h2>
-                <span class="bg-slate-800 text-xs text-slate-300 py-1 px-2 rounded-md">{{len .MediaList}} items</span>
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h2 class="sidebar-title">Media Files</h2>
+                <span class="sidebar-count">{{len .MediaList}} items</span>
             </div>
-            <div class="flex-1 overflow-y-auto p-2 space-y-1 custom-scrollbar">
+            <div class="playlist-scroll">
                 {{range .MediaList}}
-                <div class="flex items-center space-x-1 group">
-                    <a href="{{.ViewerURL}}" class="playlist-item flex-1 block p-3 rounded-lg border-l-4 border-transparent flex items-start space-x-3 {{if eq .ID $.ActiveID}}active{{end}}">
-                        <div class="shrink-0 mt-1">
+                <div class="playlist-row">
+                    <a href="{{.ViewerURL}}" class="playlist-item {{if eq .ID $.ActiveID}}active{{end}}">
+                        <div class="playlist-icon">
                             {{if eq .Type "video"}}
-                            <span class="text-emerald-400">🎥</span>
+                            <span class="playlist-icon-video">🎥</span>
                             {{else}}
-                            <span class="text-green-400">🖼️</span>
+                            <span class="playlist-icon-image">🖼️</span>
                             {{end}}
                         </div>
-                        <div class="flex-1 min-w-0">
-                            <p class="text-sm font-medium text-slate-200 truncate" title="{{.Name}}">{{.Name}}</p>
-                            <p class="text-xs text-slate-500 mt-1">{{.SizeStr}}</p>
+                        <div class="playlist-info">
+                            <p class="playlist-name" title="{{.Name}}">{{.Name}}</p>
+                            <p class="playlist-size">{{.SizeStr}}</p>
                         </div>
                     </a>
-                    <a href="{{.DownloadURL}}" title="Download File" class="p-2 mr-1 rounded-lg bg-slate-800 hover:bg-emerald-600 text-slate-400 hover:text-white transition opacity-100 md:opacity-0 md:group-hover:opacity-100 flex-shrink-0">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <a href="{{.DownloadURL}}" title="Download File" class="playlist-dl-btn">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                         </svg>
                     </a>
@@ -210,9 +603,9 @@
             // Show controls permanently if mouse is moving
             let hideTimeout;
             container.addEventListener('mousemove', () => {
-                controls.style.opacity = '1';
+                controls.classList.add('visible');
                 clearTimeout(hideTimeout);
-                hideTimeout = setTimeout(() => { controls.style.opacity = '0'; }, 2000);
+                hideTimeout = setTimeout(() => { controls.classList.remove('visible'); }, 2000);
             });
 
             let scale = 1;
@@ -268,7 +661,6 @@
 
             document.getElementById('btn-zoom-in').onclick = () => { 
                 scale = Math.min(scale * 1.5, 15); 
-                // Zoom to center when using buttons
                 pointX = pointX * 1.5;
                 pointY = pointY * 1.5;
                 setTransform(); 
@@ -296,21 +688,5 @@
         }
     });
     </script>
-    <style>
-        /* Custom scrollbar for sidebar */
-        .custom-scrollbar::-webkit-scrollbar {
-            width: 6px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-track {
-            background: rgba(0, 0, 0, 0.1);
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 10px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-            background: rgba(255, 255, 255, 0.2);
-        }
-    </style>
 </body>
 </html>

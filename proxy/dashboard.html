@@ -6,23 +6,25 @@
     <title>📦 Dashboard | Disbox</title>
     <link rel="icon" type="image/x-icon" href="/favicon.ico">
     <meta name="description" content="Manage your downloads with Disbox Dashboard">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Share+Tech+Mono&display=swap" rel="stylesheet">
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
         :root {
-            --bg-primary: #0a0f0d;
-            --bg-secondary: #0f1a15;
-            --bg-card: rgba(16, 30, 24, 0.8);
-            --bg-card-hover: rgba(22, 42, 32, 0.9);
-            --bg-input: rgba(12, 24, 18, 0.9);
+            --bg-primary: #0d1117;
+            --bg-secondary: #161b22;
+            --bg-card: rgba(22, 27, 34, 0.8);
+            --bg-card-hover: rgba(30, 37, 46, 0.9);
+            --bg-input: rgba(13, 17, 23, 0.9);
             --bg-glass: rgba(255, 255, 255, 0.03);
-            --border-subtle: rgba(255, 255, 255, 0.06);
-            --border-accent: rgba(30, 191, 106, 0.3);
-            --text-primary: #e8f0ec;
-            --text-secondary: #8ba396;
-            --text-muted: #5a7264;
+            --border-subtle: rgba(255, 255, 255, 0.08);
+            --border-accent: rgba(30, 191, 106, 0.4);
+            --text-primary: #e6edf3;
+            --text-secondary: #8b949e;
+            --text-muted: #484f58;
             --accent-indigo: #5ECBA5;
+            --accent-green: #1EBF6A;
+            --accent-green-light: #5ECBA5;
             --accent-blue: #60a5fa;
             --accent-emerald: #34d399;
             --accent-rose: #fb7185;
@@ -31,10 +33,11 @@
             --gradient-primary: linear-gradient(135deg, #1EBF6A 0%, #5ECBA5 100%);
             --gradient-discord: linear-gradient(135deg, #5865F2 0%, #4752C4 100%);
             --shadow-lg: 0 20px 40px rgba(0,0,0,0.4);
-            --shadow-glow: 0 0 30px rgba(30, 191, 106, 0.15);
-            --radius: 12px;
-            --radius-lg: 16px;
+            --shadow-glow: 0 0 20px rgba(30, 191, 106, 0.15);
+            --radius: 8px;
+            --radius-lg: 12px;
             --transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            --font-tech: 'Share Tech Mono', monospace;
         }
 
         body {
@@ -50,8 +53,8 @@
             content: '';
             position: fixed;
             top: -200px; left: 50%; transform: translateX(-50%);
-            width: 800px; height: 600px;
-            background: radial-gradient(ellipse, rgba(30,191,106,0.08) 0%, transparent 70%);
+            width: 800px; height: 500px;
+            background: radial-gradient(ellipse, rgba(30,191,106,0.05) 0%, transparent 70%);
             pointer-events: none; z-index: 0;
         }
 
@@ -146,8 +149,8 @@
             text-align: left;
         }
         .dropdown-item:hover {
-            background: var(--bg-glass);
-            color: var(--accent-emerald);
+            background: rgba(30, 191, 106, 0.08);
+            color: var(--accent-green);
         }
         .dropdown-item svg { width: 14px; height: 14px; opacity: 0.7; }
 
@@ -183,9 +186,12 @@
         }
 
         .login-title {
+            font-family: var(--font-tech);
             font-size: 24px;
-            font-weight: 700;
+            font-weight: 400;
             margin-bottom: 6px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
         }
 
         .login-subtitle {
@@ -215,8 +221,8 @@
         }
 
         .btn-discord:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 25px rgba(30, 191, 106, 0.3);
+            transform: translateY(-1px);
+            box-shadow: 0 8px 25px rgba(88, 101, 242, 0.3);
         }
 
         .btn-discord svg { width: 20px; height: 20px; }
@@ -229,11 +235,11 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 16px 24px;
+            padding: 14px 24px;
             border-bottom: 1px solid var(--border-subtle);
-            background: rgba(10, 11, 15, 0.8);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
+            background: rgba(13, 17, 23, 0.95);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
             position: sticky;
             top: 0;
             z-index: 50;
@@ -246,12 +252,12 @@
         }
 
         .topbar-brand {
+            font-family: var(--font-tech);
             font-size: 18px;
-            font-weight: 700;
-            background: var(--gradient-primary);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
+            font-weight: 400;
+            color: var(--accent-green-light);
+            text-transform: uppercase;
+            letter-spacing: 2px;
         }
 
         .topbar-right {
@@ -273,7 +279,7 @@
         }
         .user-badge:hover {
             background: rgba(255, 255, 255, 0.05);
-            border-color: var(--accent-indigo);
+            border-color: var(--accent-green);
         }
 
         .user-avatar {
@@ -346,9 +352,9 @@
         .tab-btn:hover { color: var(--text-primary); }
 
         .tab-btn.active {
-            background: var(--gradient-primary);
-            color: #fff;
-            box-shadow: 0 4px 12px rgba(30, 191, 106, 0.3);
+            background: rgba(30, 191, 106, 0.12);
+            color: var(--accent-green);
+            border: 1px solid rgba(30, 191, 106, 0.2);
         }
 
         .tab-btn svg { width: 16px; height: 16px; }
@@ -394,15 +400,17 @@
             font-size: 18px; flex-shrink: 0;
         }
 
-        .history-icon.torrent { background: rgba(96, 165, 250, 0.12); }
+        .history-icon.torrent { background: rgba(30, 191, 106, 0.12); }
         .history-icon.webdl { background: rgba(52, 211, 153, 0.12); }
 
         .history-details { flex: 1; min-width: 0; }
 
         .history-name {
-            font-size: 13px; font-weight: 500;
+            font-family: var(--font-tech);
+            font-size: 14px; font-weight: 400;
             color: var(--text-primary);
             white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+            text-transform: uppercase; letter-spacing: 0.5px;
         }
 
         .history-meta {
@@ -416,8 +424,8 @@
             background: var(--bg-glass); border: 1px solid var(--border-subtle);
         }
 
-        .history-type.torrent { color: var(--accent-blue); }
-        .history-type.webdl { color: var(--accent-emerald); }
+        .history-type.torrent { color: var(--accent-green); border-color: rgba(30, 191, 106, 0.2); }
+        .history-type.webdl { color: var(--accent-emerald); border-color: rgba(52, 211, 153, 0.2); }
 
         .history-date { font-size: 11px; color: var(--text-muted); }
 
@@ -437,7 +445,7 @@
 
         .btn-browse {
             background: rgba(30, 191, 106, 0.1);
-            color: var(--accent-indigo);
+            color: var(--accent-green);
             border-color: rgba(30, 191, 106, 0.15);
         }
         .btn-browse:hover {
@@ -463,7 +471,10 @@
         }
 
         .add-form h2 {
-            font-size: 18px; font-weight: 700; margin-bottom: 4px;
+            font-family: var(--font-tech);
+            font-size: 18px; font-weight: 400; margin-bottom: 4px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
         }
 
         .add-form-subtitle {
@@ -559,8 +570,8 @@
         }
 
         .type-indicator.torrent {
-            background: rgba(96, 165, 250, 0.1);
-            color: var(--accent-blue);
+            background: rgba(30, 191, 106, 0.1);
+            color: var(--accent-green);
         }
 
         .type-indicator.webdl {
@@ -576,16 +587,17 @@
         .btn-submit {
             display: inline-flex; align-items: center; justify-content: center; gap: 8px;
             width: 100%; padding: 13px 24px;
-            background: var(--gradient-primary);
-            color: #fff; font-size: 14px; font-weight: 600; font-family: inherit;
-            border: none; border-radius: var(--radius);
+            background: rgba(30, 191, 106, 0.12);
+            color: var(--accent-green); font-size: 14px; font-weight: 600; font-family: var(--font-tech);
+            border: 1px solid rgba(30, 191, 106, 0.3); border-radius: var(--radius);
             cursor: pointer; transition: var(--transition);
-            box-shadow: 0 4px 15px rgba(30, 191, 106, 0.3);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
 
         .btn-submit:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 25px rgba(30, 191, 106, 0.4);
+            background: rgba(30, 191, 106, 0.2);
+            box-shadow: var(--shadow-glow);
         }
 
         .btn-submit:disabled {
@@ -687,7 +699,7 @@
         .loading-state .spinner {
             width: 32px; height: 32px;
             border: 3px solid var(--border-subtle);
-            border-top-color: var(--accent-indigo);
+            border-top-color: var(--accent-green);
             border-radius: 50%; animation: spin 0.8s linear infinite;
         }
 
@@ -766,8 +778,9 @@
             flex-direction: column;
         }
         .tmdb-title {
-            font-weight: 700;
-            font-size: 14px;
+            font-family: var(--font-tech);
+            font-weight: 400;
+            font-size: 15px;
             color: var(--text-primary);
             line-height: 1.3;
             margin-bottom: 4px;
@@ -775,11 +788,13 @@
             -webkit-line-clamp: 2;
             -webkit-box-orient: vertical;
             overflow: hidden;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
         .tmdb-year {
             font-size: 12px;
-            color: var(--text-secondary);
-            font-weight: 600;
+            color: var(--accent-green-light);
+            font-weight: 500;
         }
 
         .search-grid {
@@ -804,11 +819,14 @@
             box-shadow: 0 8px 24px rgba(0,0,0,0.2);
         }
         .search-card-title {
-            font-weight: 600;
-            font-size: 15px;
+            font-family: var(--font-tech);
+            font-weight: 400;
+            font-size: 16px;
             color: var(--text-primary);
             word-break: break-word;
             line-height: 1.4;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
         .search-card-meta {
             display: flex;
@@ -870,11 +888,12 @@
         }
         input:checked + .toggle-slider {
             background-color: rgba(30, 191, 106, 0.2);
-            border-color: var(--accent-indigo);
+            border-color: var(--accent-green);
         }
         input:checked + .toggle-slider:before {
             transform: translateX(20px);
-            background-color: var(--accent-indigo);
+            background-color: var(--accent-green);
+            box-shadow: 0 0 10px rgba(30, 191, 106, 0.5);
         }
         .toggle-label {
             display: flex; align-items: center;
@@ -903,7 +922,7 @@
         }
         .toggle-container:hover { border-color: var(--border-accent); }
         .toggle-text { flex: 1; }
-        .toggle-title { font-weight: 600; margin-bottom: 4px; font-size: 14px; }
+        .toggle-title { font-family: var(--font-tech); font-weight: 400; margin-bottom: 4px; font-size: 15px; text-transform: uppercase; letter-spacing: 0.5px; }
         .toggle-desc { font-size: 13px; color: var(--text-secondary); }
 
         /* ─── Admin Sub-tabs ─── */
@@ -914,15 +933,17 @@
         }
         .admin-subtab {
             flex: 1; padding: 9px 14px; background: transparent; border: none;
-            border-radius: 7px; color: var(--text-secondary); font-size: 12px;
-            font-weight: 600; font-family: inherit; cursor: pointer;
+            border-radius: 7px; color: var(--text-secondary); font-size: 13px;
+            font-weight: 400; font-family: var(--font-tech); cursor: pointer;
             transition: var(--transition); display: flex; align-items: center;
             justify-content: center; gap: 6px; white-space: nowrap;
+            text-transform: uppercase; letter-spacing: 1px;
         }
         .admin-subtab:hover { color: var(--text-primary); background: rgba(255,255,255,0.03); }
         .admin-subtab.active {
-            background: rgba(30, 191, 106, 0.12); color: var(--accent-indigo);
-            border: 1px solid rgba(30, 191, 106, 0.15);
+            background: rgba(30, 191, 106, 0.12); color: var(--accent-green);
+            border: 1px solid rgba(30, 191, 106, 0.2);
+            box-shadow: 0 0 15px rgba(30, 191, 106, 0.1);
         }
         .admin-subtab svg { width: 14px; height: 14px; }
         .admin-subpanel { display: none; }
@@ -939,7 +960,7 @@
             font-size: 18px; background: rgba(30, 191, 106, 0.1);
             flex-shrink: 0;
         }
-        .admin-section-title { font-size: 16px; font-weight: 700; }
+        .admin-section-title { font-family: var(--font-tech); font-size: 16px; font-weight: 400; text-transform: uppercase; letter-spacing: 1px; }
         .admin-section-desc { font-size: 13px; color: var(--text-secondary); margin-top: 2px; }
     
         /* Tooltip styles */

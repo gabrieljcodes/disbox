@@ -6,33 +6,35 @@
     <title>🌐 Supported Hosters | Disbox</title>
     <link rel="icon" type="image/x-icon" href="/favicon.ico">
     <meta name="description" content="View supported hosters and limits on Disbox">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Share+Tech+Mono&display=swap" rel="stylesheet">
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
         :root {
-            --bg-primary: #0a0f0d;
-            --bg-secondary: #0f1a15;
-            --bg-card: rgba(16, 30, 24, 0.8);
-            --bg-card-hover: rgba(22, 42, 32, 0.9);
-            --bg-input: rgba(12, 24, 18, 0.9);
+            --bg-primary: #0d1117;
+            --bg-secondary: #161b22;
+            --bg-card: rgba(22, 27, 34, 0.8);
+            --bg-card-hover: rgba(30, 37, 46, 0.9);
+            --bg-input: rgba(13, 17, 23, 0.9);
             --bg-glass: rgba(255, 255, 255, 0.03);
-            --border-subtle: rgba(255, 255, 255, 0.06);
-            --border-accent: rgba(30, 191, 106, 0.3);
-            --text-primary: #e8f0ec;
-            --text-secondary: #8ba396;
-            --text-muted: #5a7264;
-            --accent-indigo: #5ECBA5;
+            --border-subtle: rgba(255, 255, 255, 0.08);
+            --border-accent: rgba(30, 191, 106, 0.4);
+            --text-primary: #e6edf3;
+            --text-secondary: #8b949e;
+            --text-muted: #484f58;
+            --accent-green: #1EBF6A;
+            --accent-green-light: #5ECBA5;
             --accent-emerald: #34d399;
             --accent-rose: #fb7185;
             --accent-blue: #60a5fa;
             --accent-amber: #fbbf24;
             --gradient-primary: linear-gradient(135deg, #1EBF6A 0%, #5ECBA5 100%);
             --shadow-lg: 0 20px 40px rgba(0,0,0,0.4);
-            --shadow-glow: 0 0 30px rgba(30, 191, 106, 0.15);
-            --radius: 12px;
-            --radius-lg: 16px;
+            --shadow-glow: 0 0 20px rgba(30, 191, 106, 0.15);
+            --radius: 8px;
+            --radius-lg: 12px;
             --transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            --font-tech: 'Share Tech Mono', monospace;
         }
 
         body {
@@ -48,8 +50,8 @@
             content: '';
             position: fixed;
             top: -200px; left: 50%; transform: translateX(-50%);
-            width: 800px; height: 600px;
-            background: radial-gradient(ellipse, rgba(30,191,106,0.08) 0%, transparent 70%);
+            width: 800px; height: 500px;
+            background: radial-gradient(ellipse, rgba(30,191,106,0.05) 0%, transparent 70%);
             pointer-events: none; z-index: 0;
         }
 
@@ -58,11 +60,11 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 16px 24px;
+            padding: 14px 24px;
             border-bottom: 1px solid var(--border-subtle);
-            background: rgba(10, 11, 15, 0.8);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
+            background: rgba(13, 17, 23, 0.95);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
             position: sticky;
             top: 0;
             z-index: 50;
@@ -76,12 +78,12 @@
         }
 
         .topbar-brand {
+            font-family: var(--font-tech);
             font-size: 18px;
-            font-weight: 700;
-            background: var(--gradient-primary);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
+            font-weight: 400;
+            color: var(--accent-green-light);
+            text-transform: uppercase;
+            letter-spacing: 2px;
         }
 
         .back-btn {
@@ -119,12 +121,17 @@
         }
         
         .page-title {
-            font-size: 32px;
-            font-weight: 800;
+            font-family: var(--font-tech);
+            font-size: 28px;
+            font-weight: 400;
             margin-bottom: 10px;
-            background: var(--gradient-primary);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
+            color: var(--text-primary);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+        
+        .page-title span {
+            color: var(--accent-green);
         }
         
         .page-subtitle {
@@ -228,10 +235,13 @@
         }
         
         .hoster-name {
-            font-size: 18px;
-            font-weight: 700;
+            font-family: var(--font-tech);
+            font-size: 16px;
+            font-weight: 400;
             color: var(--text-primary);
             margin-bottom: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
         
         .status-badge {
@@ -342,8 +352,8 @@
         .spinner {
             width: 40px;
             height: 40px;
-            border: 3px solid rgba(94, 203, 165, 0.1);
-            border-top-color: var(--accent-indigo);
+            border: 3px solid rgba(30, 191, 106, 0.1);
+            border-top-color: var(--accent-green);
             border-radius: 50%;
             animation: spin 1s linear infinite;
         }
@@ -370,7 +380,7 @@
 
     <div class="container">
         <div class="page-header">
-            <h1 class="page-title">Supported Hosters</h1>
+            <h1 class="page-title">SUPPORTED <span>HOSTERS</span></h1>
             <p class="page-subtitle">A dynamic list of hosters currently supported via our integrated TorBox accounts.</p>
         </div>
 
