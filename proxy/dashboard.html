@@ -1192,7 +1192,7 @@
                     <p class="add-form-subtitle">Generate tokens to interact with Disbox via the public REST API.</p>
 
                     <div style="margin-bottom: 24px;">
-                        <a href="/api/docs" target="_blank" class="btn-submit" style="display: inline-flex; align-items: center; gap: 8px; width: auto; padding: 10px 20px; text-decoration: none; background: rgba(30, 191, 106, 0.15); color: var(--accent-emerald); border: 1px solid rgba(30, 191, 106, 0.3);">
+                        <a href="/v1/docs" target="_blank" class="btn-submit" style="display: inline-flex; align-items: center; gap: 8px; width: auto; padding: 10px 20px; text-decoration: none; background: rgba(30, 191, 106, 0.15); color: var(--accent-emerald); border: 1px solid rgba(30, 191, 106, 0.3);">
                             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>
                             View API Documentation
                         </a>
@@ -1516,7 +1516,7 @@
         const baseURL = window.location.origin;
 
         // ─── Check Auth ───
-        fetch('/api/me')
+        fetch('/v1/me')
             .then(r => { if (!r.ok) throw new Error(); return r.json(); })
             .then(user => {
                 loginPage.classList.remove('visible');
@@ -1577,7 +1577,7 @@
         window.exportTorrent = function(token, type, btn) {
             if (type === 'file') {
                 // For file, we just navigate to it so the browser downloads it
-                window.location.href = '/api/torrents/exportdata?token=' + token + '&type=file';
+                window.location.href = '/v1/torrents/exportdata?token=' + token + '&type=file';
                 return;
             }
             
@@ -1586,7 +1586,7 @@
             btn.innerHTML = '<div class="spinner-inline"></div> Fetching...';
             btn.disabled = true;
 
-            fetch('/api/torrents/exportdata?token=' + token + '&type=magnet')
+            fetch('/v1/torrents/exportdata?token=' + token + '&type=magnet')
                 .then(r => r.json())
                 .then(res => {
                     btn.disabled = false;
@@ -1634,7 +1634,7 @@
                     clearInterval(progressInterval);
                     return;
                 }
-                fetch('/api/progress?tokens=' + tokens.join(','))
+                fetch('/v1/progress?tokens=' + tokens.join(','))
                     .then(r => r.json())
                     .then(res => {
                         Object.keys(res).forEach(token => {
@@ -1682,7 +1682,7 @@
             historyList.style.display = 'none';
             historyEmpty.style.display = 'none';
 
-            fetch('/api/history')
+            fetch('/v1/history')
                 .then(r => r.json())
                 .then(items => {
                     historyLoading.style.display = 'none';
@@ -1811,7 +1811,7 @@
 
         // ─── Global Stats ───
         function loadGlobalStats() {
-            fetch('/api/queue-status')
+            fetch('/v1/queue-status')
                 .then(r => r.json())
                 .then(res => {
                     if (!res.success) return;
@@ -1827,7 +1827,7 @@
 
         // ─── Profile & FTP ───
         function loadUserProfile() {
-            fetch('/api/user/profile')
+            fetch('/v1/user/profile')
                 .then(r => r.json())
                 .then(res => {
                     if(!res.success) return;
@@ -1842,7 +1842,7 @@
                     }
                 }).catch(console.error);
                 
-            fetch('/api/user/cloud')
+            fetch('/v1/user/cloud')
                 .then(r => r.json())
                 .then(res => {
                     if(!res.success) return;
@@ -1861,7 +1861,7 @@
             const user = document.getElementById('input-ftp-user').value.trim();
             const pass = document.getElementById('input-ftp-pass').value;
 
-            fetch('/api/user/ftp', {
+            fetch('/v1/user/ftp', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({host: host, username: user, password: pass})
@@ -1886,7 +1886,7 @@
                 pixeldrain: document.getElementById('input-cloud-pixeldrain').value
             };
 
-            fetch('/api/user/cloud', {
+            fetch('/v1/user/cloud', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify(payload)
@@ -1909,7 +1909,7 @@
         window.sendToFtp = function(token, btn) {
             btn.disabled = true;
             btn.style.opacity = '0.5';
-            fetch('/api/ftp/send', {
+            fetch('/v1/ftp/send', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({token: token})
@@ -1936,7 +1936,7 @@
             btn.style.opacity = '0.5';
             btn.innerHTML = '<div class="spinner" style="width: 16px; height: 16px; border-width: 2px;"></div>';
             
-            fetch('/api/integration/' + provider, {
+            fetch('/v1/integration/' + provider, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({token: token, zip: false})
@@ -1960,9 +1960,10 @@
 
           // ─── Load Admin Access List ───
           function loadAccessList() {
-              fetch('/api/admin/access')
+              fetch('/v1/admin/access')
                   .then(r => { if(!r.ok) throw new Error(); return r.json(); })
-                  .then(data => {
+                  .then(res => {
+                      const data = res.data || res;
                       document.getElementById('whitelist-toggle').checked = data.whitelist_enabled;
                       document.getElementById('blacklist-toggle').checked = data.blacklist_enabled;
                       
@@ -2013,7 +2014,7 @@
           }
 
           window.removeAccessUser = function(id) {
-              fetch('/api/admin/access/remove', {
+              fetch('/v1/admin/access/remove', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ discord_id: id })
@@ -2024,7 +2025,7 @@
               const id = document.getElementById('access-id-input').value.trim();
               const type = document.getElementById('access-type-select').value;
               if (!id) return;
-              fetch('/api/admin/access/add', {
+              fetch('/v1/admin/access/add', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ discord_id: id, type: type })
@@ -2039,7 +2040,7 @@
           });
 
           function toggleAccess(type, enabled) {
-              fetch('/api/admin/access/toggle', {
+              fetch('/v1/admin/access/toggle', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ list_type: type, enabled: enabled })
@@ -2065,7 +2066,7 @@
 
           // ─── Load Admin Settings ───
           function loadAdminSettings() {
-              fetch('/api/admin/settings')
+              fetch('/v1/admin/settings')
                   .then(r => r.json())
                   .then(res => {
                       if (!res.success) return;
@@ -2112,7 +2113,7 @@
           }
 
           function setAdminSetting(key, value) {
-              fetch('/api/admin/settings/update', {
+              fetch('/v1/admin/settings/update', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ key, value: String(value) })
@@ -2157,7 +2158,7 @@
           document.getElementById('torbox-key-add-btn')?.addEventListener('click', () => {
               const key = document.getElementById('torbox-key-input').value.trim();
               if (!key) return;
-              fetch('/api/admin/torbox/keys', {
+              fetch('/v1/admin/torbox/keys', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ action: 'add', key: key })
@@ -2174,7 +2175,7 @@
 
           window.removeTorboxKey = function(index) {
               if (!confirm('Are you sure you want to remove this Torbox API key?')) return;
-              fetch('/api/admin/torbox/keys', {
+              fetch('/v1/admin/torbox/keys', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ action: 'remove', index: index })
@@ -2199,7 +2200,7 @@
             adminList.style.display = 'none';
             adminEmpty.style.display = 'none';
 
-            fetch('/api/admin/history')
+            fetch('/v1/admin/history')
                 .then(r => { if (!r.ok) throw new Error(); return r.json(); })
                 .then(items => {
                     adminLoading.style.display = 'none';
@@ -2431,7 +2432,7 @@
             searchEmpty.style.display = 'none';
             document.getElementById('tmdb-results').innerHTML = '';
 
-            const endpoint = searchType === 'anime' ? '/api/anilist/search' : '/api/tmdb/search';
+            const endpoint = searchType === 'anime' ? '/v1/anilist/search' : '/v1/tmdb/search';
             fetch(endpoint + '?type=' + encodeURIComponent(searchType) + '&query=' + encodeURIComponent(query))
             .then(r => r.json())
             .then(res => {
@@ -2521,7 +2522,7 @@
 
             torrentLoading.style.display = 'flex';
 
-            fetch('/api/search?type=' + encodeURIComponent(searchType) + '&query=' + encodeURIComponent(fullId), {
+            fetch('/v1/search?type=' + encodeURIComponent(searchType) + '&query=' + encodeURIComponent(fullId), {
                 headers: { 'Content-Type': 'application/json' }
             })
             .then(r => r.json())
@@ -2610,7 +2611,7 @@
             btn.innerHTML = '<div class="spinner-inline"></div> Adding...';
             btn.disabled = true;
 
-            fetch('/api/add-torrent', {
+            fetch('/v1/add-torrent', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ link: link })
@@ -2656,14 +2657,14 @@
                 const formData = new FormData();
                 formData.append('file', selectedTorrentFile);
 
-                fetchPromise = fetch('/api/add-torrent-file', {
+                fetchPromise = fetch('/v1/add-torrent-file', {
                     method: 'POST',
                     body: formData
                 });
             } else {
                 // Submit link (magnet or URL)
                 const isTorrent = link.startsWith('magnet:');
-                const endpoint = isTorrent ? '/api/add-torrent' : '/api/add-webdl';
+                const endpoint = isTorrent ? '/v1/add-torrent' : '/v1/add-webdl';
 
                 fetchPromise = fetch(endpoint, {
                     method: 'POST',
@@ -2741,7 +2742,7 @@
             tokenList.style.display = 'none';
             tokensEmpty.style.display = 'none';
 
-            fetch('/api/tokens')
+            fetch('/v1/tokens')
                 .then(r => r.json())
                 .then(tokens => {
                     tokensLoading.style.display = 'none';
@@ -2788,7 +2789,7 @@
             btnCreateToken.disabled = true;
             btnCreateToken.textContent = '...';
 
-            fetch('/api/tokens', {
+            fetch('/v1/tokens', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ name })
@@ -2823,7 +2824,7 @@
         window.revokeToken = function(token) {
             if (!confirm('Are you sure you want to revoke this token? Any applications using it will lose access.')) return;
             
-            fetch('/api/tokens/revoke', {
+            fetch('/v1/tokens/revoke', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ token })
@@ -2852,7 +2853,7 @@
             loading.style.display = 'flex';
             content.style.display = 'none';
 
-            fetch('/api/admin/user?discord_id=' + discordId)
+            fetch('/v1/admin/user?discord_id=' + discordId)
                 .then(r => r.json())
                 .then(data => {
                     loading.style.display = 'none';
@@ -2925,7 +2926,7 @@
                     }
 
                     const setAccess = (type) => {
-                        fetch('/api/admin/access/add', {
+                        fetch('/v1/admin/access/add', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ discord_id: data.discord_id, type: type })
@@ -2935,7 +2936,7 @@
                     btnWhitelist.onclick = () => setAccess('whitelist');
                     btnBlacklist.onclick = () => setAccess('blacklist');
                     btnRemove.onclick = () => {
-                        fetch('/api/admin/access/remove', {
+                        fetch('/v1/admin/access/remove', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ discord_id: data.discord_id })
@@ -2964,7 +2965,7 @@
             btnElement.innerHTML = `<span class="spinner-inline" style="width: 14px; height: 14px; border-color: var(--border-subtle); border-top-color: var(--text-primary);"></span>`;
             btnElement.disabled = true;
 
-            fetch('/api/regenerate', {
+            fetch('/v1/regenerate', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ token: token })
@@ -3045,7 +3046,7 @@
             btnElement.innerHTML = `<span class="spinner-inline" style="width: 13px; height: 13px; border-color: rgba(251, 113, 133, 0.2); border-top-color: var(--accent-rose);"></span> Removing...`;
             btnElement.disabled = true;
 
-            fetch('/api/remove-download', {
+            fetch('/v1/remove-download', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ token: token })

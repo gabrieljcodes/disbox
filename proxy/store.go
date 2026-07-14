@@ -274,7 +274,7 @@ func (st *Store) UpdateHistorySize(token string, size int64, name string) {
 
 func (st *Store) GetUserHistory(discordID string) ([]HistoryRecord, error) {
 	rows, err := st.db.Query(
-		"SELECT token, link_token, name, type, created_at FROM download_history WHERE discord_id = $1 AND deleted = false ORDER BY created_at DESC",
+		"SELECT token, COALESCE(link_token, ''), name, type, created_at FROM download_history WHERE discord_id = $1 AND deleted = false ORDER BY created_at DESC",
 		discordID,
 	)
 	if err != nil {
@@ -282,19 +282,21 @@ func (st *Store) GetUserHistory(discordID string) ([]HistoryRecord, error) {
 	}
 	defer rows.Close()
 
-	var items []HistoryRecord
+	var history []HistoryRecord
 	for rows.Next() {
-		var item HistoryRecord
-		if err := rows.Scan(&item.Token, &item.LinkToken, &item.Name, &item.Type, &item.CreatedAt); err == nil {
-			items = append(items, item)
+		var hr HistoryRecord
+		if err := rows.Scan(&hr.Token, &hr.LinkToken, &hr.Name, &hr.Type, &hr.CreatedAt); err != nil {
+			log.Printf("GetUserHistory scan error: %v", err)
+		} else {
+			history = append(history, hr)
 		}
 	}
-	return items, nil
+	return history, nil
 }
 
 func (st *Store) GetUserHistoryLimited(discordID string, limit int) ([]HistoryRecord, error) {
 	rows, err := st.db.Query(
-		"SELECT token, link_token, name, type, created_at FROM download_history WHERE discord_id = $1 AND deleted = false ORDER BY created_at DESC LIMIT $2",
+		"SELECT token, COALESCE(link_token, ''), name, type, created_at FROM download_history WHERE discord_id = $1 AND deleted = false ORDER BY created_at DESC LIMIT $2",
 		discordID, limit,
 	)
 	if err != nil {
@@ -302,33 +304,37 @@ func (st *Store) GetUserHistoryLimited(discordID string, limit int) ([]HistoryRe
 	}
 	defer rows.Close()
 
-	var items []HistoryRecord
+	var history []HistoryRecord
 	for rows.Next() {
-		var item HistoryRecord
-		if err := rows.Scan(&item.Token, &item.LinkToken, &item.Name, &item.Type, &item.CreatedAt); err == nil {
-			items = append(items, item)
+		var hr HistoryRecord
+		if err := rows.Scan(&hr.Token, &hr.LinkToken, &hr.Name, &hr.Type, &hr.CreatedAt); err != nil {
+			log.Printf("GetUserHistoryLimited scan error: %v", err)
+		} else {
+			history = append(history, hr)
 		}
 	}
-	return items, nil
+	return history, nil
 }
 
 func (st *Store) GetAdminHistory() ([]HistoryRecord, error) {
 	rows, err := st.db.Query(
-		"SELECT discord_id, discord_username, discord_avatar, token, link_token, name, type, created_at FROM download_history WHERE deleted = false ORDER BY created_at DESC",
+		"SELECT discord_id, COALESCE(discord_username, ''), COALESCE(discord_avatar, ''), token, COALESCE(link_token, ''), name, type, created_at FROM download_history WHERE deleted = false ORDER BY created_at DESC",
 	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var items []HistoryRecord
+	var history []HistoryRecord
 	for rows.Next() {
-		var item HistoryRecord
-		if err := rows.Scan(&item.DiscordID, &item.DiscordUsername, &item.DiscordAvatar, &item.Token, &item.LinkToken, &item.Name, &item.Type, &item.CreatedAt); err == nil {
-			items = append(items, item)
+		var hr HistoryRecord
+		if err := rows.Scan(&hr.DiscordID, &hr.DiscordUsername, &hr.DiscordAvatar, &hr.Token, &hr.LinkToken, &hr.Name, &hr.Type, &hr.CreatedAt); err != nil {
+			log.Printf("GetAdminHistory scan error: %v", err)
+		} else {
+			history = append(history, hr)
 		}
 	}
-	return items, nil
+	return history, nil
 }
 
 // FindDownloadForRemoval looks up a download entry for deletion.
@@ -523,22 +529,30 @@ func (st *Store) CheckAccess(discordID string) (listType string, err error) {
 }
 
 func (st *Store) GetAccessSettings() (whitelistEnabled, blacklistEnabled string) {
-	st.db.QueryRow("SELECT value FROM access_settings WHERE key = 'whitelist_enabled'").Scan(&whitelistEnabled)
-	st.db.QueryRow("SELECT value FROM access_settings WHERE key = 'blacklist_enabled'").Scan(&blacklistEnabled)
+	err1 := st.db.QueryRow("SELECT value FROM access_settings WHERE key = 'whitelist_enabled'").Scan(&whitelistEnabled)
+	if err1 != nil && err1 != sql.ErrNoRows {
+		log.Printf("GetAccessSettings whitelist error: %v", err1)
+	}
+	err2 := st.db.QueryRow("SELECT value FROM access_settings WHERE key = 'blacklist_enabled'").Scan(&blacklistEnabled)
+	if err2 != nil && err2 != sql.ErrNoRows {
+		log.Printf("GetAccessSettings blacklist error: %v", err2)
+	}
 	return
 }
 
+
+
 type AccessUser struct {
-	DiscordID       string `json:"discord_id"`
-	DiscordUsername  string `json:"discord_username"`
-	DiscordAvatar    string `json:"discord_avatar"`
-	Type            string `json:"type"`
-	AddedBy         string `json:"added_by"`
+	DiscordID       string    `json:"discord_id"`
+	DiscordUsername string    `json:"discord_username"`
+	DiscordAvatar   string    `json:"discord_avatar"`
+	Type            string    `json:"type"`
+	AddedBy         string    `json:"added_by"`
 	AddedAt         time.Time `json:"added_at"`
 }
 
 func (st *Store) ListAccessUsers() ([]AccessUser, error) {
-	rows, err := st.db.Query("SELECT discord_id, discord_username, discord_avatar, type, added_by, added_at FROM access_list ORDER BY added_at DESC")
+	rows, err := st.db.Query("SELECT discord_id, COALESCE(discord_username, ''), COALESCE(discord_avatar, ''), type, added_by, added_at FROM access_list ORDER BY added_at DESC")
 	if err != nil {
 		return nil, err
 	}
@@ -547,7 +561,9 @@ func (st *Store) ListAccessUsers() ([]AccessUser, error) {
 	var users []AccessUser
 	for rows.Next() {
 		var u AccessUser
-		if err := rows.Scan(&u.DiscordID, &u.DiscordUsername, &u.DiscordAvatar, &u.Type, &u.AddedBy, &u.AddedAt); err == nil {
+		if err := rows.Scan(&u.DiscordID, &u.DiscordUsername, &u.DiscordAvatar, &u.Type, &u.AddedBy, &u.AddedAt); err != nil {
+			log.Printf("ListAccessUsers scan error: %v", err)
+		} else {
 			users = append(users, u)
 		}
 	}
@@ -578,13 +594,20 @@ func (st *Store) ToggleAccessList(listType string, enabled bool) {
 	if enabled {
 		val = "true"
 	}
-	st.db.Exec("INSERT INTO access_settings (key, value) VALUES ($1, $2) ON CONFLICT(key) DO UPDATE SET value = $3", key, val, val)
+	_, err := st.db.Exec(`INSERT INTO access_settings ("key", "value") VALUES ($1, $2) ON CONFLICT("key") DO UPDATE SET "value" = $3`, key, val, val)
+	if err != nil {
+		log.Printf("ToggleAccessList error (%s): %v", key, err)
+	}
+
 	if enabled {
 		otherKey := "blacklist_enabled"
 		if listType == "blacklist" {
 			otherKey = "whitelist_enabled"
 		}
-		st.db.Exec("INSERT INTO access_settings (key, value) VALUES ($1, 'false') ON CONFLICT(key) DO UPDATE SET value = 'false'", otherKey)
+		_, err := st.db.Exec(`INSERT INTO access_settings ("key", "value") VALUES ($1, 'false') ON CONFLICT("key") DO UPDATE SET "value" = 'false'`, otherKey)
+		if err != nil {
+			log.Printf("ToggleAccessList error for otherKey (%s): %v", otherKey, err)
+		}
 	}
 }
 
