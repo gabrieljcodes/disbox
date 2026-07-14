@@ -1498,3 +1498,51 @@ func (s *Server) handleAdminAnnouncementsClear(w http.ResponseWriter, r *http.Re
 	s.store.ClearGlobalAnnouncements()
 	jsonOK(w, map[string]string{"message": "All announcements cleared"})
 }
+
+func (s *Server) handleQueueRemove(w http.ResponseWriter, r *http.Request) {
+	discordID, ok := s.resolveUser(w, r)
+	if !ok {
+		return
+	}
+	id := r.PathValue("id")
+	if id == "" {
+		jsonError(w, http.StatusBadRequest, "Missing queue item ID")
+		return
+	}
+
+	isAdmin := s.IsAdmin(discordID)
+	err := s.downloadManager.RemoveFromQueue(id, discordID, isAdmin)
+	if err != nil {
+		jsonError(w, http.StatusForbidden, err.Error())
+		return
+	}
+	jsonOK(w, map[string]string{"message": "Removed from queue"})
+}
+
+func (s *Server) handleQueueMove(w http.ResponseWriter, r *http.Request) {
+	discordID, ok := s.resolveUser(w, r)
+	if !ok {
+		return
+	}
+	id := r.PathValue("id")
+	if id == "" {
+		jsonError(w, http.StatusBadRequest, "Missing queue item ID")
+		return
+	}
+
+	var req struct {
+		NewPosition int `json:"new_position"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, http.StatusBadRequest, "Invalid payload")
+		return
+	}
+
+	isAdmin := s.IsAdmin(discordID)
+	err := s.downloadManager.MoveInQueue(id, discordID, isAdmin, req.NewPosition)
+	if err != nil {
+		jsonError(w, http.StatusForbidden, err.Error())
+		return
+	}
+	jsonOK(w, map[string]string{"message": "Moved in queue"})
+}

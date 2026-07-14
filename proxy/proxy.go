@@ -211,6 +211,8 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/v1/remove-download", s.handleRemoveDownload)
 	mux.HandleFunc("/v1/regenerate", s.handleRegenerate)
 	mux.HandleFunc("/v1/queue-status", s.handleQueueStatus)
+	mux.HandleFunc("DELETE /v1/queue/{id}", s.handleQueueRemove)
+	mux.HandleFunc("PATCH /v1/queue/{id}/position", s.handleQueueMove)
 	mux.HandleFunc("/v1/user/profile", s.handleUserProfile)
 	mux.HandleFunc("/v1/user/ftp", s.handleUserFtp)
 	mux.HandleFunc("/v1/ftp/send", s.handleFtpSend)

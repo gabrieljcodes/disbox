@@ -578,3 +578,64 @@ func (dm *DownloadManager) Status() GlobalQueueStatus {
 		GlobalBandwidthUsed:  dm.globalBandwidthUsed,
 	}
 }
+
+func (dm *DownloadManager) RemoveFromQueue(id, discordID string, isAdmin bool) error {
+	dm.mu.Lock()
+	defer dm.mu.Unlock()
+
+	for i, qd := range dm.queue {
+		if qd.ID == id {
+			if qd.DiscordID != discordID && !isAdmin {
+				return fmt.Errorf("permission denied")
+			}
+			dm.queue = append(dm.queue[:i], dm.queue[i+1:]...)
+			return nil
+		}
+	}
+	return fmt.Errorf("item not found in queue")
+}
+
+func (dm *DownloadManager) MoveInQueue(id, discordID string, isAdmin bool, newPos int) error {
+	dm.mu.Lock()
+	defer dm.mu.Unlock()
+
+	var qd *QueuedDownload
+	oldPos := -1
+	for i, item := range dm.queue {
+		if item.ID == id {
+			if item.DiscordID != discordID && !isAdmin {
+				return fmt.Errorf("permission denied")
+			}
+			qd = item
+			oldPos = i
+			break
+		}
+	}
+
+	if qd == nil {
+		return fmt.Errorf("item not found in queue")
+	}
+
+	if newPos < 0 {
+		newPos = 0
+	}
+	if newPos >= len(dm.queue) {
+		newPos = len(dm.queue) - 1
+	}
+
+	if oldPos == newPos {
+		return nil
+	}
+
+	dm.queue = append(dm.queue[:oldPos], dm.queue[oldPos+1:]...)
+
+	if newPos == len(dm.queue) {
+		dm.queue = append(dm.queue, qd)
+	} else {
+		// insert at newPos
+		dm.queue = append(dm.queue[:newPos+1], dm.queue[newPos:]...)
+		dm.queue[newPos] = qd
+	}
+
+	return nil
+}
