@@ -1045,6 +1045,10 @@
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
                     My Downloads
                 </button>
+                <button class="tab-btn" data-tab="queue" id="tab-queue">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                    Queue
+                </button>
 
                 <button class="tab-btn" data-tab="add" id="tab-add">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
@@ -1075,6 +1079,27 @@
                     <div class="empty-state-icon">📭</div>
                     <p>No downloads yet</p>
                     <p class="hint">Add a torrent or web download to get started!</p>
+                </div>
+            </div>
+
+            <!-- Queue Tab -->
+            <div class="tab-panel" id="panel-queue">
+                <div class="add-form" id="queue-admin-controls" style="display:none; max-width:100%; margin-bottom: 20px;">
+                    <div style="display: flex; gap: 12px; max-width: 400px;">
+                        <input type="text" id="queue-user-filter" class="form-input" placeholder="User ID to filter (leave empty for all)">
+                        <button class="btn-primary" onclick="loadQueue(document.getElementById('queue-user-filter').value)">Apply</button>
+                    </div>
+                </div>
+
+                <div class="loading-state" id="queue-loading" style="display:none;">
+                    <div class="spinner"></div>
+                    <span>Loading queue...</span>
+                </div>
+                <div class="history-list" id="queue-list" style="display:none;"></div>
+                <div class="empty-state" id="queue-empty" style="display:none;">
+                    <div class="empty-state-icon">✅</div>
+                    <p>The queue is currently empty</p>
+                    <p class="hint">Downloads will be queued automatically when slots are full.</p>
                 </div>
             </div>
 
@@ -1691,6 +1716,9 @@
                 document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
                 btn.classList.add('active');
                 document.getElementById('panel-' + btn.dataset.tab).classList.add('active');
+                if (btn.dataset.tab === 'queue') {
+                    loadQueue();
+                }
             });
         });
 
@@ -3356,6 +3384,101 @@
         }
 
     })();
+    
+        // ─── Queue Manager ───
+        window.loadQueue = async function(userId = '') {
+            document.getElementById('queue-loading').style.display = 'flex';
+            document.getElementById('queue-list').style.display = 'none';
+            document.getElementById('queue-empty').style.display = 'none';
+
+            let url = '/v1/queue';
+            if (userId) {
+                url += '?user_id=' + encodeURIComponent(userId);
+            }
+
+            try {
+                const res = await fetch(url);
+                const data = await res.json();
+                if (!data.success) throw new Error(data.error);
+
+                if (window.currentUser && window.currentUser.is_admin) {
+                    document.getElementById('queue-admin-controls').style.display = 'block';
+                }
+
+                if (!data.data || data.data.length === 0) {
+                    document.getElementById('queue-loading').style.display = 'none';
+                    document.getElementById('queue-empty').style.display = 'flex';
+                    return;
+                }
+
+                const list = document.getElementById('queue-list');
+                list.innerHTML = '';
+                
+                data.data.forEach((item, index) => {
+                    const row = document.createElement('div');
+                    row.className = 'history-item';
+                    
+                    const time = new Date(item.queued_at).toLocaleString();
+                    const isFirst = index === 0;
+                    const isLast = index === data.data.length - 1;
+
+                    row.innerHTML = `
+                        <div class="history-item-content">
+                            <div class="history-item-title">
+                                <span class="badge" style="background:var(--accent-amber);color:#000;">Pos: ${item.position}</span>
+                                ${escapeHtml(item.name)}
+                            </div>
+                            <div class="history-item-meta">
+                                <span class="badge badge-queued">${item.type.toUpperCase()}</span>
+                                <span>Queued: ${time}</span>
+                            </div>
+                        </div>
+                        <div class="history-item-actions" style="display:flex; gap:8px;">
+                            ${isFirst ? '' : `<button class="btn-primary" onclick="moveQueueItem('${item.id}', 0)" title="Move to Top">⬆️ Top</button>`}
+                            ${isFirst ? '' : `<button class="btn-primary" onclick="moveQueueItem('${item.id}', ${index - 1})" title="Move Up">🔼</button>`}
+                            ${isLast ? '' : `<button class="btn-primary" onclick="moveQueueItem('${item.id}', ${index + 1})" title="Move Down">🔽</button>`}
+                            <button class="btn-danger" onclick="removeQueueItem('${item.id}')" title="Remove">❌</button>
+                        </div>
+                    `;
+                    list.appendChild(row);
+                });
+
+                document.getElementById('queue-loading').style.display = 'none';
+                list.style.display = 'flex';
+
+            } catch (err) {
+                console.error("Queue load error:", err);
+                document.getElementById('queue-loading').style.display = 'none';
+            }
+        };
+
+        window.moveQueueItem = async function(id, newPosition) {
+            try {
+                const res = await fetch('/v1/queue/' + encodeURIComponent(id) + '/position', {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ new_position: newPosition })
+                });
+                const data = await res.json();
+                if (!data.success) alert("Error: " + data.error);
+                loadQueue(document.getElementById('queue-user-filter').value);
+            } catch (err) {
+                alert("Failed to move item");
+            }
+        };
+
+        window.removeQueueItem = async function(id) {
+            if (!confirm("Are you sure you want to remove this item from the queue?")) return;
+            try {
+                const res = await fetch('/v1/queue/' + encodeURIComponent(id), { method: 'DELETE' });
+                const data = await res.json();
+                if (!data.success) alert("Error: " + data.error);
+                loadQueue(document.getElementById('queue-user-filter').value);
+            } catch (err) {
+                alert("Failed to remove item");
+            }
+        };
+
     </script>
 
     <!-- User Profile Modal -->
