@@ -223,7 +223,7 @@ func (s *Server) handleAddTorrent(w http.ResponseWriter, r *http.Request) {
 
 	qd, err := s.downloadManager.Submit(qd)
 	if err != nil {
-		jsonError(w, http.StatusBadGateway, err.Error())
+		jsonError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -290,7 +290,7 @@ func (s *Server) handleAddTorrentFile(w http.ResponseWriter, r *http.Request) {
 
 	qd, err = s.downloadManager.Submit(qd)
 	if err != nil {
-		jsonError(w, http.StatusBadGateway, err.Error())
+		jsonError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -339,7 +339,7 @@ func (s *Server) handleAddWebdl(w http.ResponseWriter, r *http.Request) {
 
 	qd, err := s.downloadManager.Submit(qd)
 	if err != nil {
-		jsonError(w, http.StatusBadGateway, err.Error())
+		jsonError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
