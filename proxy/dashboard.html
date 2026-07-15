@@ -139,8 +139,11 @@
             color: var(--text-primary);
             text-decoration: none;
             border-radius: 8px;
-            font-size: 13px;
-            font-weight: 500;
+            font-size: 14px;
+            font-weight: 400;
+            font-family: var(--font-tech);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
             cursor: pointer;
             transition: var(--transition);
             background: transparent;
@@ -338,9 +341,11 @@
             border: none;
             border-radius: 8px;
             color: var(--text-secondary);
-            font-size: 13px;
-            font-weight: 600;
-            font-family: inherit;
+            font-size: 14px;
+            font-weight: 400;
+            font-family: var(--font-tech);
+            text-transform: uppercase;
+            letter-spacing: 1px;
             cursor: pointer;
             transition: var(--transition);
             display: flex;
@@ -622,7 +627,8 @@
         .dropdown-content.show { display: flex; flex-direction: row; }
         .dropdown-content button {
             background: transparent; color: var(--text-primary); padding: 8px;
-            text-align: left; border: none; cursor: pointer; font-size: 13px; font-weight: 500;
+            text-align: left; border: none; cursor: pointer; font-size: 14px; font-weight: 400;
+            font-family: var(--font-tech); text-transform: uppercase; letter-spacing: 0.5px;
             display: flex; align-items: center; gap: 8px; transition: background 0.2s;
             width: auto; border-radius: 4px; justify-content: center;
         }
@@ -1096,10 +1102,10 @@
                     <span>Loading queue...</span>
                 </div>
                 <div class="history-list" id="queue-list" style="display:none;"></div>
-                <div class="empty-state" id="queue-empty" style="display:none;">
-                    <div class="empty-state-icon">✅</div>
-                    <p>The queue is currently empty</p>
-                    <p class="hint">Downloads will be queued automatically when slots are full.</p>
+                <div class="empty-state" id="queue-empty" style="display:none; flex-direction: column; align-items: center; justify-content: center; padding: 80px 20px; background: rgba(30, 191, 106, 0.02); border: 1px dashed rgba(30, 191, 106, 0.2); border-radius: var(--radius-lg); margin-top: 20px;">
+                    <div class="empty-state-icon" style="font-size: 48px; margin-bottom: 20px; opacity: 1; background: rgba(30, 191, 106, 0.1); width: 100px; height: 100px; display: flex; align-items: center; justify-content: center; border-radius: 50%; box-shadow: var(--shadow-glow);">✨</div>
+                    <p style="font-family: var(--font-tech); font-size: 22px; color: var(--accent-green); text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 12px; font-weight: 400;">Queue is Empty</p>
+                    <p class="hint" style="font-size: 14px; color: var(--text-secondary); max-width: 320px; text-align: center; line-height: 1.6;">Downloads will be queued automatically when slots are full.</p>
                 </div>
             </div>
 
