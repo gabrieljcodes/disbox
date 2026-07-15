@@ -515,13 +515,13 @@ func (dm *DownloadManager) executeDownload(qd *QueuedDownload) error {
 	}
 }
 
-func (dm *DownloadManager) GetQueueStatus(discordID string) []QueueStatusItem {
+func (dm *DownloadManager) GetQueueItems(filterDiscordID string) []QueueStatusItem {
 	dm.mu.Lock()
 	defer dm.mu.Unlock()
 
 	var items []QueueStatusItem
 	for i, qd := range dm.queue {
-		if qd.DiscordID == discordID || dm.server.IsAdmin(discordID) {
+		if filterDiscordID == "" || qd.DiscordID == filterDiscordID {
 			name := qd.FileName
 			if name == "" {
 				name = qd.Link
@@ -538,6 +538,9 @@ func (dm *DownloadManager) GetQueueStatus(discordID string) []QueueStatusItem {
 				Status:   qd.Status,
 			})
 		}
+	}
+	if items == nil {
+		items = make([]QueueStatusItem, 0)
 	}
 	return items
 }

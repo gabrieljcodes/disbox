@@ -1499,6 +1499,26 @@ func (s *Server) handleAdminAnnouncementsClear(w http.ResponseWriter, r *http.Re
 	jsonOK(w, map[string]string{"message": "All announcements cleared"})
 }
 
+func (s *Server) handleQueueItems(w http.ResponseWriter, r *http.Request) {
+	discordID, ok := s.resolveUser(w, r)
+	if !ok {
+		return
+	}
+
+	filterID := discordID
+	if s.IsAdmin(discordID) {
+		queryUser := r.URL.Query().Get("user_id")
+		if queryUser != "" {
+			filterID = queryUser
+		} else {
+			filterID = "" // return all
+		}
+	}
+
+	items := s.downloadManager.GetQueueItems(filterID)
+	jsonOK(w, items)
+}
+
 func (s *Server) handleQueueRemove(w http.ResponseWriter, r *http.Request) {
 	discordID, ok := s.resolveUser(w, r)
 	if !ok {
