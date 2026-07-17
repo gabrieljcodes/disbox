@@ -37,6 +37,9 @@ type QueueStatusItem struct {
 	QueuedAt time.Time `json:"queued_at"`
 	Position int       `json:"position"`
 	Status   string    `json:"status"`
+	Progress float64   `json:"progress,omitempty"`
+	Speed    int64     `json:"speed,omitempty"`
+	ETA      int64     `json:"eta,omitempty"`
 }
 
 type CachedProgress struct {
@@ -290,23 +293,11 @@ func (dm *DownloadManager) periodicRefresh() {
 }
 
 func (dm *DownloadManager) checkUserLimit(discordID string) error {
-	limitStr := dm.server.GetSetting("max_concurrent_per_user", "0")
-	if limitStr == "0" || limitStr == "" {
-		return nil
-	}
-
 	if dm.server.IsAdmin(discordID) {
 		return nil
 	}
 
-	limit, err := strconv.Atoi(limitStr)
-	if err != nil || limit <= 0 {
-		return nil
-	}
-
 	dm.mu.Lock()
-	userActive := dm.userActive[discordID]
-
 	userQueued := 0
 	for _, qd := range dm.queue {
 		if qd.DiscordID == discordID {
@@ -315,8 +306,8 @@ func (dm *DownloadManager) checkUserLimit(discordID string) error {
 	}
 	dm.mu.Unlock()
 
-	if userActive+userQueued >= limit {
-		return fmt.Errorf("you have reached the maximum of %d concurrent downloads set by the admin", limit)
+	if userQueued >= 10 {
+		return fmt.Errorf("you have reached the maximum of 10 queued downloads")
 	}
 
 	return nil
@@ -352,21 +343,30 @@ func (dm *DownloadManager) Submit(qd *QueuedDownload) (*QueuedDownload, error) {
 	qd.QueuedAt = time.Now()
 
 	if availableSlots > 0 {
-		qd.Status = "processing"
+		limitStr := dm.server.GetSetting("max_concurrent_per_user", "0")
+		limit, _ := strconv.Atoi(limitStr)
+		
 		dm.mu.Lock()
-		if len(dm.activeCount) > 0 {
-			dm.activeCount[0]++
-		} else {
-			dm.activeCount[0] = 1
-		}
-		dm.userActive[qd.DiscordID]++
+		userActive := dm.userActive[qd.DiscordID]
 		dm.mu.Unlock()
 
-		err := dm.executeDownload(qd)
-		if err != nil {
-			return qd, err
+		if limit <= 0 || dm.server.IsAdmin(qd.DiscordID) || userActive < limit {
+			qd.Status = "processing"
+			dm.mu.Lock()
+			if len(dm.activeCount) > 0 {
+				dm.activeCount[0]++
+			} else {
+				dm.activeCount[0] = 1
+			}
+			dm.userActive[qd.DiscordID]++
+			dm.mu.Unlock()
+
+			err := dm.executeDownload(qd)
+			if err != nil {
+				return qd, err
+			}
+			return qd, nil
 		}
-		return qd, nil
 	}
 
 	qd.Status = "queued"
@@ -412,17 +412,40 @@ func (dm *DownloadManager) tryDispatch() {
 		return
 	}
 
-	qd := dm.queue[0]
-	dm.queue = dm.queue[1:]
-	qd.Status = "processing"
+	limitStr := dm.server.GetSetting("max_concurrent_per_user", "0")
+	limit, _ := strconv.Atoi(limitStr)
+
+	var selectedQD *QueuedDownload
+	var selectedIndex int
+
+	for i, qd := range dm.queue {
+		if limit > 0 && !dm.server.IsAdmin(qd.DiscordID) {
+			if dm.userActive[qd.DiscordID] >= limit {
+				continue
+			}
+		}
+		selectedQD = qd
+		selectedIndex = i
+		break
+	}
+
+	if selectedQD == nil {
+		dm.mu.Unlock()
+		return
+	}
+
+	dm.queue = append(dm.queue[:selectedIndex], dm.queue[selectedIndex+1:]...)
+	selectedQD.Status = "processing"
 
 	if len(dm.activeCount) > 0 {
 		dm.activeCount[0]++
+	} else {
+		dm.activeCount[0] = 1
 	}
-	dm.userActive[qd.DiscordID]++
+	dm.userActive[selectedQD.DiscordID]++
 	dm.mu.Unlock()
 
-	go dm.executeDownload(qd)
+	go dm.executeDownload(selectedQD)
 }
 
 func (dm *DownloadManager) executeDownload(qd *QueuedDownload) error {

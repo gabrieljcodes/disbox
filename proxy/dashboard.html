@@ -1256,7 +1256,7 @@
 
                     <div class="form-group">
                         <label class="form-label" for="input-link">Link</label>
-                        <input type="text" class="form-input" id="input-link" placeholder="magnet:?xt=urn:btih:... or https://..." autocomplete="off" spellcheck="false">
+                        <textarea class="form-input" id="input-link" placeholder="Enter up to 10 links separated by newlines&#10;magnet:?xt=urn:btih:...&#10;https://..." autocomplete="off" spellcheck="false" style="resize: vertical; min-height: 80px; max-height: 200px; font-family: var(--font-tech);"></textarea>
                         <div class="type-indicator unknown" id="type-indicator">
                             <span>Paste a link to detect type</span>
                         </div>
@@ -2938,83 +2938,88 @@
 
         // ─── Add Link or File ───
         // ─── Submit ───
-        btnSubmit.addEventListener('click', () => {
-            const link = inputLink.value.trim();
+        btnSubmit.addEventListener('click', async () => {
+            const val = inputLink.value.trim();
             const hasFile = selectedTorrentFile !== null;
 
-            if (!link && !hasFile) return;
+            if (!val && !hasFile) return;
+
+            let links = [];
+            if (val) {
+                links = val.split(/\r?\n/).map(l => l.trim()).filter(l => l);
+            }
+
+            if (links.length > 10) {
+                showToast('You can add up to 10 links at once.', 'error');
+                return;
+            }
 
             btnSubmit.disabled = true;
             btnSubmit.innerHTML = '<span class="spinner-inline"></span> Adding...';
             toast.className = 'toast';
             toast.style.display = 'none';
 
-            let fetchPromise;
+            let successes = 0;
+            let errors = [];
 
             if (hasFile) {
-                // Upload .torrent file
                 const formData = new FormData();
                 formData.append('file', selectedTorrentFile);
+                try {
+                    const r = await fetch('/v1/add-torrent-file', { method: 'POST', body: formData });
+                    const data = await r.json();
+                    if (data.error) errors.push(data.error);
+                    else successes++;
+                } catch(e) {
+                    errors.push('Network error');
+                }
+            }
 
-                fetchPromise = fetch('/v1/add-torrent-file', {
-                    method: 'POST',
-                    body: formData
-                });
-            } else {
-                // Submit link (magnet or URL)
+            for (const link of links) {
                 const isTorrent = link.startsWith('magnet:');
                 const endpoint = isTorrent ? '/v1/add-torrent' : '/v1/add-webdl';
 
-                fetchPromise = fetch(endpoint, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ link: link })
-                });
+                try {
+                    const r = await fetch(endpoint, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ link: link })
+                    });
+                    const data = await r.json();
+                    if (data.error) errors.push(`Link ${link.substring(0,10)}... : ${data.error}`);
+                    else successes++;
+                } catch (e) {
+                    errors.push(`Network error for link ${link.substring(0,10)}...`);
+                }
             }
 
-            fetchPromise
-            .then(r => r.json())
-            .then(data => {
-                btnSubmit.disabled = false;
-                btnSubmit.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg> Add Download';
+            btnSubmit.disabled = false;
+            btnSubmit.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg> Add Download';
 
-                if (data.error) {
-                    toast.className = 'toast error';
-                    toast.innerHTML = '❌ ' + escapeHtml(data.error);
-                } else {
-                    toast.className = 'toast success';
-                    let html = '✅ Download added successfully!';
-                    if (data.browse_url || data.download_url) {
-                        html += '<div class="toast-links">';
-                        const cacheBuster = '?v=' + Date.now();
-                        // Convert server-side URLs to use browser origin
-                        const toLocalURL = (u) => { try { return window.location.origin + new URL(u).pathname; } catch(e) { return u; } };
-                        if (data.browse_url) html += '<a href="' + toLocalURL(data.browse_url) + cacheBuster + '" class="link-browse" target="_blank" rel="noopener noreferrer">📂 Browse Files</a>';
-                        if (data.download_url) html += '<a href="' + toLocalURL(data.download_url) + cacheBuster + '" class="link-dl">🔗 Download</a>';
-                        html += '</div>';
-                    }
-                    if (data.status === 'monitoring') {
-                        html = '⏳ Download added and is being monitored. Check back later!';
-                    }
-                    toast.innerHTML = html;
-                    inputLink.value = '';
-                    clearFileSelection();
-                    typeIndicator.className = 'type-indicator unknown';
-                    typeIndicator.innerHTML = 'Paste a link to detect type';
-                    // Reload history
-                    loadHistory();
-                    const adminTab = document.getElementById('tab-admin');
-                    if (adminTab && adminTab.style.display !== 'none') {
-                        loadAdminHistory();
-                    }
-                }
-            })
-            .catch(() => {
-                btnSubmit.disabled = false;
-                btnSubmit.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg> Add Download';
+            if (errors.length === 0) {
+                toast.className = 'toast success';
+                toast.innerHTML = `✅ Successfully added ${successes} download(s)!`;
+                inputLink.value = '';
+                clearFileSelection();
+                typeIndicator.className = 'type-indicator unknown';
+                typeIndicator.innerHTML = 'Paste a link to detect type';
+            } else if (successes > 0) {
+                toast.className = 'toast success';
+                toast.innerHTML = `✅ Added ${successes} download(s). ❌ Failed ${errors.length}.<br><span style="font-size:11px">${escapeHtml(errors[0])}</span>`;
+                inputLink.value = '';
+                clearFileSelection();
+                typeIndicator.className = 'type-indicator unknown';
+                typeIndicator.innerHTML = 'Paste a link to detect type';
+            } else {
                 toast.className = 'toast error';
-                toast.innerHTML = '❌ Network error. Please try again.';
-            });
+                toast.innerHTML = `❌ Failed to add: ${escapeHtml(errors[0])}`;
+            }
+
+            loadHistory();
+            const adminTab = document.getElementById('tab-admin');
+            if (adminTab && adminTab.style.display !== 'none') {
+                loadAdminHistory();
+            }
         });
 
         function escapeHtml(text) {
@@ -3392,10 +3397,12 @@
     })();
     
         // ─── Queue Manager ───
-        window.loadQueue = async function(userId = '') {
-            document.getElementById('queue-loading').style.display = 'flex';
-            document.getElementById('queue-list').style.display = 'none';
-            document.getElementById('queue-empty').style.display = 'none';
+        window.loadQueue = async function(userId = '', isSilent = false) {
+            if (!isSilent) {
+                document.getElementById('queue-loading').style.display = 'flex';
+                document.getElementById('queue-list').style.display = 'none';
+                document.getElementById('queue-empty').style.display = 'none';
+            }
 
             let url = '/v1/queue';
             if (userId) {
@@ -3418,6 +3425,10 @@
                 }
 
                 const list = document.getElementById('queue-list');
+                
+                // Keep track of active jobs to enable polling
+                let hasActiveFTP = false;
+
                 list.innerHTML = '';
                 
                 data.data.forEach((item, index) => {
@@ -3437,7 +3448,20 @@
                             <div class="history-item-meta">
                                 <span class="badge badge-queued">${item.type.toUpperCase()}</span>
                                 <span>Queued: ${time}</span>
+                                <span style="margin-left:8px; color: ${item.status === 'processing' ? 'var(--accent-emerald)' : 'var(--text-muted)'}; text-transform: uppercase; font-size: 10px; font-weight: bold;">${item.status}</span>
                             </div>
+                            
+                            ${item.type === 'ftp' && (item.status === 'processing' || item.progress > 0) ? `
+                            <div class="progress-container" style="display: block; margin-top: 8px;">
+                                <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--text-muted); margin-bottom: 4px;">
+                                    <span>${item.status === 'completed' ? 'Completed' : (item.status === 'error' ? 'Error' : 'Uploading...')}</span>
+                                    <span>${(item.progress * 100).toFixed(1)}% ${item.speed ? ' • ' + formatSpeed(item.speed) : ''} ${item.eta ? ' • ' + formatETA(item.eta) : ''}</span>
+                                </div>
+                                <div style="width: 100%; background: var(--bg-input); border-radius: 4px; height: 6px; overflow: hidden; border: 1px solid var(--border-subtle);">
+                                    <div style="width: ${item.progress * 100}%; height: 100%; background: ${item.status === 'error' ? 'var(--accent-rose)' : 'var(--accent-emerald)'}; transition: width 0.5s ease; box-shadow: 0 0 10px ${item.status === 'error' ? 'var(--accent-rose)' : 'var(--accent-emerald)'};"></div>
+                                </div>
+                            </div>
+                            ` : ''}
                         </div>
                         <div class="history-item-actions" style="display:flex; gap:8px;">
                             ${isFirst ? '' : `<button class="btn-primary" onclick="moveQueueItem('${item.id}', 0)" title="Move to Top">⬆️ Top</button>`}
@@ -3447,14 +3471,36 @@
                         </div>
                     `;
                     list.appendChild(row);
+                    
+                    if (item.type === 'ftp' && item.status === 'processing') {
+                        hasActiveFTP = true;
+                    }
                 });
 
                 document.getElementById('queue-loading').style.display = 'none';
                 list.style.display = 'flex';
 
+                // Poll queue state if there are active FTP uploads
+                if (window.queuePollInterval) clearInterval(window.queuePollInterval);
+                if (hasActiveFTP) {
+                    window.queuePollInterval = setTimeout(() => {
+                        // Only poll if we are still on the queue tab
+                        if (document.getElementById('panel-queue').classList.contains('active')) {
+                            // Fetch data again without showing the loading spinner to avoid flicker
+                            fetch(url).then(r => r.json()).then(newData => {
+                                if (newData.success && newData.data) {
+                                    // simple complete redraw is fine for the queue size
+                                    // we can just call loadQueue again quietly, but we need a silent mode
+                                    loadQueue(userId, true);
+                                }
+                            });
+                        }
+                    }, 3000);
+                }
+
             } catch (err) {
                 console.error("Queue load error:", err);
-                document.getElementById('queue-loading').style.display = 'none';
+                if (!isSilent) document.getElementById('queue-loading').style.display = 'none';
             }
         };
 

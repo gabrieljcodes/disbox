@@ -13,10 +13,7 @@ import (
 	"strings"
 	"time"
 	"torbox-discord-bot/torbox"
-
-	"github.com/jlaffaye/ftp"
 )
-
 // ─── JSON Response Helpers ───
 
 type apiResponse struct {
@@ -666,54 +663,23 @@ func (s *Server) handleFtpSend(w http.ResponseWriter, r *http.Request) {
 		fileID = *req.FileID
 	}
 
-	go s.uploadToFTP(host, username, password, dlType, downloadID, clientIndex, name, fileID)
+	job := &QueuedFTPJob{
+		DiscordID:    discordID,
+		Filename:     name,
+		Host:         host,
+		Username:     username,
+		Password:     password,
+		DownloadType: dlType,
+		DownloadID:   downloadID,
+		FileID:       fileID,
+		ClientIndex:  clientIndex,
+	}
+	s.ftpManager.Submit(job)
 
 	jsonOK(w, map[string]string{"message": "FTP upload started in background"})
 }
 
-func (s *Server) uploadToFTP(host, username, password, dlType string, downloadID, clientIndex int, filename string, fileID int) {
-	adapter := s.getAdapterForType(dlType, clientIndex)
-	if adapter == nil {
-		log.Printf("FTP Upload failed: unknown download type %s", dlType)
-		return
-	}
 
-	downloadURL, err := adapter.RequestURL(downloadID, fileID)
-	if err != nil {
-		log.Printf("FTP Upload failed to get URL: %v", err)
-		return
-	}
-
-	resp, err := http.Get(downloadURL)
-	if err != nil {
-		log.Printf("FTP Upload failed to fetch file: %v", err)
-		return
-	}
-	defer resp.Body.Close()
-
-	if !strings.Contains(host, ":") {
-		host += ":21"
-	}
-
-	c, err := ftp.Dial(host, ftp.DialWithTimeout(5*time.Second))
-	if err != nil {
-		log.Printf("FTP Upload failed to connect: %v", err)
-		return
-	}
-	defer c.Quit()
-
-	if err := c.Login(username, password); err != nil {
-		log.Printf("FTP Upload failed to login: %v", err)
-		return
-	}
-
-	if err := c.Stor(filename, resp.Body); err != nil {
-		log.Printf("FTP Upload failed to store file: %v", err)
-		return
-	}
-
-	log.Printf("FTP Upload successful: %s sent to %s", filename, host)
-}
 
 // ─── Hosters ───
 
@@ -1516,6 +1482,14 @@ func (s *Server) handleQueueItems(w http.ResponseWriter, r *http.Request) {
 	}
 
 	items := s.downloadManager.GetQueueItems(filterID)
+	ftpItems := s.ftpManager.GetQueueItems(filterID)
+	
+	// Merge ftp items to the end of the queue
+	for _, fItem := range ftpItems {
+		fItem.Position = len(items)
+		items = append(items, fItem)
+	}
+
 	jsonOK(w, items)
 }
 
@@ -1531,10 +1505,17 @@ func (s *Server) handleQueueRemove(w http.ResponseWriter, r *http.Request) {
 	}
 
 	isAdmin := s.IsAdmin(discordID)
-	err := s.downloadManager.RemoveFromQueue(id, discordID, isAdmin)
-	if err != nil {
-		jsonError(w, http.StatusForbidden, err.Error())
-		return
+	if strings.HasPrefix(id, "ftp_") {
+		if !s.ftpManager.Remove(id, discordID, isAdmin) {
+			jsonError(w, http.StatusForbidden, "Cannot remove this item or item not found")
+			return
+		}
+	} else {
+		err := s.downloadManager.RemoveFromQueue(id, discordID, isAdmin)
+		if err != nil {
+			jsonError(w, http.StatusForbidden, err.Error())
+			return
+		}
 	}
 	jsonOK(w, map[string]string{"message": "Removed from queue"})
 }
@@ -1559,10 +1540,17 @@ func (s *Server) handleQueueMove(w http.ResponseWriter, r *http.Request) {
 	}
 
 	isAdmin := s.IsAdmin(discordID)
-	err := s.downloadManager.MoveInQueue(id, discordID, isAdmin, req.NewPosition)
-	if err != nil {
-		jsonError(w, http.StatusForbidden, err.Error())
-		return
+	if strings.HasPrefix(id, "ftp_") {
+		if !s.ftpManager.Move(id, discordID, isAdmin, req.NewPosition) {
+			jsonError(w, http.StatusForbidden, "Cannot move this item or item not found")
+			return
+		}
+	} else {
+		err := s.downloadManager.MoveInQueue(id, discordID, isAdmin, req.NewPosition)
+		if err != nil {
+			jsonError(w, http.StatusForbidden, err.Error())
+			return
+		}
 	}
 	jsonOK(w, map[string]string{"message": "Moved in queue"})
 }

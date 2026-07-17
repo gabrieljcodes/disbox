@@ -91,6 +91,7 @@ type Server struct {
 	apiRateLimitsMu sync.Mutex
 
 	downloadManager *DownloadManager
+	ftpManager      *FTPManager
 }
 
 // NewServer accepts a Config struct, a ClientPool, and an open database connection.
@@ -122,8 +123,9 @@ func NewServer(cfg *config.Config, clientPool *torbox.ClientPool, db *sql.DB) (*
 		clientPool.UpdateKeys(storedKeys)
 	}
 
-	// Initialize DownloadManager
+	// Initialize Managers
 	s.downloadManager = NewDownloadManager(s)
+	s.ftpManager = NewFTPManager(s)
 
 	// Load existing links from database into memory
 	downloads, err := st.LoadDownloadLinks()
