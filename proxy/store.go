@@ -396,16 +396,16 @@ func (st *Store) MarkDeleted(token string) {
 // FindExistingDownload checks if a download already exists in history.
 func (st *Store) FindExistingDownload(dlType string, downloadID int, discordID string) (linkToken string, sameUser bool, exists bool) {
 	var existingDiscordID string
-	err := st.db.QueryRow("SELECT discord_id FROM download_history WHERE type = $1 AND download_id = $2 ORDER BY id ASC LIMIT 1", dlType, downloadID).Scan(&existingDiscordID)
+	err := st.db.QueryRow("SELECT discord_id FROM download_history WHERE type = $1 AND download_id = $2 AND deleted = false ORDER BY id ASC LIMIT 1", dlType, downloadID).Scan(&existingDiscordID)
 	if err != nil {
 		return "", false, false
 	}
 
 	var userLinkToken string
-	err = st.db.QueryRow("SELECT link_token FROM download_history WHERE type = $1 AND download_id = $2 AND discord_id = $3 LIMIT 1", dlType, downloadID, discordID).Scan(&userLinkToken)
+	err = st.db.QueryRow("SELECT link_token FROM download_history WHERE type = $1 AND download_id = $2 AND discord_id = $3 AND deleted = false LIMIT 1", dlType, downloadID, discordID).Scan(&userLinkToken)
 	if err == nil {
 		if userLinkToken == "" {
-			st.db.QueryRow("SELECT token FROM download_history WHERE type = $1 AND download_id = $2 AND discord_id = $3 LIMIT 1", dlType, downloadID, discordID).Scan(&userLinkToken)
+			st.db.QueryRow("SELECT token FROM download_history WHERE type = $1 AND download_id = $2 AND discord_id = $3 AND deleted = false LIMIT 1", dlType, downloadID, discordID).Scan(&userLinkToken)
 		}
 		return userLinkToken, true, true
 	}
