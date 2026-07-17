@@ -113,8 +113,34 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 		result = []HistoryItem{}
 	}
 
+	// Asynchronously repair any entries with generic placeholder names
+	go s.repairGenericNames(discordID)
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(result)
+}
+
+// repairGenericNames checks for history entries with placeholder names and updates them from TorBox.
+func (s *Server) repairGenericNames(discordID string) {
+	entries, err := s.store.GetGenericNamedEntries(discordID)
+	if err != nil || len(entries) == 0 {
+		return
+	}
+
+	for _, entry := range entries {
+		adapter := s.getAdapterForType(entry.Type, entry.ClientIndex)
+		if adapter == nil {
+			continue
+		}
+		info, err := adapter.GetInfo(entry.DownloadID)
+		if err != nil {
+			continue
+		}
+		if info.Name != "" && info.Name != "Getting info..." && info.Name != "Torrent" && info.Name != "Web Download" {
+			s.store.UpdateHistoryName(entry.Token, info.Name)
+			log.Printf("Repaired name for %s: %s -> %s", entry.Token, entry.Type, info.Name)
+		}
+	}
 }
 
 func (s *Server) handleProgress(w http.ResponseWriter, r *http.Request) {

@@ -281,6 +281,33 @@ func (st *Store) UpdateHistorySize(token string, size int64, name string) {
 	}
 }
 
+// GetGenericNamedEntries returns history entries with placeholder names that need to be updated.
+func (st *Store) GetGenericNamedEntries(discordID string) ([]HistoryRecord, error) {
+	rows, err := st.db.Query(
+		"SELECT token, type, download_id, client_index FROM download_history WHERE discord_id = $1 AND deleted = false AND (name = 'Torrent' OR name = 'Web Download') ORDER BY created_at DESC LIMIT 10",
+		discordID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var records []HistoryRecord
+	for rows.Next() {
+		var hr HistoryRecord
+		if err := rows.Scan(&hr.Token, &hr.Type, &hr.DownloadID, &hr.ClientIndex); err == nil {
+			records = append(records, hr)
+		}
+	}
+	return records, nil
+}
+
+// UpdateHistoryName updates only the name of a history record.
+func (st *Store) UpdateHistoryName(token string, name string) {
+	st.db.Exec("UPDATE download_history SET name = $1 WHERE token = $2", name, token)
+}
+
+
 func (st *Store) GetUserHistory(discordID string) ([]HistoryRecord, error) {
 	rows, err := st.db.Query(
 		"SELECT token, COALESCE(link_token, ''), name, type, created_at FROM download_history WHERE discord_id = $1 AND deleted = false ORDER BY created_at DESC",

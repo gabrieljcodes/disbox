@@ -390,22 +390,45 @@ func (s *Server) RegisterDownloadWithUser(downloadType string, id int, clientInd
 }
 
 func (s *Server) pollDownloadSize(downloadType string, id, clientIndex int, fileToken string) {
-	for i := 0; i < 12; i++ {
+	sizeFound := false
+	nameFound := false
+	for i := 0; i < 20; i++ {
 		time.Sleep(5 * time.Second)
 		adapter := s.getAdapterForType(downloadType, clientIndex)
 		if adapter == nil {
 			continue
 		}
 		info, err := adapter.GetInfo(id)
-		if err != nil || info.Size <= 0 {
+		if err != nil {
 			continue
 		}
+
 		name := ""
 		if info.Name != "" && info.Name != "Getting info..." {
 			name = info.Name
+			nameFound = true
 		}
-		s.store.UpdateHistorySize(fileToken, info.Size, name)
-		break
+
+		if info.Size > 0 && !sizeFound {
+			s.store.UpdateHistorySize(fileToken, info.Size, name)
+			sizeFound = true
+			if nameFound {
+				break
+			}
+		} else if nameFound && !sizeFound {
+			// Name found but size not yet, continue waiting
+			continue
+		} else if nameFound && sizeFound {
+			// Both found, update name and break
+			s.store.UpdateHistorySize(fileToken, info.Size, name)
+			break
+		}
+
+		// If only size was found before but now we have the name, update
+		if sizeFound && nameFound {
+			s.store.UpdateHistorySize(fileToken, info.Size, name)
+			break
+		}
 	}
 }
 

@@ -1786,8 +1786,9 @@
         let progressInterval = null;
 
         function formatSpeed(bytes) {
-            if (bytes === 0) return '0 B/s';
-            const k = 1024, sizes = ['B/s', 'KB/s', 'MB/s', 'GB/s'], i = Math.floor(Math.log(bytes) / Math.log(k));
+            if (!bytes || bytes <= 0) return '0 B/s';
+            const k = 1024, sizes = ['B/s', 'KB/s', 'MB/s', 'GB/s', 'TB/s'], i = Math.floor(Math.log(bytes) / Math.log(k));
+            if (i >= sizes.length) return parseFloat((bytes / Math.pow(k, sizes.length - 1)).toFixed(1)) + ' ' + sizes[sizes.length - 1];
             return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
         }
         function formatETA(seconds) {
@@ -3394,7 +3395,6 @@
             }, 5000);
         }
 
-    })();
     
         // ─── Queue Manager ───
         window.loadQueue = async function(userId = '', isSilent = false) {
@@ -3434,20 +3434,27 @@
                 data.data.forEach((item, index) => {
                     const row = document.createElement('div');
                     row.className = 'history-item';
+                    row.style.animationDelay = (index * 0.04) + 's';
                     
-                    const time = new Date(item.queued_at).toLocaleString();
+                    const time = new Date(item.queued_at || Date.now()).toLocaleString();
                     const isFirst = index === 0;
                     const isLast = index === data.data.length - 1;
 
+                    let icon = '⏳';
+                    if (item.type === 'torrent') icon = '🌊';
+                    else if (item.type === 'webdl') icon = '🌐';
+                    else if (item.type === 'ftp') icon = '📤';
+
                     row.innerHTML = `
-                        <div class="history-item-content">
-                            <div class="history-item-title">
-                                <span class="badge" style="background:var(--accent-amber);color:#000;">Pos: ${item.position}</span>
+                        <div class="history-icon ${item.type}" style="opacity: 0.7;">${icon}</div>
+                        <div class="history-details">
+                            <div class="history-name" title="${escapeHtml(item.name)}">
+                                <span class="badge" style="background:var(--accent-amber);color:#000;margin-right:8px;">Pos: ${item.position}</span>
                                 ${escapeHtml(item.name)}
                             </div>
-                            <div class="history-item-meta">
-                                <span class="badge badge-queued">${item.type.toUpperCase()}</span>
-                                <span>Queued: ${time}</span>
+                            <div class="history-meta">
+                                <span class="history-type ${item.type}">${item.type.toUpperCase()}</span>
+                                <span class="history-date">Queued: ${time}</span>
                                 <span style="margin-left:8px; color: ${item.status === 'processing' ? 'var(--accent-emerald)' : (item.status === 'error' ? 'var(--accent-rose)' : 'var(--text-muted)')}; text-transform: uppercase; font-size: 10px; font-weight: bold;">${item.status}</span>
                             </div>
                             
@@ -3463,11 +3470,11 @@
                             </div>
                             ` : ''}
                         </div>
-                        <div class="history-item-actions" style="display:flex; gap:8px;">
-                            ${isFirst ? '' : `<button class="btn-primary" onclick="moveQueueItem('${item.id}', 0)" title="Move to Top">⬆️ Top</button>`}
-                            ${isFirst ? '' : `<button class="btn-primary" onclick="moveQueueItem('${item.id}', ${index - 1})" title="Move Up">🔼</button>`}
-                            ${isLast ? '' : `<button class="btn-primary" onclick="moveQueueItem('${item.id}', ${index + 1})" title="Move Down">🔽</button>`}
-                            <button class="btn-danger" onclick="removeQueueItem('${item.id}')" title="Remove">❌</button>
+                        <div class="history-actions" style="display:flex; gap:4px; margin-left:16px;">
+                            ${isFirst ? '' : `<button class="btn-sm" style="background:rgba(255,255,255,0.05); color:var(--text-secondary); border:1px solid var(--border-subtle); cursor:pointer;" onclick="moveQueueItem('${item.id}', 0)" title="Move to Top">⬆️</button>`}
+                            ${isFirst ? '' : `<button class="btn-sm" style="background:rgba(255,255,255,0.05); color:var(--text-secondary); border:1px solid var(--border-subtle); cursor:pointer;" onclick="moveQueueItem('${item.id}', ${index - 1})" title="Move Up">🔼</button>`}
+                            ${isLast ? '' : `<button class="btn-sm" style="background:rgba(255,255,255,0.05); color:var(--text-secondary); border:1px solid var(--border-subtle); cursor:pointer;" onclick="moveQueueItem('${item.id}', ${index + 1})" title="Move Down">🔽</button>`}
+                            <button class="btn-sm" style="background:rgba(239,68,68,0.1); color:#ef4444; border:1px solid rgba(239,68,68,0.2); cursor:pointer;" onclick="removeQueueItem('${item.id}')" title="Remove">❌</button>
                         </div>
                     `;
                     list.appendChild(row);
@@ -3488,12 +3495,12 @@
                         if (document.getElementById('panel-queue').classList.contains('active')) {
                             // Fetch data again without showing the loading spinner to avoid flicker
                             fetch(url).then(r => r.json()).then(newData => {
-                                if (newData.success && newData.data) {
+                                if (newData.success && Array.isArray(newData.data)) {
                                     // simple complete redraw is fine for the queue size
                                     // we can just call loadQueue again quietly, but we need a silent mode
                                     loadQueue(userId, true);
                                 }
-                            });
+                            }).catch(err => console.error('Queue poll error:', err));
                         }
                     }, 3000);
                 }
@@ -3531,6 +3538,7 @@
             }
         };
 
+    })();
     </script>
 
     <!-- User Profile Modal -->
