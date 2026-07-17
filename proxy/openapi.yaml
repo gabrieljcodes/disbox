@@ -37,6 +37,28 @@ components:
           type: string
         download_url:
           type: string
+    QueueItem:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+        name:
+          type: string
+        queued_at:
+          type: string
+          format: date-time
+        position:
+          type: integer
+        status:
+          type: string
+        progress:
+          type: number
+        speed:
+          type: integer
+        eta:
+          type: integer
 security:
   - bearerAuth: []
 
@@ -190,6 +212,97 @@ paths:
                         type: integer
                       available_slots:
                         type: integer
+
+  /v1/queue:
+    get:
+      summary: Get Queue Items
+      description: Returns the user's queued downloads. Administrators can pass user_id to view another user's queue or omit it to see the global queue.
+      tags: [Downloads]
+      parameters:
+        - name: user_id
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Optional. Admin only. Filter by user Discord ID. Omit for all global items.
+      responses:
+        '200':
+          description: List of queue items
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/QueueItem'
+
+  /v1/queue/{id}:
+    delete:
+      summary: Remove from Queue
+      description: Removes an item from the queue. Admin users can remove any user's item.
+      tags: [Downloads]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Item removed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      message:
+                        type: string
+
+  /v1/queue/{id}/position:
+    patch:
+      summary: Move Queue Item
+      description: Changes the position of an item in the queue. Admin users can move any user's item.
+      tags: [Downloads]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [new_position]
+              properties:
+                new_position:
+                  type: integer
+      responses:
+        '200':
+          description: Item moved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      message:
+                        type: string
 
   /v1/add-torrent:
     post:

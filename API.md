@@ -97,6 +97,20 @@ Returns the user's download history and active proxy links.
 `GET /v1/queue-status`
 Returns the global slots capacity, active jobs, and queued jobs. This helps identify if a new download will be queued or start immediately.
 
+#### Get Queue Items
+`GET /v1/queue`
+Returns the user's queued downloads. 
+*Admin Note:* Administrators can optionally append `?user_id=123456789` to view a specific user's queue, or omit the query parameter to view the entire global queue.
+
+#### Remove Queue Item
+`DELETE /v1/queue/{id}`
+Removes an item from the queue by its ID. Admin users can remove any user's item.
+
+#### Move Queue Item
+`PATCH /v1/queue/{id}/position`
+Body: `{"new_position": 1}`
+Moves an item to a new 0-indexed position in the queue. Admin users can move any user's item.
+
 #### Get Hoster List
 `GET /v1/hosters`
 Returns a dynamic list of hosters that TorBox supports. 
