@@ -3448,10 +3448,10 @@
                             <div class="history-item-meta">
                                 <span class="badge badge-queued">${item.type.toUpperCase()}</span>
                                 <span>Queued: ${time}</span>
-                                <span style="margin-left:8px; color: ${item.status === 'processing' ? 'var(--accent-emerald)' : 'var(--text-muted)'}; text-transform: uppercase; font-size: 10px; font-weight: bold;">${item.status}</span>
+                                <span style="margin-left:8px; color: ${item.status === 'processing' ? 'var(--accent-emerald)' : (item.status === 'error' ? 'var(--accent-rose)' : 'var(--text-muted)')}; text-transform: uppercase; font-size: 10px; font-weight: bold;">${item.status}</span>
                             </div>
                             
-                            ${item.type === 'ftp' && (item.status === 'processing' || item.progress > 0) ? `
+                            ${item.type === 'ftp' && (item.status === 'processing' || item.progress > 0 || item.status === 'error') ? `
                             <div class="progress-container" style="display: block; margin-top: 8px;">
                                 <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--text-muted); margin-bottom: 4px;">
                                     <span>${item.status === 'completed' ? 'Completed' : (item.status === 'error' ? 'Error' : 'Uploading...')}</span>

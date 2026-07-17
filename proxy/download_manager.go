@@ -387,6 +387,23 @@ func (dm *DownloadManager) processQueue() {
 	for {
 		select {
 		case <-ticker.C:
+			dm.mu.Lock()
+			// Cleanup old error items
+			now := time.Now()
+			var toRemove []int
+			for i, qd := range dm.queue {
+				if qd.Status == "error" {
+					if now.Sub(qd.QueuedAt) > 10 * time.Second {
+						toRemove = append(toRemove, i)
+					}
+				}
+			}
+			for i := len(toRemove) - 1; i >= 0; i-- {
+				idx := toRemove[i]
+				dm.queue = append(dm.queue[:idx], dm.queue[idx+1:]...)
+			}
+			dm.mu.Unlock()
+
 			dm.tryDispatch()
 		case <-dm.stopChan:
 			return
@@ -416,16 +433,17 @@ func (dm *DownloadManager) tryDispatch() {
 	limit, _ := strconv.Atoi(limitStr)
 
 	var selectedQD *QueuedDownload
-	var selectedIndex int
 
-	for i, qd := range dm.queue {
+	for _, qd := range dm.queue {
+		if qd.Status != "queued" {
+			continue
+		}
 		if limit > 0 && !dm.server.IsAdmin(qd.DiscordID) {
 			if dm.userActive[qd.DiscordID] >= limit {
 				continue
 			}
 		}
 		selectedQD = qd
-		selectedIndex = i
 		break
 	}
 
@@ -434,7 +452,6 @@ func (dm *DownloadManager) tryDispatch() {
 		return
 	}
 
-	dm.queue = append(dm.queue[:selectedIndex], dm.queue[selectedIndex+1:]...)
 	selectedQD.Status = "processing"
 
 	if len(dm.activeCount) > 0 {
@@ -529,11 +546,23 @@ func (dm *DownloadManager) executeDownload(qd *QueuedDownload) error {
 		log.Printf("Download %s failed: %v", qd.ID, err)
 		dm.mu.Lock()
 		dm.userActive[qd.DiscordID]--
+		qd.Status = "error"
+		qd.QueuedAt = time.Now() // reset time so cleanup logic can keep it for a bit
 		dm.mu.Unlock()
 		return err
 	} else {
 		log.Printf("Download %s started successfully: %s", qd.ID, proxyLink)
 		qd.ProxyLink = proxyLink
+		
+		dm.mu.Lock()
+		// Remove from queue upon success so it moves seamlessly to History
+		for i, job := range dm.queue {
+			if job.ID == qd.ID {
+				dm.queue = append(dm.queue[:i], dm.queue[i+1:]...)
+				break
+			}
+		}
+		dm.mu.Unlock()
 		return nil
 	}
 }
