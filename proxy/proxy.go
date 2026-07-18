@@ -501,7 +501,20 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("Proxying download for %s #%d (client #%d)", entry.Type, entry.ID, entry.ClientIndex+1)
 
-	resp, err := http.Get(downloadURL)
+	reqDownload, err := http.NewRequest("GET", downloadURL, nil)
+	if err != nil {
+		log.Printf("Failed to create request for TorBox: %v", err)
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		browserTemplate.Execute(w, BrowseData{Title: "Error", ErrorMessage: "Failed to fetch file from TorBox."})
+		return
+	}
+	
+	// Forward Range header to support multithreaded downloads and pause/resume
+	if rangeHeader := r.Header.Get("Range"); rangeHeader != "" {
+		reqDownload.Header.Set("Range", rangeHeader)
+	}
+
+	resp, err := http.DefaultClient.Do(reqDownload)
 	if err != nil {
 		log.Printf("Failed to fetch file from TorBox: %v", err)
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -518,6 +531,12 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 	}
 	if cd := resp.Header.Get("Content-Disposition"); cd != "" {
 		w.Header().Set("Content-Disposition", cd)
+	}
+	if ar := resp.Header.Get("Accept-Ranges"); ar != "" {
+		w.Header().Set("Accept-Ranges", ar)
+	}
+	if cr := resp.Header.Get("Content-Range"); cr != "" {
+		w.Header().Set("Content-Range", cr)
 	}
 
 	w.WriteHeader(resp.StatusCode)
