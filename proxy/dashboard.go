@@ -29,7 +29,7 @@ func (s *Server) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
 	q.Set("client_id", s.discordClientID)
 	q.Set("redirect_uri", redirectURI)
 	q.Set("response_type", "code")
-	q.Set("scope", "identify")
+	q.Set("scope", "identify guilds.members.read")
 	u.RawQuery = q.Encode()
 
 	http.Redirect(w, r, u.String(), http.StatusTemporaryRedirect)
@@ -99,6 +99,46 @@ func (s *Server) handleAuthCallback(w http.ResponseWriter, r *http.Request) {
 	avatarURL := "https://cdn.discordapp.com/embed/avatars/0.png"
 	if userRes.Avatar != "" {
 		avatarURL = fmt.Sprintf("https://cdn.discordapp.com/avatars/%s/%s.png", userRes.ID, userRes.Avatar)
+	}
+
+	// Guild/Role Whitelist Check
+	whitelistEnabled, _ := s.store.GetAccessSettings()
+	if whitelistEnabled == "true" {
+		listType, err := s.store.CheckAccess(userRes.ID)
+		isExplicitlyWhitelisted := (err == nil && listType == "whitelist")
+
+		guildRolesMap := s.store.GetGuildRolesWhitelist()
+		if !isExplicitlyWhitelisted && len(guildRolesMap) > 0 {
+		outer:
+			for guildID, requiredRoles := range guildRolesMap {
+				if len(requiredRoles) == 0 {
+					continue
+				}
+				reqMember, _ := http.NewRequest("GET", fmt.Sprintf("https://discord.com/api/users/@me/guilds/%s/member", guildID), nil)
+				reqMember.Header.Set("Authorization", "Bearer "+tokenRes.AccessToken)
+				respMember, err := client.Do(reqMember)
+				if err == nil && respMember.StatusCode == http.StatusOK {
+					var memberRes struct {
+						Roles []string `json:"roles"`
+					}
+					if err := json.NewDecoder(respMember.Body).Decode(&memberRes); err == nil {
+						for _, userRole := range memberRes.Roles {
+							for _, reqRole := range requiredRoles {
+								if userRole == reqRole {
+									// Automatically add to whitelist
+									s.store.AddToAccessList(userRes.ID, userRes.Username, avatarURL, "whitelist", "AutoRoleSync")
+									log.Printf("User %s added to whitelist via AutoRoleSync (Guild: %s, Role: %s)", userRes.ID, guildID, reqRole)
+									break outer
+								}
+							}
+						}
+					}
+					respMember.Body.Close()
+				} else if err == nil {
+					respMember.Body.Close()
+				}
+			}
+		}
 	}
 
 	// 3. Check access control

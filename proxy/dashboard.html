@@ -1464,6 +1464,20 @@
 
                         <h3 style="font-size: 13px; margin-top: 28px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 8px; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-secondary);">Access List</h3>
                         <div id="access-list-container" class="history-list" style="max-height:400px; overflow-y:auto; padding-right: 8px;"></div>
+                        
+                        <h3 style="font-size: 13px; margin-top: 36px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 8px; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-secondary);">Guild & Role Whitelist (AutoRoleSync)</h3>
+                        <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 16px;">Configure servers and required roles. Users having these roles will be automatically added to the whitelist on login.</p>
+                        
+                        <div class="form-group" style="margin-bottom: 16px;">
+                            <div style="display:flex; gap:12px; align-items: center;">
+                                <input type="text" id="add-guild-id-input" placeholder="Server ID (Guild ID)" class="form-input" style="flex:1;">
+                                <button class="btn-submit" style="width: auto; padding: 13px 24px; white-space: nowrap;" onclick="window.addWhitelistGuild()">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px; height:16px;"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                                    Add Server
+                                </button>
+                            </div>
+                        </div>
+                        <div id="guild-roles-container" style="display:flex; flex-direction:column; gap:16px; margin-bottom: 16px;"></div>
                     </div>
                 </div>
 
@@ -1568,8 +1582,9 @@
                                     <input type="checkbox" id="admin-api-toggle" disabled>
                                     <span class="toggle-slider"></span>
                                 </span>
-                            </label>
                         </div>
+
+
                     </div>
                 </div>
 
@@ -2291,6 +2306,12 @@
                       document.getElementById('api-delay-input').value = data.public_api_delay_ms;
                       document.getElementById('user-gb-limit-input').value = data.user_gb_limit || '0';
                       document.getElementById('user-concurrent-limit-input').value = data.max_concurrent_per_user || '0';
+                      try {
+                          window.guildRolesConfig = JSON.parse(data.whitelist_guild_roles || '{}');
+                      } catch(e) {
+                          window.guildRolesConfig = {};
+                      }
+                      window.renderGuildRoles();
                       
                       const adminApiToggle = document.getElementById('admin-api-toggle');
                       if (adminApiToggle) adminApiToggle.checked = data.admin_api_enabled;
@@ -2349,6 +2370,7 @@
           document.getElementById('api-delay-btn')?.addEventListener('click', () => {
               setAdminSetting('public_api_delay_ms', document.getElementById('api-delay-input').value);
           });
+
           document.getElementById('user-gb-limit-btn')?.addEventListener('click', () => {
               setAdminSetting('user_gb_limit', document.getElementById('user-gb-limit-input').value);
           });
@@ -2399,6 +2421,100 @@
                       showToast(res.error || 'Failed to remove key', 'error');
                   }
               });
+          };
+
+          window.guildRolesConfig = {};
+
+          window.renderGuildRoles = function() {
+              const container = document.getElementById('guild-roles-container');
+              if (!container) return;
+              container.innerHTML = '';
+              const guilds = Object.keys(window.guildRolesConfig);
+              if (guilds.length === 0) {
+                  container.innerHTML = '<div style="color:var(--text-muted); font-size:12px; font-style:italic;">No servers configured for whitelist.</div>';
+                  return;
+              }
+
+              guilds.forEach(guildId => {
+                  const roles = window.guildRolesConfig[guildId] || [];
+                  const el = document.createElement('div');
+                  el.className = 'token-card'; // Reuse token card styles for a nice container
+                  el.style.flexDirection = 'column';
+                  el.style.alignItems = 'stretch';
+                  
+                  let rolesHtml = roles.length === 0 
+                      ? '<div style="color:var(--text-muted); font-size:11px;">No roles added yet.</div>' 
+                      : `<div style="display:flex; flex-wrap:wrap; gap:8px;">` + roles.map(roleId => `
+                          <div class="badge" style="background: rgba(30, 191, 106, 0.1); color: var(--accent-green); border: 1px solid rgba(30, 191, 106, 0.3); padding: 4px 8px; border-radius: 6px; display:flex; align-items:center; gap:6px; font-family:monospace; font-size:12px;">
+                              ${escapeHtml(roleId)}
+                              <button onclick="window.removeWhitelistRole('${guildId}', '${roleId}')" style="background:none; border:none; color:var(--accent-rose); cursor:pointer; padding:0; display:flex;">
+                                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                              </button>
+                          </div>
+                      `).join('') + `</div>`;
+
+                  el.innerHTML = `
+                      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 12px;">
+                          <div style="font-size: 14px; font-weight: 600; color: var(--text-primary);">
+                              <span style="color:var(--text-secondary); font-size:12px;">Guild ID: </span>${escapeHtml(guildId)}
+                          </div>
+                          <button class="btn-revoke" onclick="window.removeWhitelistGuild('${guildId}')" style="padding:4px 8px; font-size:11px;">Remove Server</button>
+                      </div>
+                      <div style="margin-bottom: 12px;">
+                          ${rolesHtml}
+                      </div>
+                      <div style="display:flex; gap:8px;">
+                          <input type="text" id="add-role-input-${guildId}" placeholder="Role ID" class="form-input" style="flex:1; padding: 6px 10px; font-size:12px;">
+                          <button class="btn" style="background: var(--bg-input); border: 1px solid var(--border-subtle); color: var(--text-primary); font-size:12px; padding:6px 12px;" onclick="window.addWhitelistRole('${guildId}')">Add Role</button>
+                      </div>
+                  `;
+                  container.appendChild(el);
+              });
+          };
+
+          window.saveGuildRoles = function() {
+              setAdminSetting('whitelist_guild_roles', JSON.stringify(window.guildRolesConfig));
+          };
+
+          window.addWhitelistGuild = function() {
+              const input = document.getElementById('add-guild-id-input');
+              const val = input.value.trim();
+              if (!val) return;
+              if (window.guildRolesConfig[val]) {
+                  showToast('Server already added', 'error');
+                  return;
+              }
+              window.guildRolesConfig[val] = [];
+              input.value = '';
+              window.saveGuildRoles();
+              window.renderGuildRoles();
+          };
+
+          window.removeWhitelistGuild = function(guildId) {
+              if (!confirm('Are you sure you want to remove this server?')) return;
+              delete window.guildRolesConfig[guildId];
+              window.saveGuildRoles();
+              window.renderGuildRoles();
+          };
+
+          window.addWhitelistRole = function(guildId) {
+              const input = document.getElementById('add-role-input-' + guildId);
+              const val = input.value.trim();
+              if (!val) return;
+              if (window.guildRolesConfig[guildId].includes(val)) {
+                  showToast('Role already added', 'error');
+                  return;
+              }
+              window.guildRolesConfig[guildId].push(val);
+              input.value = '';
+              window.saveGuildRoles();
+              window.renderGuildRoles();
+          };
+
+          window.removeWhitelistRole = function(guildId, roleId) {
+              window.guildRolesConfig[guildId] = window.guildRolesConfig[guildId].filter(r => r !== roleId);
+              window.saveGuildRoles();
+              window.renderGuildRoles();
           };
 
 

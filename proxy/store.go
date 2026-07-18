@@ -549,6 +549,7 @@ func (st *Store) InitDefaultSettings(existingKeys []string) {
 	initIfMissing("aiostreams_password", "")
 	initIfMissing("tmdb_api_key", "")
 	initIfMissing("remove_from_torbox_on_delete", "true")
+	initIfMissing("whitelist_guild_roles", "{}")
 }
 
 // GetStoredKeys reads torbox_api_keys from DB and returns them, or empty if not set.
@@ -596,7 +597,23 @@ func (st *Store) GetAccessSettings() (whitelistEnabled, blacklistEnabled string)
 	return
 }
 
+func (st *Store) GetGuildRolesWhitelist() map[string][]string {
+	var jsonStr string
+	err := st.db.QueryRow("SELECT value FROM access_settings WHERE key = 'whitelist_guild_roles'").Scan(&jsonStr)
+	if err != nil {
+		if err != sql.ErrNoRows {
+			log.Printf("GetGuildRolesWhitelist error: %v", err)
+		}
+		return map[string][]string{}
+	}
 
+	var rolesMap map[string][]string
+	if err := json.Unmarshal([]byte(jsonStr), &rolesMap); err != nil {
+		log.Printf("GetGuildRolesWhitelist json parse error: %v", err)
+		return map[string][]string{}
+	}
+	return rolesMap
+}
 
 type AccessUser struct {
 	DiscordID       string    `json:"discord_id"`

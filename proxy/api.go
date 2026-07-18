@@ -1312,6 +1312,7 @@ func (s *Server) handleAdminSettingsGet(w http.ResponseWriter, r *http.Request) 
 		"tmdb_api_key":                 s.store.GetSetting("tmdb_api_key", ""),
 		"remove_from_torbox_on_delete": s.store.GetSetting("remove_from_torbox_on_delete", "true") == "true",
 		"max_concurrent_per_user":      s.store.GetSetting("max_concurrent_per_user", "0"),
+		"whitelist_guild_roles":        s.store.GetSetting("whitelist_guild_roles", "{}"),
 	})
 }
 
@@ -1340,6 +1341,7 @@ func (s *Server) handleAdminSettingsUpdate(w http.ResponseWriter, r *http.Reques
 		"search_enabled": true, "public_api_delay_ms": true,
 		"aiostreams_url": true, "aiostreams_uuid": true, "aiostreams_password": true,
 		"tmdb_api_key": true, "remove_from_torbox_on_delete": true, "max_concurrent_per_user": true,
+		"whitelist_guild_roles": true,
 	}
 
 	if !allowedKeys[req.Key] {
