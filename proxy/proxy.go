@@ -521,7 +521,9 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(resp.StatusCode)
 
-	written, err := io.Copy(w, resp.Body)
+	// Use a larger buffer (4MB) to maximize throughput on high-speed connections
+	buf := make([]byte, 4*1024*1024)
+	written, err := io.CopyBuffer(w, resp.Body, buf)
 	if err != nil {
 		log.Printf("Error streaming download for %s #%d: %v (wrote %d bytes)", entry.Type, entry.ID, err, written)
 		return
