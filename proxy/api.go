@@ -1582,3 +1582,43 @@ func (s *Server) handleQueueMove(w http.ResponseWriter, r *http.Request) {
 	}
 	jsonOK(w, map[string]string{"message": "Moved in queue"})
 }
+
+func (s *Server) handleSpeedtest(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	sizeStr := r.URL.Query().Get("size")
+	size, err := strconv.ParseInt(sizeStr, 10, 64)
+	if err != nil || size <= 0 {
+		size = 10 * 1024 * 1024 // default 10MB
+	}
+	if size > 100*1024*1024 {
+		size = 100 * 1024 * 1024 // max 100MB
+	}
+
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Length", strconv.FormatInt(size, 10))
+	w.Header().Set("Content-Disposition", "attachment; filename=\"speedtest.bin\"")
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	w.WriteHeader(http.StatusOK)
+
+	buf := make([]byte, 1024*1024)
+	for i := range buf {
+		buf[i] = byte(i % 256)
+	}
+
+	var written int64 = 0
+	for written < size {
+		toWrite := int64(len(buf))
+		if size-written < toWrite {
+			toWrite = size - written
+		}
+		n, err := w.Write(buf[:toWrite])
+		if err != nil {
+			break
+		}
+		written += int64(n)
+	}
+}

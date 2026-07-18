@@ -781,3 +781,24 @@ paths:
       responses:
         '200':
           description: Upload started
+  /v1/speedtest:
+    get:
+      summary: Server Speed Test
+      description: Returns a stream of dummy data to measure download speed from the Disbox server.
+      tags: [Downloads]
+      parameters:
+        - name: size
+          in: query
+          required: false
+          description: Size of the dummy file in bytes (default 10MB, max 100MB)
+          schema:
+            type: integer
+            default: 10485760
+      responses:
+        '200':
+          description: Binary dummy data stream
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
