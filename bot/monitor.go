@@ -139,7 +139,7 @@ func (m *Monitor) checkTorrent(key string, download *TrackedDownload) {
 	if info.DownloadFinished && info.DownloadPresent {
 		log.Printf("Torrent %d (client #%d) has finished downloading", download.ID, download.ClientIndex+1)
 		
-		downloadLink, err := client.RequestDownloadURL(download.ID, -1)
+		downloadLink, err := client.RequestDownloadURL(download.ID, -1, "")
 		if err != nil {
 			log.Printf("Failed to get download link for torrent %d (client #%d): %v", download.ID, download.ClientIndex+1, err)
 			m.notifyError(download, fmt.Sprintf("Download finished but failed to get link: %v", err))
@@ -177,7 +177,7 @@ func (m *Monitor) checkWebDownload(key string, download *TrackedDownload) {
 	if info.DownloadFinished && info.DownloadPresent {
 		log.Printf("Web download %d (client #%d) has finished", download.ID, download.ClientIndex+1)
 		
-		downloadLink, err := client.RequestWebDownloadURL(download.ID, -1)
+		downloadLink, err := client.RequestWebDownloadURL(download.ID, -1, "")
 		if err != nil {
 			log.Printf("Failed to get download link for webdl %d (client #%d): %v", download.ID, download.ClientIndex+1, err)
 			m.notifyError(download, fmt.Sprintf("Download finished but failed to get link: %v", err))
@@ -219,7 +219,7 @@ func (m *Monitor) notifyCompletion(download *TrackedDownload, downloadLink strin
 	log.Printf("Download %d completed using API Key #%d", download.ID, download.ClientIndex+1)
 	
 	// Register a proxy link instead of using the direct TorBox URL
-	proxyLink, _ := m.proxyServer.RegisterDownloadWithUser(download.Type, download.ID, download.ClientIndex, download.UserID, download.Username, download.AvatarURL, download.Name, size)
+	proxyLink, _ := m.proxyServer.RegisterDownloadWithUser(download.Type, download.ID, download.ClientIndex, "discord", download.UserID, download.Username, download.AvatarURL, download.Name, size)
 	
 	// Notify the download manager that a slot might be free for this user
 	m.proxyServer.GetDownloadManager().OnDownloadComplete(download.UserID)

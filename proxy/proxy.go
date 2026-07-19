@@ -310,9 +310,9 @@ func (s *Server) resolveAdmin(w http.ResponseWriter, r *http.Request) (discordID
 	return id, true
 }
 
-// getUserDetails returns username and avatar for a discord user, fetched from session data.
-func (s *Server) getUserDetails(discordID string) (username, avatar string) {
-	username, avatar = s.store.GetUserInfoFromSession(discordID)
+// getUserDetails returns username and avatar for a user
+func (s *Server) getUserDetails(userID string) (username, avatar string) {
+	username, avatar = s.store.GetUserProfile(userID)
 	if username == "" {
 		username = "API User"
 	}
@@ -348,20 +348,24 @@ func (s *Server) GetBaseURL() string {
 }
 
 // RegisterDownloadWithUser registers a proxy token and also saves it to the user's history
-func (s *Server) RegisterDownloadWithUser(downloadType string, id int, clientIndex int, discordID, discordUsername, discordAvatar, name string, size int64) (string, int) {
+func (s *Server) RegisterDownloadWithUser(downloadType string, id int, clientIndex int, provider, providerID, username, avatar, name string, size int64) (string, int) {
 	status := 0
 	fileToken := generateToken()
 	linkToken := generateToken()
 
-	if discordID != "" {
-		existingLinkToken, sameUser, exists := s.store.FindExistingDownload(downloadType, id, discordID)
-		if exists {
-			if sameUser {
-				proxyURL := fmt.Sprintf("%s/dl/%s", s.baseURL, existingLinkToken)
-				return proxyURL, 1
+	var userID string
+	if providerID != "" {
+		userID, _ = s.store.GetOrCreateUser(provider, providerID, username, avatar)
+		if userID != "" {
+			existingLinkToken, sameUser, exists := s.store.FindExistingDownload(downloadType, id, userID)
+			if exists {
+				if sameUser {
+					proxyURL := fmt.Sprintf("%s/dl/%s", s.baseURL, existingLinkToken)
+					return proxyURL, 1
+				}
+				status = 2
+				size = 0
 			}
-			status = 2
-			size = 0
 		}
 	}
 
@@ -377,8 +381,8 @@ func (s *Server) RegisterDownloadWithUser(downloadType string, id int, clientInd
 	}
 	s.mu.Unlock()
 
-	if discordID != "" {
-		if err := s.store.SaveHistory(discordID, discordUsername, discordAvatar, fileToken, linkToken, name, downloadType, id, clientIndex, size); err != nil {
+	if userID != "" {
+		if err := s.store.SaveHistory(userID, fileToken, linkToken, name, downloadType, id, clientIndex, size); err != nil {
 			log.Printf("Warning: failed to save download history: %v", err)
 		} else if size == 0 && status == 0 {
 			go s.pollDownloadSize(downloadType, id, clientIndex, fileToken)
@@ -386,7 +390,7 @@ func (s *Server) RegisterDownloadWithUser(downloadType string, id int, clientInd
 	}
 
 	proxyURL := fmt.Sprintf("%s/dl/%s", s.baseURL, linkToken)
-	log.Printf("Registered proxy link for %s #%d (client #%d): %s (User: %s)", downloadType, id, clientIndex+1, proxyURL, discordID)
+	log.Printf("Registered proxy link for %s #%d (client #%d): %s (User: %s)", downloadType, id, clientIndex+1, proxyURL, userID)
 	return proxyURL, status
 }
 
@@ -491,7 +495,7 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	downloadURL, err := adapter.RequestURL(entry.ID, fileID)
+	downloadURL, err := adapter.RequestURL(entry.ID, fileID, "")
 	if err != nil {
 		log.Printf("Failed to get fresh TorBox download URL for %s #%d: %v", entry.Type, entry.ID, err)
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -541,8 +545,8 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(resp.StatusCode)
 
-	// Use a larger buffer (4MB) to maximize throughput on high-speed connections
-	buf := make([]byte, 4*1024*1024)
+	// Use a standard 128KB buffer for streaming (avoids TCP slow-start issues on large buffers)
+	buf := make([]byte, 128*1024)
 	written, err := io.CopyBuffer(w, resp.Body, buf)
 	if err != nil {
 		log.Printf("Error streaming download for %s #%d: %v (wrote %d bytes)", entry.Type, entry.ID, err, written)

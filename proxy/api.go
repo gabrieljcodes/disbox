@@ -1052,9 +1052,9 @@ func (s *Server) handleAdminHistory(w http.ResponseWriter, r *http.Request) {
 	}
 
 	type AdminHistoryItem struct {
-		DiscordID       string `json:"discord_id"`
-		DiscordUsername  string `json:"discord_username"`
-		DiscordAvatar   string `json:"discord_avatar"`
+		UserID          string `json:"user_id"`
+		Username        string `json:"username"`
+		Avatar          string `json:"avatar"`
 		Token           string `json:"token"`
 		LinkToken       string `json:"link_token"`
 		Name            string `json:"name"`
@@ -1069,9 +1069,9 @@ func (s *Server) handleAdminHistory(w http.ResponseWriter, r *http.Request) {
 			activeToken = item.LinkToken
 		}
 		result = append(result, AdminHistoryItem{
-			DiscordID:      item.DiscordID,
-			DiscordUsername: item.DiscordUsername,
-			DiscordAvatar:  item.DiscordAvatar,
+			UserID:         item.UserID,
+			Username:       item.Username,
+			Avatar:         item.Avatar,
 			Token:          activeToken,
 			LinkToken:      item.LinkToken,
 			Name:           item.Name,
@@ -1211,8 +1211,14 @@ func (s *Server) handleAdminAccessAdd(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if err := s.store.AddToAccessList(req.DiscordID, targetUsername, targetAvatar, req.Type, adminName); err != nil {
-		jsonError(w, http.StatusInternalServerError, "Database error")
+	targetUserID, err := s.store.GetOrCreateUser("discord", req.DiscordID, targetUsername, targetAvatar)
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, "Database error creating user")
+		return
+	}
+
+	if err := s.store.AddToAccessList(targetUserID, req.Type, adminName); err != nil {
+		jsonError(w, http.StatusInternalServerError, "Database error adding to access list")
 		return
 	}
 
@@ -1238,7 +1244,10 @@ func (s *Server) handleAdminAccessRemove(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	s.store.RemoveFromAccessList(req.DiscordID)
+	targetUserID, err := s.store.GetUserByProvider("discord", req.DiscordID)
+	if err == nil && targetUserID != "" {
+		s.store.RemoveFromAccessList(targetUserID)
+	}
 	jsonOK(w, map[string]string{"message": "User removed from access list"})
 }
 

@@ -30,25 +30,35 @@ func NewStore(db *sql.DB, encKey string) *Store {
 // CreateTables initializes the database schema.
 func (st *Store) CreateTables() error {
 	_, err := st.db.Exec(`
+		CREATE TABLE IF NOT EXISTS users (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			provider TEXT NOT NULL,
+			provider_id TEXT NOT NULL,
+			username TEXT DEFAULT '',
+			avatar TEXT DEFAULT '',
+			created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+			UNIQUE(provider, provider_id)
+		);
+
 		CREATE TABLE IF NOT EXISTS download_links (
 			token TEXT PRIMARY KEY,
 			type TEXT NOT NULL,
 			download_id INTEGER NOT NULL,
 			client_index INTEGER NOT NULL,
-			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+			created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 		);
+
 		CREATE TABLE IF NOT EXISTS user_sessions (
 			session_token TEXT PRIMARY KEY,
-			discord_id TEXT NOT NULL,
-			discord_username TEXT NOT NULL,
-			discord_avatar TEXT NOT NULL,
-			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+			user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 		);
+		CREATE INDEX IF NOT EXISTS idx_user_sessions_user_id ON user_sessions(user_id);
+
 		CREATE TABLE IF NOT EXISTS download_history (
-			id SERIAL PRIMARY KEY,
-			discord_id TEXT NOT NULL,
-			discord_username TEXT DEFAULT '',
-			discord_avatar TEXT DEFAULT '',
+			id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+			user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
 			token TEXT NOT NULL,
 			link_token TEXT DEFAULT '',
 			name TEXT NOT NULL,
@@ -57,35 +67,42 @@ func (st *Store) CreateTables() error {
 			client_index INTEGER NOT NULL,
 			size BIGINT DEFAULT 0,
 			deleted BOOLEAN DEFAULT false,
-			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+			created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 		);
+		CREATE INDEX IF NOT EXISTS idx_download_history_user_id ON download_history(user_id);
+		CREATE INDEX IF NOT EXISTS idx_download_history_token ON download_history(token);
+		CREATE INDEX IF NOT EXISTS idx_download_history_link_token ON download_history(link_token);
+
 		CREATE TABLE IF NOT EXISTS api_tokens (
 			token TEXT PRIMARY KEY,
-			discord_id TEXT NOT NULL,
+			user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
 			name TEXT NOT NULL,
-			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-			last_used_at TIMESTAMP
+			created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+			last_used_at TIMESTAMPTZ
 		);
+		CREATE INDEX IF NOT EXISTS idx_api_tokens_user_id ON api_tokens(user_id);
+
 		CREATE TABLE IF NOT EXISTS access_settings (
 			key TEXT PRIMARY KEY,
 			value TEXT NOT NULL
 		);
+
 		CREATE TABLE IF NOT EXISTS access_list (
-			discord_id TEXT PRIMARY KEY,
-			discord_username TEXT DEFAULT '',
-			discord_avatar TEXT DEFAULT '',
+			user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
 			type TEXT NOT NULL,
 			added_by TEXT NOT NULL,
-			added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+			added_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 		);
+
 		CREATE TABLE IF NOT EXISTS user_ftp_configs (
-			discord_id TEXT PRIMARY KEY,
+			user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
 			host TEXT NOT NULL,
 			username TEXT NOT NULL,
 			password TEXT NOT NULL
 		);
+
 		CREATE TABLE IF NOT EXISTS user_cloud_configs (
-			discord_id TEXT PRIMARY KEY,
+			user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
 			google_token TEXT DEFAULT '',
 			dropbox_token TEXT DEFAULT '',
 			onedrive_token TEXT DEFAULT '',
@@ -138,47 +155,68 @@ func (st *Store) DeleteDownloadLink(token string) {
 	st.db.Exec("DELETE FROM download_links WHERE token = $1", token)
 }
 
+// ─── Users ───
+
+func (st *Store) GetOrCreateUser(provider, providerID, username, avatar string) (string, error) {
+	var id string
+	err := st.db.QueryRow(`
+		INSERT INTO users (provider, provider_id, username, avatar, updated_at)
+		VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
+		ON CONFLICT(provider, provider_id) DO UPDATE SET 
+			username = EXCLUDED.username, 
+			avatar = EXCLUDED.avatar, 
+			updated_at = CURRENT_TIMESTAMP
+		RETURNING id
+	`, provider, providerID, username, avatar).Scan(&id)
+	return id, err
+}
+
+func (st *Store) GetUserByProvider(provider, providerID string) (string, error) {
+	var id string
+	err := st.db.QueryRow("SELECT id FROM users WHERE provider = $1 AND provider_id = $2", provider, providerID).Scan(&id)
+	return id, err
+}
+
+func (st *Store) GetUserInfo(userID string) (username, avatar string) {
+	st.db.QueryRow("SELECT username, avatar FROM users WHERE id = $1", userID).Scan(&username, &avatar)
+	return username, avatar
+}
+
 // ─── Sessions ───
 
-func (st *Store) SaveSession(sessionToken, discordID, username, avatar string) error {
+func (st *Store) SaveSession(sessionToken, userID string) error {
 	_, err := st.db.Exec(
-		"INSERT INTO user_sessions (session_token, discord_id, discord_username, discord_avatar) VALUES ($1, $2, $3, $4)",
-		sessionToken, discordID, username, avatar,
+		"INSERT INTO user_sessions (session_token, user_id) VALUES ($1, $2)",
+		sessionToken, userID,
 	)
 	return err
 }
 
-func (st *Store) GetSessionUser(sessionToken string) (discordID, username, avatar string, ok bool) {
-	err := st.db.QueryRow(
-		"SELECT discord_id, discord_username, discord_avatar FROM user_sessions WHERE session_token = $1",
-		sessionToken,
-	).Scan(&discordID, &username, &avatar)
-	return discordID, username, avatar, err == nil
+func (st *Store) GetSessionUser(sessionToken string) (userID, username, avatar string, ok bool) {
+	err := st.db.QueryRow(`
+		SELECT u.id, u.username, u.avatar 
+		FROM user_sessions s
+		JOIN users u ON s.user_id = u.id
+		WHERE s.session_token = $1
+	`, sessionToken).Scan(&userID, &username, &avatar)
+	return userID, username, avatar, err == nil
 }
 
 func (st *Store) DeleteSession(sessionToken string) {
 	st.db.Exec("DELETE FROM user_sessions WHERE session_token = $1", sessionToken)
 }
 
-func (st *Store) GetUserInfoFromSession(discordID string) (username, avatar string) {
-	st.db.QueryRow(
-		"SELECT discord_username, discord_avatar FROM user_sessions WHERE discord_id = $1 LIMIT 1",
-		discordID,
-	).Scan(&username, &avatar)
-	return username, avatar
-}
-
 // ─── API Tokens ───
 
-func (st *Store) GetAPIUser(token string) (discordID string, ok bool) {
-	err := st.db.QueryRow("SELECT discord_id FROM api_tokens WHERE token = $1", token).Scan(&discordID)
+func (st *Store) GetAPIUser(token string) (userID string, ok bool) {
+	err := st.db.QueryRow("SELECT user_id FROM api_tokens WHERE token = $1", token).Scan(&userID)
 	if err != nil {
 		return "", false
 	}
 	go func() {
 		st.db.Exec("UPDATE api_tokens SET last_used_at = CURRENT_TIMESTAMP WHERE token = $1", token)
 	}()
-	return discordID, true
+	return userID, true
 }
 
 type TokenInfo struct {
@@ -188,10 +226,10 @@ type TokenInfo struct {
 	LastUsedAt *time.Time `json:"last_used_at"`
 }
 
-func (st *Store) ListAPITokens(discordID string) ([]TokenInfo, error) {
+func (st *Store) ListAPITokens(userID string) ([]TokenInfo, error) {
 	rows, err := st.db.Query(
-		"SELECT token, name, created_at, last_used_at FROM api_tokens WHERE discord_id = $1 ORDER BY created_at DESC",
-		discordID,
+		"SELECT token, name, created_at, last_used_at FROM api_tokens WHERE user_id = $1 ORDER BY created_at DESC",
+		userID,
 	)
 	if err != nil {
 		return nil, err
@@ -216,31 +254,31 @@ func (st *Store) ListAPITokens(discordID string) ([]TokenInfo, error) {
 	return tokens, nil
 }
 
-func (st *Store) CountAPITokens(discordID string) int {
+func (st *Store) CountAPITokens(userID string) int {
 	var count int
-	st.db.QueryRow("SELECT COUNT(*) FROM api_tokens WHERE discord_id = $1", discordID).Scan(&count)
+	st.db.QueryRow("SELECT COUNT(*) FROM api_tokens WHERE user_id = $1", userID).Scan(&count)
 	return count
 }
 
-func (st *Store) CreateAPIToken(token, discordID, name string) error {
+func (st *Store) CreateAPIToken(token, userID, name string) error {
 	_, err := st.db.Exec(
-		"INSERT INTO api_tokens (token, discord_id, name) VALUES ($1, $2, $3)",
-		token, discordID, name,
+		"INSERT INTO api_tokens (token, user_id, name) VALUES ($1, $2, $3)",
+		token, userID, name,
 	)
 	return err
 }
 
-func (st *Store) RevokeAPIToken(tokenPrefix, discordID string, isMasked bool) (int64, error) {
+func (st *Store) RevokeAPIToken(tokenPrefix, userID string, isMasked bool) (int64, error) {
 	var result int64
 	if isMasked {
 		prefix := strings.TrimSuffix(tokenPrefix, "...")
-		res, err := st.db.Exec("DELETE FROM api_tokens WHERE token LIKE $1 AND discord_id = $2", prefix+"%", discordID)
+		res, err := st.db.Exec("DELETE FROM api_tokens WHERE token LIKE $1 AND user_id = $2", prefix+"%", userID)
 		if err != nil {
 			return 0, err
 		}
 		result, _ = res.RowsAffected()
 	} else {
-		res, err := st.db.Exec("DELETE FROM api_tokens WHERE token = $1 AND discord_id = $2", tokenPrefix, discordID)
+		res, err := st.db.Exec("DELETE FROM api_tokens WHERE token = $1 AND user_id = $2", tokenPrefix, userID)
 		if err != nil {
 			return 0, err
 		}
@@ -252,9 +290,9 @@ func (st *Store) RevokeAPIToken(tokenPrefix, discordID string, isMasked bool) (i
 // ─── Download History ───
 
 type HistoryRecord struct {
-	DiscordID       string
-	DiscordUsername  string
-	DiscordAvatar   string
+	UserID          string
+	Username        string
+	Avatar          string
 	Token           string
 	LinkToken       string
 	Name            string
@@ -265,10 +303,10 @@ type HistoryRecord struct {
 	CreatedAt       time.Time
 }
 
-func (st *Store) SaveHistory(discordID, username, avatar, token, linkToken, name, dlType string, downloadID, clientIndex int, size int64) error {
+func (st *Store) SaveHistory(userID, token, linkToken, name, dlType string, downloadID, clientIndex int, size int64) error {
 	_, err := st.db.Exec(
-		"INSERT INTO download_history (discord_id, discord_username, discord_avatar, token, link_token, name, type, download_id, client_index, size) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
-		discordID, username, avatar, token, linkToken, name, dlType, downloadID, clientIndex, size,
+		"INSERT INTO download_history (user_id, token, link_token, name, type, download_id, client_index, size) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+		userID, token, linkToken, name, dlType, downloadID, clientIndex, size,
 	)
 	return err
 }
@@ -282,10 +320,10 @@ func (st *Store) UpdateHistorySize(token string, size int64, name string) {
 }
 
 // GetGenericNamedEntries returns history entries with placeholder names that need to be updated.
-func (st *Store) GetGenericNamedEntries(discordID string) ([]HistoryRecord, error) {
+func (st *Store) GetGenericNamedEntries(userID string) ([]HistoryRecord, error) {
 	rows, err := st.db.Query(
-		"SELECT token, type, download_id, client_index FROM download_history WHERE discord_id = $1 AND deleted = false AND (name = 'Torrent' OR name = 'Web Download') ORDER BY created_at DESC LIMIT 10",
-		discordID,
+		"SELECT token, type, download_id, client_index FROM download_history WHERE user_id = $1 AND deleted = false AND (name = 'Torrent' OR name = 'Web Download') ORDER BY created_at DESC LIMIT 10",
+		userID,
 	)
 	if err != nil {
 		return nil, err
@@ -308,10 +346,10 @@ func (st *Store) UpdateHistoryName(token string, name string) {
 }
 
 
-func (st *Store) GetUserHistory(discordID string) ([]HistoryRecord, error) {
+func (st *Store) GetUserHistory(userID string) ([]HistoryRecord, error) {
 	rows, err := st.db.Query(
-		"SELECT token, COALESCE(link_token, ''), name, type, created_at FROM download_history WHERE discord_id = $1 AND deleted = false ORDER BY created_at DESC",
-		discordID,
+		"SELECT token, COALESCE(link_token, ''), name, type, created_at FROM download_history WHERE user_id = $1 AND deleted = false ORDER BY created_at DESC",
+		userID,
 	)
 	if err != nil {
 		return nil, err
@@ -330,10 +368,10 @@ func (st *Store) GetUserHistory(discordID string) ([]HistoryRecord, error) {
 	return history, nil
 }
 
-func (st *Store) GetUserHistoryLimited(discordID string, limit int) ([]HistoryRecord, error) {
+func (st *Store) GetUserHistoryLimited(userID string, limit int) ([]HistoryRecord, error) {
 	rows, err := st.db.Query(
-		"SELECT token, COALESCE(link_token, ''), name, type, created_at FROM download_history WHERE discord_id = $1 AND deleted = false ORDER BY created_at DESC LIMIT $2",
-		discordID, limit,
+		"SELECT token, COALESCE(link_token, ''), name, type, created_at FROM download_history WHERE user_id = $1 AND deleted = false ORDER BY created_at DESC LIMIT $2",
+		userID, limit,
 	)
 	if err != nil {
 		return nil, err
@@ -353,9 +391,12 @@ func (st *Store) GetUserHistoryLimited(discordID string, limit int) ([]HistoryRe
 }
 
 func (st *Store) GetAdminHistory() ([]HistoryRecord, error) {
-	rows, err := st.db.Query(
-		"SELECT discord_id, COALESCE(discord_username, ''), COALESCE(discord_avatar, ''), token, COALESCE(link_token, ''), name, type, created_at FROM download_history WHERE deleted = false ORDER BY created_at DESC",
-	)
+	rows, err := st.db.Query(`
+		SELECT h.user_id, COALESCE(u.username, ''), COALESCE(u.avatar, ''), h.token, COALESCE(h.link_token, ''), h.name, h.type, h.created_at 
+		FROM download_history h
+		LEFT JOIN users u ON h.user_id = u.id
+		WHERE h.deleted = false ORDER BY h.created_at DESC
+	`)
 	if err != nil {
 		return nil, err
 	}
@@ -364,7 +405,7 @@ func (st *Store) GetAdminHistory() ([]HistoryRecord, error) {
 	var history []HistoryRecord
 	for rows.Next() {
 		var hr HistoryRecord
-		if err := rows.Scan(&hr.DiscordID, &hr.DiscordUsername, &hr.DiscordAvatar, &hr.Token, &hr.LinkToken, &hr.Name, &hr.Type, &hr.CreatedAt); err != nil {
+		if err := rows.Scan(&hr.UserID, &hr.Username, &hr.Avatar, &hr.Token, &hr.LinkToken, &hr.Name, &hr.Type, &hr.CreatedAt); err != nil {
 			log.Printf("GetAdminHistory scan error: %v", err)
 		} else {
 			history = append(history, hr)
@@ -374,7 +415,7 @@ func (st *Store) GetAdminHistory() ([]HistoryRecord, error) {
 }
 
 // FindDownloadForRemoval looks up a download entry for deletion.
-func (st *Store) FindDownloadForRemoval(token string, discordID string, isAdmin bool) (dlType string, downloadID, clientIndex int, err error) {
+func (st *Store) FindDownloadForRemoval(token string, userID string, isAdmin bool) (dlType string, downloadID, clientIndex int, err error) {
 	if isAdmin {
 		err = st.db.QueryRow(
 			"SELECT type, download_id, client_index FROM download_history WHERE token = $1 OR link_token = $2",
@@ -382,8 +423,8 @@ func (st *Store) FindDownloadForRemoval(token string, discordID string, isAdmin 
 		).Scan(&dlType, &downloadID, &clientIndex)
 	} else {
 		err = st.db.QueryRow(
-			"SELECT type, download_id, client_index FROM download_history WHERE (token = $1 OR link_token = $2) AND discord_id = $3",
-			token, token, discordID,
+			"SELECT type, download_id, client_index FROM download_history WHERE (token = $1 OR link_token = $2) AND user_id = $3",
+			token, token, userID,
 		).Scan(&dlType, &downloadID, &clientIndex)
 	}
 	return
@@ -394,18 +435,18 @@ func (st *Store) MarkDeleted(token string) {
 }
 
 // FindExistingDownload checks if a download already exists in history.
-func (st *Store) FindExistingDownload(dlType string, downloadID int, discordID string) (linkToken string, sameUser bool, exists bool) {
-	var existingDiscordID string
-	err := st.db.QueryRow("SELECT discord_id FROM download_history WHERE type = $1 AND download_id = $2 AND deleted = false ORDER BY id ASC LIMIT 1", dlType, downloadID).Scan(&existingDiscordID)
+func (st *Store) FindExistingDownload(dlType string, downloadID int, userID string) (linkToken string, sameUser bool, exists bool) {
+	var existingUserID string
+	err := st.db.QueryRow("SELECT user_id FROM download_history WHERE type = $1 AND download_id = $2 AND deleted = false ORDER BY id ASC LIMIT 1", dlType, downloadID).Scan(&existingUserID)
 	if err != nil {
 		return "", false, false
 	}
 
 	var userLinkToken string
-	err = st.db.QueryRow("SELECT link_token FROM download_history WHERE type = $1 AND download_id = $2 AND discord_id = $3 AND deleted = false LIMIT 1", dlType, downloadID, discordID).Scan(&userLinkToken)
+	err = st.db.QueryRow("SELECT link_token FROM download_history WHERE type = $1 AND download_id = $2 AND user_id = $3 AND deleted = false LIMIT 1", dlType, downloadID, userID).Scan(&userLinkToken)
 	if err == nil {
 		if userLinkToken == "" {
-			st.db.QueryRow("SELECT token FROM download_history WHERE type = $1 AND download_id = $2 AND discord_id = $3 AND deleted = false LIMIT 1", dlType, downloadID, discordID).Scan(&userLinkToken)
+			st.db.QueryRow("SELECT token FROM download_history WHERE type = $1 AND download_id = $2 AND user_id = $3 AND deleted = false LIMIT 1", dlType, downloadID, userID).Scan(&userLinkToken)
 		}
 		return userLinkToken, true, true
 	}
@@ -413,7 +454,7 @@ func (st *Store) FindExistingDownload(dlType string, downloadID int, discordID s
 }
 
 // FindDownloadForRegenerate looks up download info for link regeneration.
-func (st *Store) FindDownloadForRegenerate(token, discordID string, isAdmin bool) (dlType, oldLinkToken string, downloadID, clientIndex int, err error) {
+func (st *Store) FindDownloadForRegenerate(token, userID string, isAdmin bool) (dlType, oldLinkToken string, downloadID, clientIndex int, err error) {
 	if isAdmin {
 		err = st.db.QueryRow(
 			"SELECT type, download_id, client_index, link_token FROM download_history WHERE token = $1 LIMIT 1",
@@ -421,14 +462,14 @@ func (st *Store) FindDownloadForRegenerate(token, discordID string, isAdmin bool
 		).Scan(&dlType, &downloadID, &clientIndex, &oldLinkToken)
 	} else {
 		err = st.db.QueryRow(
-			"SELECT type, download_id, client_index, link_token FROM download_history WHERE (token = $1 OR link_token = $2) AND discord_id = $3 LIMIT 1",
-			token, token, discordID,
+			"SELECT type, download_id, client_index, link_token FROM download_history WHERE (token = $1 OR link_token = $2) AND user_id = $3 LIMIT 1",
+			token, token, userID,
 		).Scan(&dlType, &downloadID, &clientIndex, &oldLinkToken)
 	}
 	return
 }
 
-func (st *Store) RegenerateLink(oldLinkToken, newLinkToken, dlType string, downloadID, clientIndex int, historyToken, discordID string, isAdmin bool) error {
+func (st *Store) RegenerateLink(oldLinkToken, newLinkToken, dlType string, downloadID, clientIndex int, historyToken, userID string, isAdmin bool) error {
 	tx, err := st.db.Begin()
 	if err != nil {
 		return err
@@ -445,7 +486,7 @@ func (st *Store) RegenerateLink(oldLinkToken, newLinkToken, dlType string, downl
 	if isAdmin {
 		_, err = tx.Exec("UPDATE download_history SET link_token = $1 WHERE token = $2", newLinkToken, historyToken)
 	} else {
-		_, err = tx.Exec("UPDATE download_history SET link_token = $1 WHERE (token = $2 OR link_token = $3) AND discord_id = $4", newLinkToken, historyToken, historyToken, discordID)
+		_, err = tx.Exec("UPDATE download_history SET link_token = $1 WHERE (token = $2 OR link_token = $3) AND user_id = $4", newLinkToken, historyToken, historyToken, userID)
 	}
 	if err != nil {
 		tx.Rollback()
@@ -456,19 +497,19 @@ func (st *Store) RegenerateLink(oldLinkToken, newLinkToken, dlType string, downl
 }
 
 // FindDownloadForExport looks up download info for export.
-func (st *Store) FindDownloadForExport(token, discordID string) (dlType string, downloadID, clientIndex int, err error) {
+func (st *Store) FindDownloadForExport(token, userID string) (dlType string, downloadID, clientIndex int, err error) {
 	err = st.db.QueryRow(
-		"SELECT type, download_id, client_index FROM download_history WHERE (token = $1 OR link_token = $2) AND discord_id = $3",
-		token, token, discordID,
+		"SELECT type, download_id, client_index FROM download_history WHERE (token = $1 OR link_token = $2) AND user_id = $3",
+		token, token, userID,
 	).Scan(&dlType, &downloadID, &clientIndex)
 	return
 }
 
 // FindDownloadForFTP looks up download info for FTP send.
-func (st *Store) FindDownloadForFTP(token, discordID string) (dlType, name string, downloadID, clientIndex int, err error) {
+func (st *Store) FindDownloadForFTP(token, userID string) (dlType, name string, downloadID, clientIndex int, err error) {
 	err = st.db.QueryRow(
-		"SELECT type, download_id, client_index, name FROM download_history WHERE (token = $1 OR link_token = $2) AND discord_id = $3",
-		token, token, discordID,
+		"SELECT type, download_id, client_index, name FROM download_history WHERE (token = $1 OR link_token = $2) AND user_id = $3",
+		token, token, userID,
 	).Scan(&dlType, &downloadID, &clientIndex, &name)
 	return
 }
@@ -580,8 +621,8 @@ func (st *Store) GetStoredKeys() []string {
 
 // ─── Access Control ───
 
-func (st *Store) CheckAccess(discordID string) (listType string, err error) {
-	err = st.db.QueryRow("SELECT type FROM access_list WHERE discord_id = $1", discordID).Scan(&listType)
+func (st *Store) CheckAccess(userID string) (listType string, err error) {
+	err = st.db.QueryRow("SELECT type FROM access_list WHERE user_id = $1", userID).Scan(&listType)
 	return
 }
 
@@ -616,16 +657,21 @@ func (st *Store) GetGuildRolesWhitelist() map[string][]string {
 }
 
 type AccessUser struct {
-	DiscordID       string    `json:"discord_id"`
-	DiscordUsername string    `json:"discord_username"`
-	DiscordAvatar   string    `json:"discord_avatar"`
+	UserID          string    `json:"user_id"`
+	Username        string    `json:"username"`
+	Avatar          string    `json:"avatar"`
 	Type            string    `json:"type"`
 	AddedBy         string    `json:"added_by"`
 	AddedAt         time.Time `json:"added_at"`
 }
 
 func (st *Store) ListAccessUsers() ([]AccessUser, error) {
-	rows, err := st.db.Query("SELECT discord_id, COALESCE(discord_username, ''), COALESCE(discord_avatar, ''), type, added_by, added_at FROM access_list ORDER BY added_at DESC")
+	rows, err := st.db.Query(`
+		SELECT a.user_id, COALESCE(u.username, ''), COALESCE(u.avatar, ''), a.type, a.added_by, a.added_at 
+		FROM access_list a
+		LEFT JOIN users u ON a.user_id = u.id
+		ORDER BY a.added_at DESC
+	`)
 	if err != nil {
 		return nil, err
 	}
@@ -634,7 +680,7 @@ func (st *Store) ListAccessUsers() ([]AccessUser, error) {
 	var users []AccessUser
 	for rows.Next() {
 		var u AccessUser
-		if err := rows.Scan(&u.DiscordID, &u.DiscordUsername, &u.DiscordAvatar, &u.Type, &u.AddedBy, &u.AddedAt); err != nil {
+		if err := rows.Scan(&u.UserID, &u.Username, &u.Avatar, &u.Type, &u.AddedBy, &u.AddedAt); err != nil {
 			log.Printf("ListAccessUsers scan error: %v", err)
 		} else {
 			users = append(users, u)
@@ -646,16 +692,16 @@ func (st *Store) ListAccessUsers() ([]AccessUser, error) {
 	return users, nil
 }
 
-func (st *Store) AddToAccessList(discordID, username, avatar, listType, addedBy string) error {
+func (st *Store) AddToAccessList(userID, listType, addedBy string) error {
 	_, err := st.db.Exec(
-		"INSERT INTO access_list (discord_id, discord_username, discord_avatar, type, added_by) VALUES ($1, $2, $3, $4, $5) ON CONFLICT(discord_id) DO UPDATE SET type = $6, added_by = $7, discord_username = EXCLUDED.discord_username, discord_avatar = EXCLUDED.discord_avatar",
-		discordID, username, avatar, listType, addedBy, listType, addedBy,
+		"INSERT INTO access_list (user_id, type, added_by) VALUES ($1, $2, $3) ON CONFLICT(user_id) DO UPDATE SET type = $4, added_by = $5",
+		userID, listType, addedBy, listType, addedBy,
 	)
 	return err
 }
 
-func (st *Store) RemoveFromAccessList(discordID string) {
-	st.db.Exec("DELETE FROM access_list WHERE discord_id = $1", discordID)
+func (st *Store) RemoveFromAccessList(userID string) {
+	st.db.Exec("DELETE FROM access_list WHERE user_id = $1", userID)
 }
 
 func (st *Store) ToggleAccessList(listType string, enabled bool) {
@@ -745,20 +791,20 @@ func (st *Store) ClearGlobalAnnouncements() {
 
 // ─── User Stats ───
 
-func (st *Store) GetUserTotalSize(discordID string) int64 {
+func (st *Store) GetUserTotalSize(userID string) int64 {
 	var totalSize sql.NullInt64
-	st.db.QueryRow("SELECT SUM(size) FROM download_history WHERE discord_id = $1", discordID).Scan(&totalSize)
+	st.db.QueryRow("SELECT SUM(size) FROM download_history WHERE user_id = $1", userID).Scan(&totalSize)
 	if !totalSize.Valid {
 		return 0
 	}
 	return totalSize.Int64
 }
 
-func (st *Store) GetUserMonthlySize(discordID string) int64 {
+func (st *Store) GetUserMonthlySize(userID string) int64 {
 	var totalSize sql.NullInt64
 	now := time.Now().UTC()
 	firstOfMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC).Format("2006-01-02 15:04:05")
-	st.db.QueryRow("SELECT SUM(size) FROM download_history WHERE discord_id = $1 AND created_at >= $2", discordID, firstOfMonth).Scan(&totalSize)
+	st.db.QueryRow("SELECT SUM(size) FROM download_history WHERE user_id = $1 AND created_at >= $2", userID, firstOfMonth).Scan(&totalSize)
 	if !totalSize.Valid {
 		return 0
 	}
@@ -767,25 +813,25 @@ func (st *Store) GetUserMonthlySize(discordID string) int64 {
 
 // ─── User FTP Config ───
 
-func (st *Store) GetFTPConfig(discordID string) (host, username, password string, err error) {
+func (st *Store) GetFTPConfig(userID string) (host, username, password string, err error) {
 	var encPassword string
-	err = st.db.QueryRow("SELECT host, username, password FROM user_ftp_configs WHERE discord_id = $1", discordID).Scan(&host, &username, &encPassword)
+	err = st.db.QueryRow("SELECT host, username, password FROM user_ftp_configs WHERE user_id = $1", userID).Scan(&host, &username, &encPassword)
 	if err == nil && encPassword != "" {
 		password, err = decrypt(st.encryptionKey, encPassword)
 	}
 	return
 }
 
-func (st *Store) SaveFTPConfig(discordID, host, username, password string) error {
+func (st *Store) SaveFTPConfig(userID, host, username, password string) error {
 	encPassword, err := encrypt(st.encryptionKey, password)
 	if err != nil {
 		return err
 	}
 	_, err = st.db.Exec(`
-		INSERT INTO user_ftp_configs (discord_id, host, username, password)
+		INSERT INTO user_ftp_configs (user_id, host, username, password)
 		VALUES ($1, $2, $3, $4)
-		ON CONFLICT(discord_id) DO UPDATE SET host=$5, username=$6, password=$7`,
-		discordID, host, username, encPassword,
+		ON CONFLICT(user_id) DO UPDATE SET host=$5, username=$6, password=$7`,
+		userID, host, username, encPassword,
 		host, username, encPassword,
 	)
 	return err
@@ -802,11 +848,11 @@ type CloudConfig struct {
 	Pixeldrain string `json:"pixeldrain"`
 }
 
-func (st *Store) GetCloudConfig(discordID string) (CloudConfig, error) {
+func (st *Store) GetCloudConfig(userID string) (CloudConfig, error) {
 	var c CloudConfig
 	err := st.db.QueryRow(
-		"SELECT google_token, dropbox_token, onedrive_token, gofile_token, onefichier_token, pixeldrain_token FROM user_cloud_configs WHERE discord_id = $1",
-		discordID,
+		"SELECT google_token, dropbox_token, onedrive_token, gofile_token, onefichier_token, pixeldrain_token FROM user_cloud_configs WHERE user_id = $1",
+		userID,
 	).Scan(&c.Google, &c.Dropbox, &c.OneDrive, &c.Gofile, &c.Onefichier, &c.Pixeldrain)
 	if err == sql.ErrNoRows {
 		return c, nil
@@ -825,7 +871,7 @@ func (st *Store) GetCloudConfig(discordID string) (CloudConfig, error) {
 	return c, nil
 }
 
-func (st *Store) SaveCloudConfig(discordID string, c CloudConfig) error {
+func (st *Store) SaveCloudConfig(userID string, c CloudConfig) error {
 	var err error
 	if c.Google != "" { c.Google, err = encrypt(st.encryptionKey, c.Google); if err != nil { return err } }
 	if c.Dropbox != "" { c.Dropbox, err = encrypt(st.encryptionKey, c.Dropbox); if err != nil { return err } }
@@ -835,22 +881,22 @@ func (st *Store) SaveCloudConfig(discordID string, c CloudConfig) error {
 	if c.Pixeldrain != "" { c.Pixeldrain, err = encrypt(st.encryptionKey, c.Pixeldrain); if err != nil { return err } }
 
 	_, err = st.db.Exec(`
-		INSERT INTO user_cloud_configs (discord_id, google_token, dropbox_token, onedrive_token, gofile_token, onefichier_token, pixeldrain_token)
+		INSERT INTO user_cloud_configs (user_id, google_token, dropbox_token, onedrive_token, gofile_token, onefichier_token, pixeldrain_token)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
-		ON CONFLICT(discord_id) DO UPDATE SET
+		ON CONFLICT(user_id) DO UPDATE SET
 			google_token=EXCLUDED.google_token,
 			dropbox_token=EXCLUDED.dropbox_token,
 			onedrive_token=EXCLUDED.onedrive_token,
 			gofile_token=EXCLUDED.gofile_token,
 			onefichier_token=EXCLUDED.onefichier_token,
 			pixeldrain_token=EXCLUDED.pixeldrain_token
-	`, discordID, c.Google, c.Dropbox, c.OneDrive, c.Gofile, c.Onefichier, c.Pixeldrain)
+	`, userID, c.Google, c.Dropbox, c.OneDrive, c.Gofile, c.Onefichier, c.Pixeldrain)
 	return err
 }
 
-func (st *Store) GetCloudProviderToken(discordID, dbField string) (string, error) {
+func (st *Store) GetCloudProviderToken(userID, dbField string) (string, error) {
 	var encToken string
-	err := st.db.QueryRow(fmt.Sprintf("SELECT %s FROM user_cloud_configs WHERE discord_id = $1", dbField), discordID).Scan(&encToken)
+	err := st.db.QueryRow(fmt.Sprintf("SELECT %s FROM user_cloud_configs WHERE user_id = $1", dbField), userID).Scan(&encToken)
 	if err != nil || encToken == "" {
 		return encToken, err
 	}
@@ -859,20 +905,11 @@ func (st *Store) GetCloudProviderToken(discordID, dbField string) (string, error
 
 // ─── Admin User Profile ───
 
-func (st *Store) GetUserProfile(discordID string) (username, avatar string) {
-	err := st.db.QueryRow(
-		"SELECT discord_username, discord_avatar FROM user_sessions WHERE discord_id = $1 ORDER BY created_at DESC LIMIT 1",
-		discordID,
-	).Scan(&username, &avatar)
-	if err != nil {
-		st.db.QueryRow(
-			"SELECT discord_username, discord_avatar FROM download_history WHERE discord_id = $1 ORDER BY created_at DESC LIMIT 1",
-			discordID,
-		).Scan(&username, &avatar)
-		if username == "" {
-			username = "Unknown User"
-			avatar = "https://cdn.discordapp.com/embed/avatars/0.png"
-		}
+func (st *Store) GetUserProfile(userID string) (username, avatar string) {
+	err := st.db.QueryRow("SELECT username, avatar FROM users WHERE id = $1", userID).Scan(&username, &avatar)
+	if err != nil || username == "" {
+		username = "Unknown User"
+		avatar = "https://cdn.discordapp.com/embed/avatars/0.png"
 	}
 	return
 }
@@ -885,10 +922,10 @@ type AdminProfileHistory struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
-func (st *Store) GetAdminUserHistory(discordID string) ([]AdminProfileHistory, int64, int, error) {
+func (st *Store) GetAdminUserHistory(userID string) ([]AdminProfileHistory, int64, int, error) {
 	rows, err := st.db.Query(
-		"SELECT token, name, type, size, created_at FROM download_history WHERE discord_id = $1 AND deleted = false ORDER BY created_at DESC",
-		discordID,
+		"SELECT token, name, type, size, created_at FROM download_history WHERE user_id = $1 AND deleted = false ORDER BY created_at DESC",
+		userID,
 	)
 	if err != nil {
 		return nil, 0, 0, err
@@ -912,9 +949,9 @@ func (st *Store) GetAdminUserHistory(discordID string) ([]AdminProfileHistory, i
 	return history, totalSize, totalDownloads, nil
 }
 
-func (st *Store) GetAccessType(discordID string) string {
+func (st *Store) GetAccessType(userID string) string {
 	var accessType string
-	err := st.db.QueryRow("SELECT type FROM access_list WHERE discord_id = $1", discordID).Scan(&accessType)
+	err := st.db.QueryRow("SELECT type FROM access_list WHERE user_id = $1", userID).Scan(&accessType)
 	if err == sql.ErrNoRows {
 		return "none"
 	}

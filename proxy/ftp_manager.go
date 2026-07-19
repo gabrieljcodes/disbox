@@ -206,7 +206,7 @@ func (fm *FTPManager) upload(job *QueuedFTPJob) {
 		return
 	}
 
-	downloadURL, err := adapter.RequestURL(job.DownloadID, job.FileID)
+	downloadURL, err := adapter.RequestURL(job.DownloadID, job.FileID, "")
 	if err != nil {
 		fm.completeJob(job, "error", fmt.Sprintf("Failed to get URL: %v", err))
 		return

@@ -101,10 +101,18 @@ func (s *Server) handleAuthCallback(w http.ResponseWriter, r *http.Request) {
 		avatarURL = fmt.Sprintf("https://cdn.discordapp.com/avatars/%s/%s.png", userRes.ID, userRes.Avatar)
 	}
 
+	// Get or create user in DB
+	userID, err := s.store.GetOrCreateUser("discord", userRes.ID, userRes.Username, avatarURL)
+	if err != nil {
+		log.Printf("Failed to get or create user: %v", err)
+		http.Redirect(w, r, "/dashboard?error=internal_error", http.StatusTemporaryRedirect)
+		return
+	}
+
 	// Guild/Role Whitelist Check
 	whitelistEnabled, _ := s.store.GetAccessSettings()
 	if whitelistEnabled == "true" {
-		listType, err := s.store.CheckAccess(userRes.ID)
+		listType, err := s.store.CheckAccess(userID)
 		isExplicitlyWhitelisted := (err == nil && listType == "whitelist")
 
 		guildRolesMap := s.store.GetGuildRolesWhitelist()
@@ -126,8 +134,8 @@ func (s *Server) handleAuthCallback(w http.ResponseWriter, r *http.Request) {
 							for _, reqRole := range requiredRoles {
 								if userRole == reqRole {
 									// Automatically add to whitelist
-									s.store.AddToAccessList(userRes.ID, userRes.Username, avatarURL, "whitelist", "AutoRoleSync")
-									log.Printf("User %s added to whitelist via AutoRoleSync (Guild: %s, Role: %s)", userRes.ID, guildID, reqRole)
+									s.store.AddToAccessList(userID, "whitelist", "AutoRoleSync")
+									log.Printf("User %s added to whitelist via AutoRoleSync (Guild: %s, Role: %s)", userID, guildID, reqRole)
 									break outer
 								}
 							}
@@ -142,8 +150,8 @@ func (s *Server) handleAuthCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 3. Check access control
-	if isAllowed, _ := s.CheckAccess(userRes.ID); !isAllowed {
-		log.Printf("User %s denied login by access control", userRes.ID)
+	if isAllowed, _ := s.CheckAccess(userID); !isAllowed {
+		log.Printf("User %s denied login by access control", userID)
 		http.Redirect(w, r, "/dashboard?error=access_denied", http.StatusTemporaryRedirect)
 		return
 	}
@@ -153,7 +161,7 @@ func (s *Server) handleAuthCallback(w http.ResponseWriter, r *http.Request) {
 	rand.Read(b)
 	sessionToken := hex.EncodeToString(b)
 
-	if err := s.store.SaveSession(sessionToken, userRes.ID, userRes.Username, avatarURL); err != nil {
+	if err := s.store.SaveSession(sessionToken, userID); err != nil {
 		log.Printf("Session save error: %v", err)
 		http.Redirect(w, r, "/dashboard", http.StatusTemporaryRedirect)
 		return

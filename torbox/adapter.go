@@ -4,7 +4,7 @@ package torbox
 // Two adapters justify the seam: TorrentAdapter and WebDLAdapter — both real.
 type DownloadAdapter interface {
 	GetInfo(id int) (*DownloadInfo, error)
-	RequestURL(id int, fileID int) (string, error)
+	RequestURL(id int, fileID int, userIP string) (string, error)
 	Control(id int, operation string, all bool) (*APIResponse, error)
 }
 
@@ -50,8 +50,8 @@ func (a *TorrentAdapter) GetInfo(id int) (*DownloadInfo, error) {
 	}, nil
 }
 
-func (a *TorrentAdapter) RequestURL(id int, fileID int) (string, error) {
-	return a.Client.RequestDownloadURL(id, fileID)
+func (a *TorrentAdapter) RequestURL(id int, fileID int, userIP string) (string, error) {
+	return a.Client.RequestDownloadURL(id, fileID, userIP)
 }
 
 func (a *TorrentAdapter) Control(id int, operation string, all bool) (*APIResponse, error) {
@@ -83,8 +83,8 @@ func (a *WebDLAdapter) GetInfo(id int) (*DownloadInfo, error) {
 	}, nil
 }
 
-func (a *WebDLAdapter) RequestURL(id int, fileID int) (string, error) {
-	return a.Client.RequestWebDownloadURL(id, fileID)
+func (a *WebDLAdapter) RequestURL(id int, fileID int, userIP string) (string, error) {
+	return a.Client.RequestWebDownloadURL(id, fileID, userIP)
 }
 
 func (a *WebDLAdapter) Control(id int, operation string, all bool) (*APIResponse, error) {

@@ -445,7 +445,7 @@ func (c *Client) ListWebDownloads() ([]WebDownloadInfo, error) {
 	return webdls, nil
 }
 
-func (c *Client) requestDLURL(endpoint, idParam string, id int, fileID int) (string, error) {
+func (c *Client) requestDLURL(endpoint, idParam string, id int, fileID int, userIP string) (string, error) {
 	req, err := http.NewRequest("GET", fmt.Sprintf("%s/%s", apiBaseURL, endpoint), nil)
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %w", err)
@@ -458,6 +458,9 @@ func (c *Client) requestDLURL(endpoint, idParam string, id int, fileID int) (str
 		q.Add("file_id", fmt.Sprintf("%d", fileID))
 	} else {
 		q.Add("zip_link", "true")
+	}
+	if userIP != "" {
+		q.Add("user_ip", userIP)
 	}
 	req.URL.RawQuery = q.Encode()
 
@@ -478,12 +481,12 @@ func (c *Client) requestDLURL(endpoint, idParam string, id int, fileID int) (str
 	return downloadLink, nil
 }
 
-func (c *Client) RequestDownloadURL(torrentID int, fileID int) (string, error) {
-	return c.requestDLURL("torrents/requestdl", "torrent_id", torrentID, fileID)
+func (c *Client) RequestDownloadURL(torrentID int, fileID int, userIP string) (string, error) {
+	return c.requestDLURL("torrents/requestdl", "torrent_id", torrentID, fileID, userIP)
 }
 
-func (c *Client) RequestWebDownloadURL(webdlID int, fileID int) (string, error) {
-	return c.requestDLURL("webdl/requestdl", "web_id", webdlID, fileID)
+func (c *Client) RequestWebDownloadURL(webdlID int, fileID int, userIP string) (string, error) {
+	return c.requestDLURL("webdl/requestdl", "web_id", webdlID, fileID, userIP)
 }
 
 func (c *Client) doRequest(req *http.Request) (*APIResponse, error) {
