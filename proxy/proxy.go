@@ -1031,12 +1031,22 @@ func (s *Server) CheckAccess(discordID string) (bool, string) {
 	return true, ""
 }
 
-func (s *Server) IsAdmin(discordID string) bool {
+func (s *Server) IsAdmin(userID string) bool {
 	for _, adminID := range s.adminUsers {
-		if adminID == discordID {
+		if adminID == userID {
 			return true
 		}
 	}
+	
+	providerID := s.store.GetProviderID(userID)
+	if providerID != "" {
+		for _, adminID := range s.adminUsers {
+			if adminID == providerID {
+				return true
+			}
+		}
+	}
+	
 	return false
 }
 

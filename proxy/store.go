@@ -182,6 +182,11 @@ func (st *Store) GetUserInfo(userID string) (username, avatar string) {
 	return username, avatar
 }
 
+func (st *Store) GetProviderID(userID string) (providerID string) {
+	st.db.QueryRow("SELECT provider_id FROM users WHERE id = $1", userID).Scan(&providerID)
+	return providerID
+}
+
 // ─── Sessions ───
 
 func (st *Store) SaveSession(sessionToken, userID string) error {
