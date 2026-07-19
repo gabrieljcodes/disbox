@@ -219,7 +219,8 @@ func (m *Monitor) notifyCompletion(download *TrackedDownload, downloadLink strin
 	log.Printf("Download %d completed using API Key #%d", download.ID, download.ClientIndex+1)
 	
 	// Register a proxy link instead of using the direct TorBox URL
-	proxyLink, _ := m.proxyServer.RegisterDownloadWithUser(download.Type, download.ID, download.ClientIndex, "discord", download.UserID, download.Username, download.AvatarURL, download.Name, size)
+	internalUserID, _ := m.proxyServer.GetOrCreateUser("discord", download.UserID, download.Username, download.AvatarURL)
+	proxyLink, _ := m.proxyServer.RegisterDownloadWithUser(download.Type, download.ID, download.ClientIndex, internalUserID, download.Name, size)
 	
 	// Notify the download manager that a slot might be free for this user
 	m.proxyServer.GetDownloadManager().OnDownloadComplete(download.UserID)

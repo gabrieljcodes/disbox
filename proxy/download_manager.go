@@ -489,7 +489,7 @@ func (dm *DownloadManager) executeDownload(qd *QueuedDownload) error {
 					if !okName || name == "" {
 						name = "Torrent"
 					}
-					proxyLink, _ = dm.server.RegisterDownloadWithUser("torrent", int(idFloat), clientIndex, "discord", qd.DiscordID, qd.Username, qd.Avatar, name, 0)
+					proxyLink, _ = dm.server.RegisterDownloadWithUser("torrent", int(idFloat), clientIndex, qd.DiscordID, name, 0)
 				}
 			}
 		}
@@ -512,7 +512,7 @@ func (dm *DownloadManager) executeDownload(qd *QueuedDownload) error {
 					if name == "" {
 						name = qd.FileName
 					}
-					proxyLink, _ = dm.server.RegisterDownloadWithUser("torrent", int(idFloat), clientIndex, "discord", qd.DiscordID, qd.Username, qd.Avatar, name, 0)
+					proxyLink, _ = dm.server.RegisterDownloadWithUser("torrent", int(idFloat), clientIndex, qd.DiscordID, name, 0)
 				}
 			}
 		}
@@ -535,7 +535,7 @@ func (dm *DownloadManager) executeDownload(qd *QueuedDownload) error {
 					if name == "" {
 						name = "Web Download"
 					}
-					proxyLink, _ = dm.server.RegisterDownloadWithUser("webdl", int(idFloat), clientIndex, "discord", qd.DiscordID, qd.Username, qd.Avatar, name, 0)
+					proxyLink, _ = dm.server.RegisterDownloadWithUser("webdl", int(idFloat), clientIndex, qd.DiscordID, name, 0)
 				}
 			}
 		}

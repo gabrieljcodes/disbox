@@ -347,7 +347,8 @@ func (b *Bot) handleAddTorrent(s *discordgo.Session, i *discordgo.InteractionCre
 	}
 
 	// Register a proxy link instead of using the direct TorBox URL
-	proxyLink, status := b.proxyServer.RegisterDownloadWithUser("torrent", int(torrentID), clientIndex, "discord", i.Member.User.ID, i.Member.User.Username, i.Member.User.AvatarURL(""), name, size)
+	internalUserID, _ := b.proxyServer.GetOrCreateUser("discord", i.Member.User.ID, i.Member.User.Username, i.Member.User.AvatarURL(""))
+	proxyLink, status := b.proxyServer.RegisterDownloadWithUser("torrent", int(torrentID), clientIndex, internalUserID, name, size)
 	
 	if status == 1 {
 		err = fmt.Errorf("⚠️ **Already Added**\n\nYou have already added this torrent.\n\n💡 Use the link below or check `/list-downloads`.")
@@ -703,7 +704,8 @@ func (b *Bot) handleDownloadStatus(s *discordgo.Session, i *discordgo.Interactio
 	}
 
 	if finished && present {
-		proxyLink, _ := b.proxyServer.RegisterDownloadWithUser(dlType, dlID, foundClientIndex, "discord", i.Member.User.ID, i.Member.User.Username, i.Member.User.AvatarURL(""), name, size)
+		internalUserID, _ := b.proxyServer.GetOrCreateUser("discord", i.Member.User.ID, i.Member.User.Username, i.Member.User.AvatarURL(""))
+		proxyLink, _ := b.proxyServer.RegisterDownloadWithUser(dlType, dlID, foundClientIndex, internalUserID, name, size)
 		
 		embed.Description = fmt.Sprintf("**%s**\n\n🔒 Permanent link via proxy", name)
 		

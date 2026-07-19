@@ -348,24 +348,20 @@ func (s *Server) GetBaseURL() string {
 }
 
 // RegisterDownloadWithUser registers a proxy token and also saves it to the user's history
-func (s *Server) RegisterDownloadWithUser(downloadType string, id int, clientIndex int, provider, providerID, username, avatar, name string, size int64) (string, int) {
+func (s *Server) RegisterDownloadWithUser(downloadType string, id int, clientIndex int, userID string, name string, size int64) (string, int) {
 	status := 0
 	fileToken := generateToken()
 	linkToken := generateToken()
 
-	var userID string
-	if providerID != "" {
-		userID, _ = s.store.GetOrCreateUser(provider, providerID, username, avatar)
-		if userID != "" {
-			existingLinkToken, sameUser, exists := s.store.FindExistingDownload(downloadType, id, userID)
-			if exists {
-				if sameUser {
-					proxyURL := fmt.Sprintf("%s/dl/%s", s.baseURL, existingLinkToken)
-					return proxyURL, 1
-				}
-				status = 2
-				size = 0
+	if userID != "" {
+		existingLinkToken, sameUser, exists := s.store.FindExistingDownload(downloadType, id, userID)
+		if exists {
+			if sameUser {
+				proxyURL := fmt.Sprintf("%s/dl/%s", s.baseURL, existingLinkToken)
+				return proxyURL, 1
 			}
+			status = 2
+			size = 0
 		}
 	}
 
@@ -1048,6 +1044,10 @@ func (s *Server) IsAdmin(userID string) bool {
 	}
 	
 	return false
+}
+
+func (s *Server) GetOrCreateUser(provider, providerID, username, avatar string) (string, error) {
+	return s.store.GetOrCreateUser(provider, providerID, username, avatar)
 }
 
 // GetUserTotalSize returns the sum of sizes of all historical downloads for a user
