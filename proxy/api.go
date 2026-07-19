@@ -49,19 +49,19 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	discordID, ok := s.resolveUser(w, r)
+	userID, ok := s.resolveUser(w, r)
 	if !ok {
 		return
 	}
 
-	username, avatar := s.getUserDetails(discordID)
+	username, avatar := s.getUserDetails(userID)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"id":             discordID,
+		"id":             userID,
 		"username":       username,
 		"avatar_url":     avatar,
-		"is_admin":       s.IsAdmin(discordID),
+		"is_admin":       s.IsAdmin(userID),
 		"search_enabled": s.store.GetSetting("search_enabled", "true") == "true",
 	})
 }
@@ -72,12 +72,12 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	discordID, ok := s.resolveUser(w, r)
+	userID, ok := s.resolveUser(w, r)
 	if !ok {
 		return
 	}
 
-	items, err := s.store.GetUserHistory(discordID)
+	items, err := s.store.GetUserHistory(userID)
 	if err != nil {
 		jsonError(w, http.StatusInternalServerError, "Database error")
 		return
@@ -114,15 +114,15 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Asynchronously repair any entries with generic placeholder names
-	go s.repairGenericNames(discordID)
+	go s.repairGenericNames(userID)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(result)
 }
 
 // repairGenericNames checks for history entries with placeholder names and updates them from TorBox.
-func (s *Server) repairGenericNames(discordID string) {
-	entries, err := s.store.GetGenericNamedEntries(discordID)
+func (s *Server) repairGenericNames(userID string) {
+	entries, err := s.store.GetGenericNamedEntries(userID)
 	if err != nil || len(entries) == 0 {
 		return
 	}
@@ -184,13 +184,13 @@ func (s *Server) handleProgress(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(results)
 }
 
-func (s *Server) checkGBLimit(discordID string) error {
+func (s *Server) checkGBLimit(userID string) error {
 	limitStr := s.store.GetSetting("user_gb_limit", "0")
 	if limitStr == "0" || limitStr == "" {
 		return nil
 	}
 
-	if s.IsAdmin(discordID) {
+	if s.IsAdmin(userID) {
 		return nil
 	}
 
@@ -200,7 +200,7 @@ func (s *Server) checkGBLimit(discordID string) error {
 	}
 
 	limitBytes := limitGB * 1024 * 1024 * 1024
-	monthlyBytes := s.store.GetUserMonthlySize(discordID)
+	monthlyBytes := s.store.GetUserMonthlySize(userID)
 
 	if monthlyBytes >= limitBytes {
 		return fmt.Errorf("You have exceeded the maximum monthly download limit of %d GB set by the admin.", limitGB)
@@ -215,12 +215,12 @@ func (s *Server) handleAddTorrent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	discordID, ok := s.resolveUser(w, r)
+	userID, ok := s.resolveUser(w, r)
 	if !ok {
 		return
 	}
 
-	if err := s.checkGBLimit(discordID); err != nil {
+	if err := s.checkGBLimit(userID); err != nil {
 		jsonError(w, http.StatusForbidden, err.Error())
 		return
 	}
@@ -233,10 +233,10 @@ func (s *Server) handleAddTorrent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	username, avatar := s.getUserDetails(discordID)
+	username, avatar := s.getUserDetails(userID)
 
 	qd := &QueuedDownload{
-		DiscordID: discordID,
+		userID: userID,
 		Username:  username,
 		Avatar:    avatar,
 		Type:      "torrent",
@@ -264,12 +264,12 @@ func (s *Server) handleAddTorrentFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	discordID, ok := s.resolveUser(w, r)
+	userID, ok := s.resolveUser(w, r)
 	if !ok {
 		return
 	}
 
-	if err := s.checkGBLimit(discordID); err != nil {
+	if err := s.checkGBLimit(userID); err != nil {
 		jsonError(w, http.StatusForbidden, err.Error())
 		return
 	}
@@ -298,11 +298,11 @@ func (s *Server) handleAddTorrentFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	username, avatar := s.getUserDetails(discordID)
+	username, avatar := s.getUserDetails(userID)
 	cacheOnly := s.store.GetSetting("cache_only", "false") == "true"
 
 	qd := &QueuedDownload{
-		DiscordID: discordID,
+		userID: userID,
 		Username:  username,
 		Avatar:    avatar,
 		Type:      "torrent_file",
@@ -331,12 +331,12 @@ func (s *Server) handleAddWebdl(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	discordID, ok := s.resolveUser(w, r)
+	userID, ok := s.resolveUser(w, r)
 	if !ok {
 		return
 	}
 
-	if err := s.checkGBLimit(discordID); err != nil {
+	if err := s.checkGBLimit(userID); err != nil {
 		jsonError(w, http.StatusForbidden, err.Error())
 		return
 	}
@@ -349,10 +349,10 @@ func (s *Server) handleAddWebdl(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	username, avatar := s.getUserDetails(discordID)
+	username, avatar := s.getUserDetails(userID)
 
 	qd := &QueuedDownload{
-		DiscordID: discordID,
+		userID: userID,
 		Username:  username,
 		Avatar:    avatar,
 		Type:      "webdl",
@@ -380,11 +380,11 @@ func (s *Server) handleRemoveDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	discordID, ok := s.resolveUser(w, r)
+	userID, ok := s.resolveUser(w, r)
 	if !ok {
 		return
 	}
-	isAdmin := s.IsAdmin(discordID)
+	isAdmin := s.IsAdmin(userID)
 
 	var req struct {
 		Token string `json:"token"`
@@ -394,7 +394,7 @@ func (s *Server) handleRemoveDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dlType, downloadID, clientIndex, err := s.store.FindDownloadForRemoval(req.Token, discordID, isAdmin)
+	dlType, downloadID, clientIndex, err := s.store.FindDownloadForRemoval(req.Token, userID, isAdmin)
 	if err != nil {
 		jsonError(w, http.StatusNotFound, "Download not found or you don't have permission")
 		return
@@ -428,11 +428,11 @@ func (s *Server) handleRegenerate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	discordID, ok := s.resolveUser(w, r)
+	userID, ok := s.resolveUser(w, r)
 	if !ok {
 		return
 	}
-	isAdmin := s.IsAdmin(discordID)
+	isAdmin := s.IsAdmin(userID)
 
 	var req struct {
 		Token string `json:"token"`
@@ -442,7 +442,7 @@ func (s *Server) handleRegenerate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	downloadType, oldLinkToken, downloadID, clientIndex, err := s.store.FindDownloadForRegenerate(req.Token, discordID, isAdmin)
+	downloadType, oldLinkToken, downloadID, clientIndex, err := s.store.FindDownloadForRegenerate(req.Token, userID, isAdmin)
 	if err != nil {
 		jsonError(w, http.StatusNotFound, "File not found or you don't have permission")
 		return
@@ -450,7 +450,7 @@ func (s *Server) handleRegenerate(w http.ResponseWriter, r *http.Request) {
 
 	newLinkToken := generateToken()
 
-	if err := s.store.RegenerateLink(oldLinkToken, newLinkToken, downloadType, downloadID, clientIndex, req.Token, discordID, isAdmin); err != nil {
+	if err := s.store.RegenerateLink(oldLinkToken, newLinkToken, downloadType, downloadID, clientIndex, req.Token, userID, isAdmin); err != nil {
 		jsonError(w, http.StatusInternalServerError, "Failed to regenerate link")
 		return
 	}
@@ -507,12 +507,12 @@ func (s *Server) handleTokens(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleTokensList(w http.ResponseWriter, r *http.Request) {
-	discordID, ok := s.resolveUser(w, r)
+	userID, ok := s.resolveUser(w, r)
 	if !ok {
 		return
 	}
 
-	tokens, err := s.store.ListAPITokens(discordID)
+	tokens, err := s.store.ListAPITokens(userID)
 	if err != nil {
 		jsonError(w, http.StatusInternalServerError, "Database error")
 		return
@@ -523,7 +523,7 @@ func (s *Server) handleTokensList(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleTokensCreate(w http.ResponseWriter, r *http.Request) {
-	discordID, ok := s.resolveUser(w, r)
+	userID, ok := s.resolveUser(w, r)
 	if !ok {
 		return
 	}
@@ -541,19 +541,19 @@ func (s *Server) handleTokensCreate(w http.ResponseWriter, r *http.Request) {
 		name = name[:64]
 	}
 
-	if s.store.CountAPITokens(discordID) >= 10 {
+	if s.store.CountAPITokens(userID) >= 10 {
 		jsonError(w, http.StatusBadRequest, "Maximum of 10 API tokens per user")
 		return
 	}
 
 	token := generateAPIToken()
-	if err := s.store.CreateAPIToken(token, discordID, name); err != nil {
+	if err := s.store.CreateAPIToken(token, userID, name); err != nil {
 		log.Printf("Failed to create API token: %v", err)
 		jsonError(w, http.StatusInternalServerError, "Failed to create token")
 		return
 	}
 
-	log.Printf("API token created for user %s: %s (%s)", discordID, name, token[:12]+"...")
+	log.Printf("API token created for user %s: %s (%s)", userID, name, token[:12]+"...")
 
 	jsonOK(w, map[string]string{
 		"token": token,
@@ -567,7 +567,7 @@ func (s *Server) handleTokenRevoke(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	discordID, ok := s.resolveUser(w, r)
+	userID, ok := s.resolveUser(w, r)
 	if !ok {
 		return
 	}
@@ -581,13 +581,13 @@ func (s *Server) handleTokenRevoke(w http.ResponseWriter, r *http.Request) {
 	}
 
 	isMasked := strings.HasSuffix(req.Token, "...")
-	result, err := s.store.RevokeAPIToken(req.Token, discordID, isMasked)
+	result, err := s.store.RevokeAPIToken(req.Token, userID, isMasked)
 	if err != nil || result == 0 {
 		jsonError(w, http.StatusNotFound, "Token not found")
 		return
 	}
 
-	log.Printf("API token revoked for user %s", discordID)
+	log.Printf("API token revoked for user %s", userID)
 	jsonOK(w, map[string]string{"message": "Token revoked"})
 }
 
@@ -599,15 +599,15 @@ func (s *Server) handleUserProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	discordID, ok := s.resolveUser(w, r)
+	userID, ok := s.resolveUser(w, r)
 	if !ok {
 		return
 	}
 
-	total := s.store.GetUserTotalSize(discordID)
-	monthly := s.store.GetUserMonthlySize(discordID)
+	total := s.store.GetUserTotalSize(userID)
+	monthly := s.store.GetUserMonthlySize(userID)
 
-	host, username, password, _ := s.store.GetFTPConfig(discordID)
+	host, username, password, _ := s.store.GetFTPConfig(userID)
 
 	jsonOK(w, map[string]interface{}{
 		"total_downloaded":   total,
@@ -624,7 +624,7 @@ func (s *Server) handleUserFtp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	discordID, ok := s.resolveUser(w, r)
+	userID, ok := s.resolveUser(w, r)
 	if !ok {
 		return
 	}
@@ -640,11 +640,11 @@ func (s *Server) handleUserFtp(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if req.Password == "" {
-		_, _, existingPassword, _ := s.store.GetFTPConfig(discordID)
+		_, _, existingPassword, _ := s.store.GetFTPConfig(userID)
 		req.Password = existingPassword
 	}
 
-	if err := s.store.SaveFTPConfig(discordID, req.Host, req.Username, req.Password); err != nil {
+	if err := s.store.SaveFTPConfig(userID, req.Host, req.Username, req.Password); err != nil {
 		jsonError(w, http.StatusInternalServerError, "Failed to save FTP config")
 		return
 	}
@@ -658,7 +658,7 @@ func (s *Server) handleFtpSend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	discordID, ok := s.resolveUser(w, r)
+	userID, ok := s.resolveUser(w, r)
 	if !ok {
 		return
 	}
@@ -672,13 +672,13 @@ func (s *Server) handleFtpSend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dlType, name, downloadID, clientIndex, err := s.store.FindDownloadForFTP(req.Token, discordID)
+	dlType, name, downloadID, clientIndex, err := s.store.FindDownloadForFTP(req.Token, userID)
 	if err != nil {
 		jsonError(w, http.StatusNotFound, "Download not found")
 		return
 	}
 
-	host, username, password, err := s.store.GetFTPConfig(discordID)
+	host, username, password, err := s.store.GetFTPConfig(userID)
 	if err != nil || host == "" {
 		jsonError(w, http.StatusBadRequest, "FTP is not configured")
 		return
@@ -690,7 +690,7 @@ func (s *Server) handleFtpSend(w http.ResponseWriter, r *http.Request) {
 	}
 
 	job := &QueuedFTPJob{
-		DiscordID:    discordID,
+		userID:    userID,
 		Filename:     name,
 		Host:         host,
 		Username:     username,
@@ -781,13 +781,13 @@ func (s *Server) handleHosters(w http.ResponseWriter, r *http.Request) {
 // ─── Cloud Config ───
 
 func (s *Server) handleUserCloud(w http.ResponseWriter, r *http.Request) {
-	discordID, ok := s.resolveUser(w, r)
+	userID, ok := s.resolveUser(w, r)
 	if !ok {
 		return
 	}
 
 	if r.Method == http.MethodGet {
-		config, err := s.store.GetCloudConfig(discordID)
+		config, err := s.store.GetCloudConfig(userID)
 		if err != nil {
 			jsonError(w, http.StatusInternalServerError, "Database error")
 			return
@@ -810,7 +810,7 @@ func (s *Server) handleUserCloud(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		existing, _ := s.store.GetCloudConfig(discordID)
+		existing, _ := s.store.GetCloudConfig(userID)
 		if req.Google == "" { req.Google = existing.Google }
 		if req.Dropbox == "" { req.Dropbox = existing.Dropbox }
 		if req.OneDrive == "" { req.OneDrive = existing.OneDrive }
@@ -818,7 +818,7 @@ func (s *Server) handleUserCloud(w http.ResponseWriter, r *http.Request) {
 		if req.Onefichier == "" { req.Onefichier = existing.Onefichier }
 		if req.Pixeldrain == "" { req.Pixeldrain = existing.Pixeldrain }
 
-		if err := s.store.SaveCloudConfig(discordID, req); err != nil {
+		if err := s.store.SaveCloudConfig(userID, req); err != nil {
 			jsonError(w, http.StatusInternalServerError, "Failed to save cloud config")
 			return
 		}
@@ -836,7 +836,7 @@ func (s *Server) handleIntegration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	discordID, ok := s.resolveUser(w, r)
+	userID, ok := s.resolveUser(w, r)
 	if !ok {
 		return
 	}
@@ -862,7 +862,7 @@ func (s *Server) handleIntegration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, err := s.store.GetCloudProviderToken(discordID, dbField)
+	token, err := s.store.GetCloudProviderToken(userID, dbField)
 	if err != nil || token == "" {
 		jsonError(w, http.StatusForbidden, "API token for this provider is not configured. Please set it in your Profile.")
 		return
@@ -882,7 +882,7 @@ func (s *Server) handleIntegration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dlType, downloadID, clientIndex, err := s.store.FindDownloadForExport(historyToken, discordID)
+	dlType, downloadID, clientIndex, err := s.store.FindDownloadForExport(historyToken, userID)
 	if err != nil {
 		jsonError(w, http.StatusNotFound, "Download not found")
 		return
@@ -972,7 +972,7 @@ func (s *Server) handleExportData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	discordID, ok := s.resolveUser(w, r)
+	userID, ok := s.resolveUser(w, r)
 	if !ok {
 		return
 	}
@@ -985,7 +985,7 @@ func (s *Server) handleExportData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dlType, downloadID, clientIndex, err := s.store.FindDownloadForExport(token, discordID)
+	dlType, downloadID, clientIndex, err := s.store.FindDownloadForExport(token, userID)
 	if err != nil {
 		jsonError(w, http.StatusNotFound, "Download not found or you don't have permission")
 		return
@@ -1503,13 +1503,13 @@ func (s *Server) handleAdminAnnouncementsClear(w http.ResponseWriter, r *http.Re
 }
 
 func (s *Server) handleQueueItems(w http.ResponseWriter, r *http.Request) {
-	discordID, ok := s.resolveUser(w, r)
+	userID, ok := s.resolveUser(w, r)
 	if !ok {
 		return
 	}
 
-	filterID := discordID
-	if s.IsAdmin(discordID) {
+	filterID := userID
+	if s.IsAdmin(userID) {
 		queryUser := r.URL.Query().Get("user_id")
 		if queryUser != "" {
 			filterID = queryUser
@@ -1531,7 +1531,7 @@ func (s *Server) handleQueueItems(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleQueueRemove(w http.ResponseWriter, r *http.Request) {
-	discordID, ok := s.resolveUser(w, r)
+	userID, ok := s.resolveUser(w, r)
 	if !ok {
 		return
 	}
@@ -1541,14 +1541,14 @@ func (s *Server) handleQueueRemove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	isAdmin := s.IsAdmin(discordID)
+	isAdmin := s.IsAdmin(userID)
 	if strings.HasPrefix(id, "ftp_") {
-		if !s.ftpManager.Remove(id, discordID, isAdmin) {
+		if !s.ftpManager.Remove(id, userID, isAdmin) {
 			jsonError(w, http.StatusForbidden, "Cannot remove this item or item not found")
 			return
 		}
 	} else {
-		err := s.downloadManager.RemoveFromQueue(id, discordID, isAdmin)
+		err := s.downloadManager.RemoveFromQueue(id, userID, isAdmin)
 		if err != nil {
 			jsonError(w, http.StatusForbidden, err.Error())
 			return
@@ -1558,7 +1558,7 @@ func (s *Server) handleQueueRemove(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleQueueMove(w http.ResponseWriter, r *http.Request) {
-	discordID, ok := s.resolveUser(w, r)
+	userID, ok := s.resolveUser(w, r)
 	if !ok {
 		return
 	}
@@ -1576,14 +1576,14 @@ func (s *Server) handleQueueMove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	isAdmin := s.IsAdmin(discordID)
+	isAdmin := s.IsAdmin(userID)
 	if strings.HasPrefix(id, "ftp_") {
-		if !s.ftpManager.Move(id, discordID, isAdmin, req.NewPosition) {
+		if !s.ftpManager.Move(id, userID, isAdmin, req.NewPosition) {
 			jsonError(w, http.StatusForbidden, "Cannot move this item or item not found")
 			return
 		}
 	} else {
-		err := s.downloadManager.MoveInQueue(id, discordID, isAdmin, req.NewPosition)
+		err := s.downloadManager.MoveInQueue(id, userID, isAdmin, req.NewPosition)
 		if err != nil {
 			jsonError(w, http.StatusForbidden, err.Error())
 			return

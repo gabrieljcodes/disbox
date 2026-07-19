@@ -14,7 +14,7 @@ import (
 
 type QueuedDownload struct {
 	ID        string
-	DiscordID string
+	userID string
 	Username  string
 	Avatar    string
 	Type      string // "torrent", "torrent_file", "webdl"
@@ -292,15 +292,15 @@ func (dm *DownloadManager) periodicRefresh() {
 	}
 }
 
-func (dm *DownloadManager) checkUserLimit(discordID string) error {
-	if dm.server.IsAdmin(discordID) {
+func (dm *DownloadManager) checkUserLimit(userID string) error {
+	if dm.server.IsAdmin(userID) {
 		return nil
 	}
 
 	dm.mu.Lock()
 	userQueued := 0
 	for _, qd := range dm.queue {
-		if qd.DiscordID == discordID {
+		if qd.userID == userID {
 			userQueued++
 		}
 	}
@@ -314,7 +314,7 @@ func (dm *DownloadManager) checkUserLimit(discordID string) error {
 }
 
 func (dm *DownloadManager) Submit(qd *QueuedDownload) (*QueuedDownload, error) {
-	if err := dm.checkUserLimit(qd.DiscordID); err != nil {
+	if err := dm.checkUserLimit(qd.userID); err != nil {
 		return nil, err
 	}
 
@@ -347,10 +347,10 @@ func (dm *DownloadManager) Submit(qd *QueuedDownload) (*QueuedDownload, error) {
 		limit, _ := strconv.Atoi(limitStr)
 		
 		dm.mu.Lock()
-		userActive := dm.userActive[qd.DiscordID]
+		userActive := dm.userActive[qd.userID]
 		dm.mu.Unlock()
 
-		if limit <= 0 || dm.server.IsAdmin(qd.DiscordID) || userActive < limit {
+		if limit <= 0 || dm.server.IsAdmin(qd.userID) || userActive < limit {
 			qd.Status = "processing"
 			dm.mu.Lock()
 			if len(dm.activeCount) > 0 {
@@ -358,7 +358,7 @@ func (dm *DownloadManager) Submit(qd *QueuedDownload) (*QueuedDownload, error) {
 			} else {
 				dm.activeCount[0] = 1
 			}
-			dm.userActive[qd.DiscordID]++
+			dm.userActive[qd.userID]++
 			dm.mu.Unlock()
 
 			err := dm.executeDownload(qd)
@@ -438,8 +438,8 @@ func (dm *DownloadManager) tryDispatch() {
 		if qd.Status != "queued" {
 			continue
 		}
-		if limit > 0 && !dm.server.IsAdmin(qd.DiscordID) {
-			if dm.userActive[qd.DiscordID] >= limit {
+		if limit > 0 && !dm.server.IsAdmin(qd.userID) {
+			if dm.userActive[qd.userID] >= limit {
 				continue
 			}
 		}
@@ -459,7 +459,7 @@ func (dm *DownloadManager) tryDispatch() {
 	} else {
 		dm.activeCount[0] = 1
 	}
-	dm.userActive[selectedQD.DiscordID]++
+	dm.userActive[selectedQD.userID]++
 	dm.mu.Unlock()
 
 	go dm.executeDownload(selectedQD)
@@ -489,7 +489,7 @@ func (dm *DownloadManager) executeDownload(qd *QueuedDownload) error {
 					if !okName || name == "" {
 						name = "Torrent"
 					}
-					proxyLink, _ = dm.server.RegisterDownloadWithUser("torrent", int(idFloat), clientIndex, qd.DiscordID, name, 0)
+					proxyLink, _ = dm.server.RegisterDownloadWithUser("torrent", int(idFloat), clientIndex, qd.userID, name, 0)
 				}
 			}
 		}
@@ -512,7 +512,7 @@ func (dm *DownloadManager) executeDownload(qd *QueuedDownload) error {
 					if name == "" {
 						name = qd.FileName
 					}
-					proxyLink, _ = dm.server.RegisterDownloadWithUser("torrent", int(idFloat), clientIndex, qd.DiscordID, name, 0)
+					proxyLink, _ = dm.server.RegisterDownloadWithUser("torrent", int(idFloat), clientIndex, qd.userID, name, 0)
 				}
 			}
 		}
@@ -535,7 +535,7 @@ func (dm *DownloadManager) executeDownload(qd *QueuedDownload) error {
 					if name == "" {
 						name = "Web Download"
 					}
-					proxyLink, _ = dm.server.RegisterDownloadWithUser("webdl", int(idFloat), clientIndex, qd.DiscordID, name, 0)
+					proxyLink, _ = dm.server.RegisterDownloadWithUser("webdl", int(idFloat), clientIndex, qd.userID, name, 0)
 				}
 			}
 		}
@@ -545,7 +545,7 @@ func (dm *DownloadManager) executeDownload(qd *QueuedDownload) error {
 		qd.ResultError = err
 		log.Printf("Download %s failed: %v", qd.ID, err)
 		dm.mu.Lock()
-		dm.userActive[qd.DiscordID]--
+		dm.userActive[qd.userID]--
 		qd.Status = "error"
 		qd.QueuedAt = time.Now() // reset time so cleanup logic can keep it for a bit
 		dm.mu.Unlock()
@@ -573,7 +573,7 @@ func (dm *DownloadManager) GetQueueItems(filterDiscordID string) []QueueStatusIt
 
 	var items []QueueStatusItem
 	for i, qd := range dm.queue {
-		if filterDiscordID == "" || qd.DiscordID == filterDiscordID {
+		if filterDiscordID == "" || qd.userID == filterDiscordID {
 			name := qd.FileName
 			if name == "" {
 				name = qd.Link
@@ -597,12 +597,12 @@ func (dm *DownloadManager) GetQueueItems(filterDiscordID string) []QueueStatusIt
 	return items
 }
 
-func (dm *DownloadManager) OnDownloadComplete(discordID string) {
+func (dm *DownloadManager) OnDownloadComplete(userID string) {
 	dm.mu.Lock()
 	defer dm.mu.Unlock()
 
-	if dm.userActive[discordID] > 0 {
-		dm.userActive[discordID]--
+	if dm.userActive[userID] > 0 {
+		dm.userActive[userID]--
 	}
 
 	go dm.RefreshActiveCount()
@@ -634,13 +634,13 @@ func (dm *DownloadManager) Status() GlobalQueueStatus {
 	}
 }
 
-func (dm *DownloadManager) RemoveFromQueue(id, discordID string, isAdmin bool) error {
+func (dm *DownloadManager) RemoveFromQueue(id, userID string, isAdmin bool) error {
 	dm.mu.Lock()
 	defer dm.mu.Unlock()
 
 	for i, qd := range dm.queue {
 		if qd.ID == id {
-			if qd.DiscordID != discordID && !isAdmin {
+			if qd.userID != userID && !isAdmin {
 				return fmt.Errorf("permission denied")
 			}
 			dm.queue = append(dm.queue[:i], dm.queue[i+1:]...)
@@ -650,7 +650,7 @@ func (dm *DownloadManager) RemoveFromQueue(id, discordID string, isAdmin bool) e
 	return fmt.Errorf("item not found in queue")
 }
 
-func (dm *DownloadManager) MoveInQueue(id, discordID string, isAdmin bool, newPos int) error {
+func (dm *DownloadManager) MoveInQueue(id, userID string, isAdmin bool, newPos int) error {
 	dm.mu.Lock()
 	defer dm.mu.Unlock()
 
@@ -658,7 +658,7 @@ func (dm *DownloadManager) MoveInQueue(id, discordID string, isAdmin bool, newPo
 	oldPos := -1
 	for i, item := range dm.queue {
 		if item.ID == id {
-			if item.DiscordID != discordID && !isAdmin {
+			if item.userID != userID && !isAdmin {
 				return fmt.Errorf("permission denied")
 			}
 			qd = item

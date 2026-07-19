@@ -261,7 +261,7 @@ func (s *Server) Stop() {
 // resolveUser tries session cookie first, then Bearer token.
 // Returns the discord user ID and whether auth succeeded.
 // Handles rate limiting and access control for token-authenticated requests.
-func (s *Server) resolveUser(w http.ResponseWriter, r *http.Request) (discordID string, ok bool) {
+func (s *Server) resolveUser(w http.ResponseWriter, r *http.Request) (userID string, ok bool) {
 	// Try session cookie first
 	if cookie, err := r.Cookie("disbox_session"); err == nil {
 		id, _, _, valid := s.store.GetSessionUser(cookie.Value)
@@ -298,7 +298,7 @@ func (s *Server) resolveUser(w http.ResponseWriter, r *http.Request) (discordID 
 }
 
 // resolveAdmin is like resolveUser but also requires admin privileges.
-func (s *Server) resolveAdmin(w http.ResponseWriter, r *http.Request) (discordID string, ok bool) {
+func (s *Server) resolveAdmin(w http.ResponseWriter, r *http.Request) (userID string, ok bool) {
 	id, authed := s.resolveUser(w, r)
 	if !authed {
 		return "", false
@@ -1000,16 +1000,16 @@ func (s *Server) handleRead(w http.ResponseWriter, r *http.Request) {
 // ─── Access Control ───
 
 // CheckAccess verifies if a discord user is allowed to use the bot/dashboard.
-func (s *Server) CheckAccess(discordID string) (bool, string) {
+func (s *Server) CheckAccess(userID string) (bool, string) {
 	for _, admin := range s.adminUsers {
-		if admin == discordID {
+		if admin == userID {
 			return true, ""
 		}
 	}
 
 	whitelistEnabled, blacklistEnabled := s.store.GetAccessSettings()
 
-	listType, err := s.store.CheckAccess(discordID)
+	listType, err := s.store.CheckAccess(userID)
 
 	if whitelistEnabled == "true" {
 		if err == nil && listType == "whitelist" {
@@ -1051,13 +1051,13 @@ func (s *Server) GetOrCreateUser(provider, providerID, username, avatar string) 
 }
 
 // GetUserTotalSize returns the sum of sizes of all historical downloads for a user
-func (s *Server) GetUserTotalSize(discordID string) int64 {
-	return s.store.GetUserTotalSize(discordID)
+func (s *Server) GetUserTotalSize(userID string) int64 {
+	return s.store.GetUserTotalSize(userID)
 }
 
 // GetUserMonthlySize returns the sum of sizes of downloads for a user in the current month
-func (s *Server) GetUserMonthlySize(discordID string) int64 {
-	return s.store.GetUserMonthlySize(discordID)
+func (s *Server) GetUserMonthlySize(userID string) int64 {
+	return s.store.GetUserMonthlySize(userID)
 }
 
 // GetSetting delegates to the store
@@ -1071,13 +1071,13 @@ func (s *Server) SetSetting(key, val string) error {
 }
 
 // CheckRateLimit checks if a user is within rate limits
-func (s *Server) CheckRateLimit(discordID string) bool {
+func (s *Server) CheckRateLimit(userID string) bool {
 	delayMsStr := s.store.GetSetting("public_api_delay_ms", "0")
 	if delayMsStr == "0" || delayMsStr == "" {
 		return true
 	}
 
-	if s.IsAdmin(discordID) {
+	if s.IsAdmin(userID) {
 		return true
 	}
 
@@ -1089,7 +1089,7 @@ func (s *Server) CheckRateLimit(discordID string) bool {
 	s.apiRateLimitsMu.Lock()
 	defer s.apiRateLimitsMu.Unlock()
 
-	lastTime, exists := s.apiRateLimits[discordID]
+	lastTime, exists := s.apiRateLimits[userID]
 	now := time.Now()
 
 	if exists {
@@ -1098,7 +1098,7 @@ func (s *Server) CheckRateLimit(discordID string) bool {
 		}
 	}
 
-	s.apiRateLimits[discordID] = now
+	s.apiRateLimits[userID] = now
 	return true
 }
 

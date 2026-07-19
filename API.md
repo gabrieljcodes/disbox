@@ -186,7 +186,7 @@ Removes all active announcements.
 Returns the current whitelist/blacklist status and a list of all users in the access control list.
 
 #### Check Specific User
-`GET /v1/admin/access/check?discord_id=123456789`
+`GET /v1/admin/access/check?user_id=123456789`
 Returns the access status (`whitelist`, `blacklist`, or `none`) for a specific Discord ID.
 
 #### Add User to Access List
@@ -194,7 +194,7 @@ Returns the access status (`whitelist`, `blacklist`, or `none`) for a specific D
 Body: 
 ```json
 {
-  "discord_id": "123456789",
+  "user_id": "123456789",
   "type": "whitelist" // or "blacklist"
 }
 ```
@@ -205,7 +205,7 @@ Adds a user to the specified access list.
 Body: 
 ```json
 {
-  "discord_id": "123456789"
+  "user_id": "123456789"
 }
 ```
 Removes a user from the access list.

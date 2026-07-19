@@ -16,7 +16,7 @@ import (
 
 type QueuedFTPJob struct {
 	ID           string
-	DiscordID    string
+	userID    string
 	Filename     string
 	Host         string
 	Username     string
@@ -79,7 +79,7 @@ func (fm *FTPManager) GetQueueItems(filterID string) []QueueStatusItem {
 
 	items := make([]QueueStatusItem, 0, len(fm.queue))
 	for i, job := range fm.queue {
-		if filterID != "" && job.DiscordID != filterID {
+		if filterID != "" && job.userID != filterID {
 			continue
 		}
 		items = append(items, QueueStatusItem{
@@ -97,13 +97,13 @@ func (fm *FTPManager) GetQueueItems(filterID string) []QueueStatusItem {
 	return items
 }
 
-func (fm *FTPManager) Remove(id string, discordID string, isAdmin bool) bool {
+func (fm *FTPManager) Remove(id string, userID string, isAdmin bool) bool {
 	fm.mu.Lock()
 	defer fm.mu.Unlock()
 
 	for i, job := range fm.queue {
 		if job.ID == id {
-			if !isAdmin && job.DiscordID != discordID {
+			if !isAdmin && job.userID != userID {
 				return false // Not authorized
 			}
 			if job.Status == "processing" {
@@ -116,7 +116,7 @@ func (fm *FTPManager) Remove(id string, discordID string, isAdmin bool) bool {
 	return false
 }
 
-func (fm *FTPManager) Move(id string, discordID string, isAdmin bool, newPosition int) bool {
+func (fm *FTPManager) Move(id string, userID string, isAdmin bool, newPosition int) bool {
 	fm.mu.Lock()
 	defer fm.mu.Unlock()
 
@@ -127,7 +127,7 @@ func (fm *FTPManager) Move(id string, discordID string, isAdmin bool, newPositio
 	var targetIndex = -1
 	for i, job := range fm.queue {
 		if job.ID == id {
-			if !isAdmin && job.DiscordID != discordID {
+			if !isAdmin && job.userID != userID {
 				return false
 			}
 			if job.Status == "processing" {

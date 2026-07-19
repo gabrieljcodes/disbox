@@ -660,7 +660,7 @@ paths:
       summary: Check user access status
       tags: [Admin]
       parameters:
-        - name: discord_id
+        - name: user_id
           in: query
           required: true
           schema:
@@ -679,9 +679,9 @@ paths:
           application/json:
             schema:
               type: object
-              required: [discord_id, type]
+              required: [user_id, type]
               properties:
-                discord_id:
+                user_id:
                   type: string
                 type:
                   type: string
@@ -700,9 +700,9 @@ paths:
           application/json:
             schema:
               type: object
-              required: [discord_id]
+              required: [user_id]
               properties:
-                discord_id:
+                user_id:
                   type: string
       responses:
         '200':
