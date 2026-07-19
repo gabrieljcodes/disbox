@@ -2206,13 +2206,13 @@
                                   : '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent-rose)"><circle cx="12" cy="12" r="10"></circle><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line></svg>';
                               
                               let avatarHTML = '';
-                              if (u.discord_avatar) {
-                                  avatarHTML = `<img src="${u.discord_avatar}" style="width:32px; height:32px; border-radius:50%; object-fit:cover;" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">`;
+                              if (u.avatar) {
+                                  avatarHTML = `<img src="${u.avatar}" style="width:32px; height:32px; border-radius:50%; object-fit:cover;" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">`;
                               } else {
-                                  avatarHTML = `<div style="width:32px; height:32px; border-radius:50%; background:var(--surface-active); display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:bold;">${(u.discord_username || '?')[0].toUpperCase()}</div>`;
+                                  avatarHTML = `<div style="width:32px; height:32px; border-radius:50%; background:var(--surface-active); display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:bold;">${(u.username || '?')[0].toUpperCase()}</div>`;
                               }
 
-                              const displayName = u.discord_username || u.discord_id;
+                              const displayName = u.username || u.user_id;
 
                               el.innerHTML = `
                                   <div class="history-icon" style="background: ${u.type === 'whitelist' ? 'rgba(52, 211, 153, 0.1)' : 'rgba(251, 113, 133, 0.1)'}; box-shadow: none;">
@@ -2221,12 +2221,12 @@
                                   ${avatarHTML}
                                   <div class="history-details" style="flex:1;">
                                       <div class="history-name" style="display:flex; align-items:center; gap:8px;">
-                                          ${displayName} <span style="font-size:12px; color:var(--text-secondary);">(${u.discord_id})</span>
+                                          ${displayName} <span style="font-size:12px; color:var(--text-secondary);">(${u.user_id})</span>
                                           <span style="font-size:10px; text-transform:uppercase; letter-spacing:1px; font-weight:700; padding:2px 6px; border-radius:4px; background:${u.type === 'whitelist' ? 'rgba(52, 211, 153, 0.1)' : 'rgba(251, 113, 133, 0.1)'}; color:${u.type === 'whitelist' ? 'var(--accent-emerald)' : 'var(--accent-rose)'}">${u.type}</span>
                                       </div>
                                       <div class="history-meta">Added by <strong>${u.added_by}</strong> on ${date}</div>
                                   </div>
-                                  <button class="btn-sm" style="background:rgba(251, 113, 133, 0.1); border:1px solid rgba(251, 113, 133, 0.2); color:var(--accent-rose); padding:6px 12px; border-radius:8px;" onclick="removeAccessUser('${u.discord_id}')">
+                                  <button class="btn-sm" style="background:rgba(251, 113, 133, 0.1); border:1px solid rgba(251, 113, 133, 0.2); color:var(--accent-rose); padding:6px 12px; border-radius:8px;" onclick="removeAccessUser('${u.user_id}')">
                                       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path></svg>
                                       Remove
                                   </button>
@@ -2244,7 +2244,7 @@
               fetch('/v1/admin/access/remove', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ discord_id: id })
+                  body: JSON.stringify({ user_id: id })
               }).then(() => loadAccessList());
           };
 
@@ -2255,7 +2255,7 @@
               fetch('/v1/admin/access/add', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ discord_id: id, type: type })
+                  body: JSON.stringify({ user_id: id, type: type })
               }).then(r => r.json()).then(res => {
                   if(res.success) {
                       document.getElementById('access-id-input').value = '';
@@ -2549,8 +2549,8 @@
                         const browseURL = baseURL + '/browse/' + (item.link_token || item.token) + cacheBuster;
                         const dlURL = baseURL + '/dl/' + (item.link_token || item.token) + cacheBuster;
                         
-                        const avatarUrl = item.discord_avatar || 'https://cdn.discordapp.com/embed/avatars/0.png';
-                        const username = item.discord_username || 'Unknown User';
+                        const avatarUrl = item.avatar || 'https://cdn.discordapp.com/embed/avatars/0.png';
+                        const username = item.username || 'Unknown User';
 
                         el.innerHTML = `
                             <div class="history-icon ${item.type}">${icon}</div>
@@ -2562,7 +2562,7 @@
                                         <span class="history-date">${date}</span>
                                     </div>
                                 </div>
-                                <div class="user-profile-trigger" onclick="openUserProfile('${item.discord_id}')">
+                                <div class="user-profile-trigger" onclick="openUserProfile('${item.user_id}')">
                                     <img src="${avatarUrl}" alt="${escapeHtml(username)}" style="width: 24px; height: 24px; border-radius: 50%; object-fit: cover;">
                                     <span style="font-size: 12px; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100px;">${escapeHtml(username)}</span>
                                 </div>
@@ -3274,15 +3274,15 @@
             loading.style.display = 'flex';
             content.style.display = 'none';
 
-            fetch('/v1/admin/user?discord_id=' + discordId)
+            fetch('/v1/admin/user?user_id=' + discordId)
                 .then(r => r.json())
                 .then(data => {
                     loading.style.display = 'none';
                     content.style.display = 'block';
 
-                    document.getElementById('profile-avatar').src = data.discord_avatar || 'https://cdn.discordapp.com/embed/avatars/0.png';
-                    document.getElementById('profile-name').textContent = data.discord_username || 'Unknown User';
-                    document.getElementById('profile-id').textContent = data.discord_id;
+                    document.getElementById('profile-avatar').src = data.avatar || 'https://cdn.discordapp.com/embed/avatars/0.png';
+                    document.getElementById('profile-name').textContent = data.username || 'Unknown User';
+                    document.getElementById('profile-id').textContent = data.user_id;
                     
                     document.getElementById('profile-downloads').textContent = data.total_downloads || 0;
                     document.getElementById('profile-size').textContent = formatBytes(data.total_size || 0);
@@ -3350,8 +3350,8 @@
                         fetch('/v1/admin/access/add', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ discord_id: data.discord_id, type: type })
-                        }).then(() => openUserProfile(data.discord_id));
+                            body: JSON.stringify({ user_id: data.user_id, type: type })
+                        }).then(() => openUserProfile(data.user_id));
                     };
 
                     btnWhitelist.onclick = () => setAccess('whitelist');
@@ -3360,8 +3360,8 @@
                         fetch('/v1/admin/access/remove', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ discord_id: data.discord_id })
-                        }).then(() => openUserProfile(data.discord_id));
+                            body: JSON.stringify({ user_id: data.user_id })
+                        }).then(() => openUserProfile(data.user_id));
                     };
                 })
                 .catch(() => {

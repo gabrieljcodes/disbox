@@ -1052,9 +1052,9 @@ func (s *Server) handleAdminHistory(w http.ResponseWriter, r *http.Request) {
 	}
 
 	type AdminHistoryItem struct {
-		UserID          string `json:"user_id"`
-		Username        string `json:"username"`
-		Avatar          string `json:"avatar"`
+		UserID          string `json:"discord_id"`
+		Username        string `json:"discord_username"`
+		Avatar          string `json:"discord_avatar"`
 		Token           string `json:"token"`
 		LinkToken       string `json:"link_token"`
 		Name            string `json:"name"`
@@ -1121,15 +1121,15 @@ func (s *Server) handleAdminAccessCheck(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	targetID := r.URL.Query().Get("discord_id")
+	targetID := r.URL.Query().Get("user_id")
 	if targetID == "" {
-		jsonError(w, http.StatusBadRequest, "Missing discord_id query parameter")
+		jsonError(w, http.StatusBadRequest, "Missing user_id query parameter")
 		return
 	}
 
 	accessType := s.store.GetAccessType(targetID)
 	jsonOK(w, map[string]interface{}{
-		"discord_id": targetID,
+		"user_id": targetID,
 		"status":     accessType,
 	})
 }
@@ -1174,11 +1174,11 @@ func (s *Server) handleAdminAccessAdd(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		DiscordID string `json:"discord_id"`
+		UserID string `json:"user_id"`
 		Type      string `json:"type"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.DiscordID == "" || (req.Type != "whitelist" && req.Type != "blacklist") {
-		jsonError(w, http.StatusBadRequest, "Invalid payload. Required: discord_id, type (whitelist or blacklist)")
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.UserID == "" || (req.Type != "whitelist" && req.Type != "blacklist") {
+		jsonError(w, http.StatusBadRequest, "Invalid payload. Required: user_id, type (whitelist or blacklist)")
 		return
 	}
 
@@ -1188,7 +1188,7 @@ func (s *Server) handleAdminAccessAdd(w http.ResponseWriter, r *http.Request) {
 	targetUsername := ""
 	targetAvatar := ""
 	if s.discordBotToken != "" {
-		reqUser, err := http.NewRequest("GET", "https://discord.com/api/v10/users/"+req.DiscordID, nil)
+		reqUser, err := http.NewRequest("GET", "https://discord.com/api/v10/users/"+req.UserID, nil)
 		if err == nil {
 			reqUser.Header.Set("Authorization", "Bot "+s.discordBotToken)
 			client := &http.Client{Timeout: 5 * time.Second}
@@ -1203,7 +1203,7 @@ func (s *Server) handleAdminAccessAdd(w http.ResponseWriter, r *http.Request) {
 					if err := json.NewDecoder(respUser.Body).Decode(&userRes); err == nil {
 						targetUsername = userRes.Username
 						if userRes.Avatar != "" {
-							targetAvatar = fmt.Sprintf("https://cdn.discordapp.com/avatars/%s/%s.png", req.DiscordID, userRes.Avatar)
+							targetAvatar = fmt.Sprintf("https://cdn.discordapp.com/avatars/%s/%s.png", req.UserID, userRes.Avatar)
 						}
 					}
 				}
@@ -1211,7 +1211,7 @@ func (s *Server) handleAdminAccessAdd(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	targetUserID, err := s.store.GetOrCreateUser("discord", req.DiscordID, targetUsername, targetAvatar)
+	targetUserID, err := s.store.GetOrCreateUser("discord", req.UserID, targetUsername, targetAvatar)
 	if err != nil {
 		jsonError(w, http.StatusInternalServerError, "Database error creating user")
 		return
@@ -1237,14 +1237,14 @@ func (s *Server) handleAdminAccessRemove(w http.ResponseWriter, r *http.Request)
 	}
 
 	var req struct {
-		DiscordID string `json:"discord_id"`
+		UserID string `json:"user_id"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.DiscordID == "" {
-		jsonError(w, http.StatusBadRequest, "Invalid payload. Required: discord_id")
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.UserID == "" {
+		jsonError(w, http.StatusBadRequest, "Invalid payload. Required: user_id")
 		return
 	}
 
-	targetUserID, err := s.store.GetUserByProvider("discord", req.DiscordID)
+	targetUserID, err := s.store.GetUserByProvider("discord", req.UserID)
 	if err == nil && targetUserID != "" {
 		s.store.RemoveFromAccessList(targetUserID)
 	}
@@ -1257,9 +1257,9 @@ func (s *Server) handleAdminUserProfile(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	targetDiscordID := r.URL.Query().Get("discord_id")
+	targetDiscordID := r.URL.Query().Get("user_id")
 	if targetDiscordID == "" {
-		jsonError(w, http.StatusBadRequest, "Missing discord_id")
+		jsonError(w, http.StatusBadRequest, "Missing user_id")
 		return
 	}
 
@@ -1273,9 +1273,9 @@ func (s *Server) handleAdminUserProfile(w http.ResponseWriter, r *http.Request) 
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"discord_id":       targetDiscordID,
-		"discord_username": username,
-		"discord_avatar":   avatar,
+		"user_id":       targetDiscordID,
+		"username": username,
+		"avatar":   avatar,
 		"access_type":      accessType,
 		"total_downloads":  totalDownloads,
 		"total_size":       totalSize,
