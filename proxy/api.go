@@ -1052,9 +1052,9 @@ func (s *Server) handleAdminHistory(w http.ResponseWriter, r *http.Request) {
 	}
 
 	type AdminHistoryItem struct {
-		UserID          string `json:"discord_id"`
-		Username        string `json:"discord_username"`
-		Avatar          string `json:"discord_avatar"`
+		UserID          string `json:"user_id"`
+		Username        string `json:"username"`
+		Avatar          string `json:"avatar"`
 		Token           string `json:"token"`
 		LinkToken       string `json:"link_token"`
 		Name            string `json:"name"`
