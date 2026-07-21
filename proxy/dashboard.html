@@ -1076,6 +1076,12 @@
 
             <!-- History Tab -->
             <div class="tab-panel active" id="panel-history">
+                <div class="history-search-container" id="history-search-container" style="margin-bottom: 16px; display: none;">
+                    <div style="position: relative; max-width: 100%;">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; color: var(--text-muted); pointer-events: none;"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                        <input type="text" id="history-search-input" class="form-input" placeholder="Search your downloads by name, token, or type..." style="padding-left: 40px; width: 100%;" autocomplete="off" spellcheck="false" oninput="renderHistoryList(this.value)">
+                    </div>
+                </div>
                 <div class="loading-state" id="history-loading">
                     <div class="spinner"></div>
                     <span>Loading your downloads...</span>
@@ -1083,8 +1089,8 @@
                 <div class="history-list" id="history-list" style="display:none;"></div>
                 <div class="empty-state" id="history-empty" style="display:none;">
                     <div class="empty-state-icon">📭</div>
-                    <p>No downloads yet</p>
-                    <p class="hint">Add a torrent or web download to get started!</p>
+                    <p id="history-empty-title">No downloads yet</p>
+                    <p class="hint" id="history-empty-hint">Add a torrent or web download to get started!</p>
                 </div>
             </div>
 
@@ -1898,130 +1904,155 @@
             progressInterval = setInterval(poll, 5000);
         }
 
-        // ─── Load History ───
-        function loadHistory() {
-            historyLoading.style.display = '';
-            historyList.style.display = 'none';
+        // ─── Load History & Search ───
+        let userHistoryCache = [];
+
+        function renderHistoryList(query = '') {
+            const q = (query || '').toLowerCase().trim();
+            const filtered = userHistoryCache.filter(item => {
+                if (!q) return true;
+                const nameMatch = (item.name || '').toLowerCase().includes(q);
+                const tokenMatch = (item.token || '').toLowerCase().includes(q) || (item.link_token || '').toLowerCase().includes(q);
+                const typeMatch = (item.type || '').toLowerCase().includes(q);
+                const urlMatch = (item.source_url || '').toLowerCase().includes(q);
+                return nameMatch || tokenMatch || typeMatch || urlMatch;
+            });
+
+            const searchContainer = document.getElementById('history-search-container');
+            const emptyTitle = document.getElementById('history-empty-title');
+            const emptyHint = document.getElementById('history-empty-hint');
+
+            if (searchContainer) {
+                searchContainer.style.display = userHistoryCache.length > 0 ? '' : 'none';
+            }
+
+            if (filtered.length === 0) {
+                historyList.style.display = 'none';
+                historyEmpty.style.display = '';
+                if (userHistoryCache.length > 0 && q) {
+                    if (emptyTitle) emptyTitle.textContent = 'No matching downloads';
+                    if (emptyHint) emptyHint.textContent = `No downloads found for "${escapeHtml(query)}"`;
+                } else {
+                    if (emptyTitle) emptyTitle.textContent = 'No downloads yet';
+                    if (emptyHint) emptyHint.textContent = 'Add a torrent or web download to get started!';
+                }
+                return;
+            }
+
             historyEmpty.style.display = 'none';
-
-            fetch('/v1/history')
-                .then(r => r.json())
-                .then(items => {
-                    historyLoading.style.display = 'none';
-                    if (!items || items.length === 0) {
-                        historyEmpty.style.display = '';
-                        return;
-                    }
-                    historyList.style.display = '';
-                    historyList.innerHTML = '';
-                    const activeTokens = [];
-                    items.forEach((item, i) => {
-                        const el = document.createElement('div');
-                        el.className = 'history-item';
-                        el.style.animationDelay = (i * 0.04) + 's';
-                        const icon = item.type === 'torrent' ? '🌊' : '🌐';
-                        const typeLabel = item.type === 'torrent' ? 'Torrent' : 'Web DL';
-                        const date = new Date(item.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-                        // Add a cache buster to bypass Cloudflare/browser redirect caches
-                        const cacheBuster = '?v=' + Date.now();
-                        const browseURL = baseURL + '/browse/' + (item.link_token || item.token) + cacheBuster;
-                        const dlURL = baseURL + '/dl/' + (item.link_token || item.token) + cacheBuster;
-                        el.innerHTML = `
-                            <div class="history-icon ${item.type}">${icon}</div>
-                            <div class="history-details">
-                                <div class="history-name" title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</div>
-                                <div class="history-meta">
-                                    <span class="history-type ${item.type}">${typeLabel}</span>
-                                    <span class="history-date">${date}</span>
-                                </div>
-                                <div class="progress-container" id="progress-container-${item.token}" style="display: none; margin-top: 8px;">
-                                    <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--text-muted); margin-bottom: 4px;">
-                                        <span id="progress-state-${item.token}">Downloading...</span>
-                                        <span id="progress-stats-${item.token}">0%</span>
-                                    </div>
-                                    <div style="width: 100%; background: var(--bg-input); border-radius: 4px; height: 6px; overflow: hidden; border: 1px solid var(--border-subtle);">
-                                        <div id="progress-bar-${item.token}" style="width: 0%; height: 100%; background: var(--accent-emerald); transition: width 0.5s ease; box-shadow: 0 0 10px var(--accent-emerald);"></div>
-                                    </div>
-                                </div>
+            historyList.style.display = '';
+            historyList.innerHTML = '';
+            const activeTokens = [];
+            filtered.forEach((item, i) => {
+                const el = document.createElement('div');
+                el.className = 'history-item';
+                el.style.animationDelay = (i * 0.04) + 's';
+                const icon = item.type === 'torrent' ? '🌊' : '🌐';
+                const typeLabel = item.type === 'torrent' ? 'Torrent' : 'Web DL';
+                const date = new Date(item.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+                // Add a cache buster to bypass Cloudflare/browser redirect caches
+                const cacheBuster = '?v=' + Date.now();
+                const browseURL = baseURL + '/browse/' + (item.link_token || item.token) + cacheBuster;
+                const dlURL = baseURL + '/dl/' + (item.link_token || item.token) + cacheBuster;
+                el.innerHTML = `
+                    <div class="history-icon ${item.type}">${icon}</div>
+                    <div class="history-details">
+                        <div class="history-name" title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</div>
+                        <div class="history-meta">
+                            <span class="history-type ${item.type}">${typeLabel}</span>
+                            <span class="history-date">${date}</span>
+                        </div>
+                        <div class="progress-container" id="progress-container-${item.token}" style="display: none; margin-top: 8px;">
+                            <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--text-muted); margin-bottom: 4px;">
+                                <span id="progress-state-${item.token}">Downloading...</span>
+                                <span id="progress-stats-${item.token}">0%</span>
                             </div>
-                            <div class="history-actions">
-                                <a href="${browseURL}" class="btn-sm btn-browse" target="_blank" rel="noopener noreferrer" data-tooltip="Browse">
-                                    
-<svg width="800px" height="800px" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <div style="width: 100%; background: var(--bg-input); border-radius: 4px; height: 6px; overflow: hidden; border: 1px solid var(--border-subtle);">
+                                <div id="progress-bar-${item.token}" style="width: 0%; height: 100%; background: var(--accent-emerald); transition: width 0.5s ease; box-shadow: 0 0 10px var(--accent-emerald);"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="history-actions">
+                        <a href="${browseURL}" class="btn-sm btn-browse" target="_blank" rel="noopener noreferrer" data-tooltip="Browse">
+                            <svg width="800px" height="800px" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M21 9V7C21 6.44772 20.5523 6 20 6H10L9 4H4L3.21115 5.57771C3.07229 5.85542 3 6.16165 3 6.47214V9" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M3.91321 20H20.0868C20.604 20 21.0359 19.6056 21.0827 19.0905L21.9009 10.0905C21.9541 9.50492 21.493 9 20.905 9H3.09503C2.507 9 2.0459 9.50492 2.09914 10.0905L2.91732 19.0905C2.96415 19.6056 3.39601 20 3.91321 20Z" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </a>
+                        <a href="${dlURL}" class="btn-sm btn-dl" data-tooltip="Download">
+                            <svg id="Layer_1" data-name="Layer 1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" width="32" height="32" fill="currentColor" stroke="currentColor"><defs><style>.cls-1 { fill: #fff; stroke-width: 0px; }</style></defs><path d="m20,29c-.77,0-1.54-.29-2.12-.88l-9.17-9.17c-.87-.87-1.12-2.13-.65-3.27.47-1.14,1.54-1.85,2.77-1.85h4.17V4c0-1.65,1.35-3,3-3h4c1.65,0,3,1.35,3,3v9.83h4.17c1.24,0,2.3.71,2.77,1.85.47,1.14.22,2.4-.65,3.27l-9.17,9.17c-.58.58-1.35.88-2.12.88Zm-9.17-13.17c-.62,0-.86.47-.92.62-.06.14-.22.65.22,1.09l9.17,9.17c.39.39,1.02.39,1.41,0l9.17-9.17c.44-.44.28-.95.22-1.09-.06-.14-.3-.62-.92-.62h-5.17c-.55,0-1-.45-1-1V4c0-.55-.45-1-1-1h-4c-.55,0-1,.45-1,1v10.83c0,.55-.45,1-1,1h-5.17Z"></path><path d="m35,39H5c-2.21,0-4-1.79-4-4s1.79-4,4-4h30c2.21,0,4,1.79,4,4s-1.79,4-4,4Zm-30-6c-1.1,0-2,.9-2,2s.9,2,2,2h30c1.1,0,2-.9,2-2s-.9-2-2-2H5Z"></path></svg>
+                        </a>
+                        <button class="btn-sm" style="background: rgba(255, 255, 255, 0.05); color: var(--text-secondary); border: 1px solid var(--border-subtle); cursor: pointer;" onclick="copyToClipboard('${dlURL}', this)" data-tooltip="Copy Link">
+                            <svg id="Layer_1" data-name="Layer 1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" width="32" height="32" fill="currentColor" stroke="currentColor"><defs><style>.cls-1 { fill: #fff; stroke-width: 0px; }</style></defs><path d="m34,1H14c-2.76,0-5,2.24-5,5v3h-3c-2.76,0-5,2.24-5,5v20c0,2.76,2.24,5,5,5h20c2.76,0,5-2.24,5-5v-3h3c2.76,0,5-2.24,5-5V6c0-2.76-2.24-5-5-5Zm-5,33c0,1.65-1.35,3-3,3H6c-1.65,0-3-1.35-3-3V14c0-1.65,1.35-3,3-3h20c1.65,0,3,1.35,3,3v20Zm8-8c0,1.65-1.35,3-3,3h-3v-15c0-2.76-2.24-5-5-5h-15v-3c0-1.65,1.35-3,3-3h20c1.65,0,3,1.35,3,3v20Z"></path><g><path d="m16.71,30.36l-1.41,1.41c-1.95,1.95-5.12,1.95-7.07,0s-1.95-5.12,0-7.07l2.83-2.83c1.95-1.95,5.12-1.95,7.07,0,.39.39.39,1.02,0,1.41s-1.02.39-1.41,0c-1.17-1.17-3.07-1.17-4.24,0l-2.83,2.83c-1.17,1.17-1.17,3.07,0,4.24s3.07,1.17,4.24,0l1.41-1.41c.39-.39,1.02-.39,1.41,0s.39,1.02,0,1.41Z"></path><path d="m23.78,23.29l-2.83,2.83c-1.95,1.95-5.12,1.95-7.07,0-.39-.39-.39-1.02,0-1.41s1.02-.39,1.41,0c1.17,1.17,3.07,1.17,4.24,0l2.83-2.83c1.17-1.17,1.17-3.07,0-4.24s-3.07-1.17-4.24,0l-1.41,1.41c-.39.39-1.02.39-1.41,0s-.39-1.02,0-1.41l1.41-1.41c1.95-1.95,5.12-1.95,7.07,0s1.95,5.12,0,7.07Z"></path></g></svg>
+                </button>
+                <div class="dropdown dropdown-container">
+                    <button class="btn-sm" style="background: rgba(255, 255, 255, 0.05); color: var(--text-secondary); border: 1px solid var(--border-subtle); cursor: pointer;" onclick="toggleDropdown('${item.token}', event)">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
+                    </button>
+                    <div class="dropdown-menu" id="dropdown-${item.token}">
+                        <button class="dropdown-item" onclick="sendToFtp('${item.token}', this)">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                            Send to FTP
+                        </button>
+                        <button class="dropdown-item" onclick="openCloudModal('${item.token}')">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg>
+                            Send to Cloud
+                        </button>
+                        <button class="dropdown-item" onclick="regenerateLink('${item.token}', this)">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                            Regenerate Link
+                        </button>
+                        ${item.source_url ? `
+                        <button class="dropdown-item" onclick="copyOriginalLink('${encodeURIComponent(item.source_url)}')">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                            Copy Original Link
+                        </button>
+                        ` : ''}
+                        ${item.type === 'torrent' ? `
+                        <button class="dropdown-item" onclick="exportTorrent('${item.token}', 'file', this)">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><polyline points="9 15 12 18 15 15"/></svg>
+                            Export .torrent
+                        </button>
+                        <button class="dropdown-item" onclick="exportTorrent('${item.token}', 'magnet', this)">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                            Export Magnet
+                        </button>
+                        ` : ''}
+                        <button class="dropdown-item" onclick="removeDownload('${item.token}', this)" style="color: #ef4444;">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                            Delete
+                        </button>
+                    </div>
+                </div>
+            </div>`;
+        historyList.appendChild(el);
+        activeTokens.push(item.token);
+    });
 
-<path d="M21 9V7C21 6.44772 20.5523 6 20 6H10L9 4H4L3.21115 5.57771C3.07229 5.85542 3 6.16165 3 6.47214V9" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>
-<path d="M3.91321 20H20.0868C20.604 20 21.0359 19.6056 21.0827 19.0905L21.9009 10.0905C21.9541 9.50492 21.493 9 20.905 9H3.09503C2.507 9 2.0459 9.50492 2.09914 10.0905L2.91732 19.0905C2.96415 19.6056 3.39601 20 3.91321 20Z" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>
-</svg>
-                                </a>
-                                <a href="${dlURL}" class="btn-sm btn-dl" data-tooltip="Download">
-                                    <svg id="Layer_1" data-name="Layer 1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" width="32" height="32" fill="currentColor" stroke="currentColor"><defs><style>
-      .cls-1 {
-        fill: #fff;
-        stroke-width: 0px;
-      }
-    </style></defs><path d="m20,29c-.77,0-1.54-.29-2.12-.88l-9.17-9.17c-.87-.87-1.12-2.13-.65-3.27.47-1.14,1.54-1.85,2.77-1.85h4.17V4c0-1.65,1.35-3,3-3h4c1.65,0,3,1.35,3,3v9.83h4.17c1.24,0,2.3.71,2.77,1.85.47,1.14.22,2.4-.65,3.27l-9.17,9.17c-.58.58-1.35.88-2.12.88Zm-9.17-13.17c-.62,0-.86.47-.92.62-.06.14-.22.65.22,1.09l9.17,9.17c.39.39,1.02.39,1.41,0l9.17-9.17c.44-.44.28-.95.22-1.09-.06-.14-.3-.62-.92-.62h-5.17c-.55,0-1-.45-1-1V4c0-.55-.45-1-1-1h-4c-.55,0-1,.45-1,1v10.83c0,.55-.45,1-1,1h-5.17Z"></path><path d="m35,39H5c-2.21,0-4-1.79-4-4s1.79-4,4-4h30c2.21,0,4,1.79,4,4s-1.79,4-4,4Zm-30-6c-1.1,0-2,.9-2,2s.9,2,2,2h30c1.1,0,2-.9,2-2s-.9-2-2-2H5Z"></path></svg>
-                                </a>
-                                <button class="btn-sm" style="background: rgba(255, 255, 255, 0.05); color: var(--text-secondary); border: 1px solid var(--border-subtle); cursor: pointer;" onclick="copyToClipboard('${dlURL}', this)" data-tooltip="Copy Link">
-                                    <svg id="Layer_1" data-name="Layer 1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" width="32" height="32" fill="currentColor" stroke="currentColor"><defs><style>
-      .cls-1 {
-        fill: #fff;
-        stroke-width: 0px;
-      }
-    </style></defs><path d="m34,1H14c-2.76,0-5,2.24-5,5v3h-3c-2.76,0-5,2.24-5,5v20c0,2.76,2.24,5,5,5h20c2.76,0,5-2.24,5-5v-3h3c2.76,0,5-2.24,5-5V6c0-2.76-2.24-5-5-5Zm-5,33c0,1.65-1.35,3-3,3H6c-1.65,0-3-1.35-3-3V14c0-1.65,1.35-3,3-3h20c1.65,0,3,1.35,3,3v20Zm8-8c0,1.65-1.35,3-3,3h-3v-15c0-2.76-2.24-5-5-5h-15v-3c0-1.65,1.35-3,3-3h20c1.65,0,3,1.35,3,3v20Z"></path><g><path d="m16.71,30.36l-1.41,1.41c-1.95,1.95-5.12,1.95-7.07,0s-1.95-5.12,0-7.07l2.83-2.83c1.95-1.95,5.12-1.95,7.07,0,.39.39.39,1.02,0,1.41s-1.02.39-1.41,0c-1.17-1.17-3.07-1.17-4.24,0l-2.83,2.83c-1.17,1.17-1.17,3.07,0,4.24s3.07,1.17,4.24,0l1.41-1.41c.39-.39,1.02-.39,1.41,0s.39,1.02,0,1.41Z"></path><path d="m23.78,23.29l-2.83,2.83c-1.95,1.95-5.12,1.95-7.07,0-.39-.39-.39-1.02,0-1.41s1.02-.39,1.41,0c1.17,1.17,3.07,1.17,4.24,0l2.83-2.83c1.17-1.17,1.17-3.07,0-4.24s-3.07-1.17-4.24,0l-1.41,1.41c-.39.39-1.02.39-1.41,0s-.39-1.02,0-1.41l1.41-1.41c1.95-1.95,5.12-1.95,7.07,0s1.95,5.12,0,7.07Z"></path></g></svg>
-                                </button>
-                                
-                                <div class="dropdown dropdown-container">
-                                    <button class="btn-sm" style="background: rgba(255, 255, 255, 0.05); color: var(--text-secondary); border: 1px solid var(--border-subtle); cursor: pointer;" onclick="toggleDropdown('${item.token}', event)">
-                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
-                                    </button>
-                                    <div class="dropdown-menu" id="dropdown-${item.token}">
+    startProgressPolling(activeTokens);
+}
 
-                                        <button class="dropdown-item" onclick="sendToFtp('${item.token}', this)">
-                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-                                            Send to FTP
-                                        </button>
-                                        <button class="dropdown-item" onclick="openCloudModal('${item.token}')">
-                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg>
-                                            Send to Cloud
-                                        </button>
-                                        <button class="dropdown-item" onclick="regenerateLink('${item.token}', this)">
-                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
-                                            Regenerate Link
-                                        </button>
-                                        ${item.source_url ? `
-                                        <button class="dropdown-item" onclick="copyOriginalLink('${encodeURIComponent(item.source_url)}')">
-                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-                                            Copy Original Link
-                                        </button>
-                                        ` : ''}
-                                        ${item.type === 'torrent' ? `
-                                        <button class="dropdown-item" onclick="exportTorrent('${item.token}', 'file', this)">
-                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><polyline points="9 15 12 18 15 15"/></svg>
-                                            Export .torrent
-                                        </button>
-                                        <button class="dropdown-item" onclick="exportTorrent('${item.token}', 'magnet', this)">
-                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-                                            Export Magnet
-                                        </button>
-                                        ` : ''}
-                                        <button class="dropdown-item" onclick="removeDownload('${item.token}', this)" style="color: #ef4444;">
-                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
-                                            Delete
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>`;
-                        historyList.appendChild(el);
-                        activeTokens.push(item.token);
-                    });
-                    
-                    startProgressPolling(activeTokens);
-                })
-                .catch(() => {
-                    historyLoading.style.display = 'none';
-                    historyEmpty.style.display = '';
-                });
-        }
+function loadHistory() {
+    historyLoading.style.display = '';
+    historyList.style.display = 'none';
+    historyEmpty.style.display = 'none';
+    const searchContainer = document.getElementById('history-search-container');
+    if (searchContainer) searchContainer.style.display = 'none';
+
+    fetch('/v1/history')
+        .then(r => r.json())
+        .then(items => {
+            historyLoading.style.display = 'none';
+            userHistoryCache = items || [];
+            const searchInput = document.getElementById('history-search-input');
+            const currentQuery = searchInput ? searchInput.value : '';
+            renderHistoryList(currentQuery);
+        })
+        .catch(() => {
+            historyLoading.style.display = 'none';
+            historyEmpty.style.display = '';
+        });
+}
 
         // ─── Global Stats ───
         function loadGlobalStats() {
