@@ -86,6 +86,7 @@ type Server struct {
 	discordBotToken     string
 	adminUsers          []string
 	adminAPIEnabled     bool
+	proxyMode           bool
 
 	apiRateLimits   map[string]time.Time
 	apiRateLimitsMu sync.Mutex
@@ -114,6 +115,7 @@ func NewServer(cfg *config.Config, clientPool *torbox.ClientPool, db *sql.DB) (*
 		discordBotToken:     cfg.DiscordBotToken,
 		adminUsers:          cfg.AdminUsers,
 		adminAPIEnabled:     cfg.AdminAPIEnabled,
+		proxyMode:           cfg.ProxyMode,
 		apiRateLimits:       make(map[string]time.Time),
 	}
 
@@ -488,6 +490,18 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 	if adapter == nil {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		browserTemplate.Execute(w, BrowseData{Title: "Error", ErrorMessage: "Unknown download type."})
+		return
+	}
+
+	if !s.proxyMode {
+		userIP := r.Header.Get("X-Forwarded-For")
+		if userIP == "" {
+			userIP = strings.Split(r.RemoteAddr, ":")[0]
+		}
+		
+		log.Printf("Redirecting download to CDN for %s #%d (client #%d) IP: %s", entry.Type, entry.ID, entry.ClientIndex+1, userIP)
+		permalink := adapter.GetPermalink(entry.ID, fileID, userIP)
+		http.Redirect(w, r, permalink, http.StatusFound)
 		return
 	}
 

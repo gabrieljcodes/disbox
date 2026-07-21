@@ -17,6 +17,7 @@ type Config struct {
 	ProxyBaseURL         string
 	ProxyPort            string
 	AdminAPIEnabled      bool
+	ProxyMode            bool
 	DatabaseURL          string
 	EncryptionKey        string
 }
@@ -44,6 +45,7 @@ func LoadConfig() (*Config, error) {
 		ProxyBaseURL:        proxyBaseURL,
 		ProxyPort:           proxyPort,
 		AdminAPIEnabled:     strings.ToLower(os.Getenv("ADMIN_API_ENABLED")) != "false",
+		ProxyMode:           strings.ToLower(os.Getenv("PROXY_MODE")) != "false",
 		DatabaseURL:         os.Getenv("DATABASE_URL"),
 		EncryptionKey:       os.Getenv("ENCRYPTION_KEY"),
 	}

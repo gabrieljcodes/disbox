@@ -5,6 +5,7 @@ package torbox
 type DownloadAdapter interface {
 	GetInfo(id int) (*DownloadInfo, error)
 	RequestURL(id int, fileID int, userIP string) (string, error)
+	GetPermalink(id int, fileID int, userIP string) string
 	Control(id int, operation string, all bool) (*APIResponse, error)
 }
 
@@ -54,6 +55,10 @@ func (a *TorrentAdapter) RequestURL(id int, fileID int, userIP string) (string, 
 	return a.Client.RequestDownloadURL(id, fileID, userIP)
 }
 
+func (a *TorrentAdapter) GetPermalink(id int, fileID int, userIP string) string {
+	return a.Client.GetPermalink("torrent", id, fileID, userIP)
+}
+
 func (a *TorrentAdapter) Control(id int, operation string, all bool) (*APIResponse, error) {
 	return a.Client.ControlTorrent(id, operation, all)
 }
@@ -85,6 +90,10 @@ func (a *WebDLAdapter) GetInfo(id int) (*DownloadInfo, error) {
 
 func (a *WebDLAdapter) RequestURL(id int, fileID int, userIP string) (string, error) {
 	return a.Client.RequestWebDownloadURL(id, fileID, userIP)
+}
+
+func (a *WebDLAdapter) GetPermalink(id int, fileID int, userIP string) string {
+	return a.Client.GetPermalink("webdl", id, fileID, userIP)
 }
 
 func (a *WebDLAdapter) Control(id int, operation string, all bool) (*APIResponse, error) {

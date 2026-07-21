@@ -1582,6 +1582,27 @@
                                     <input type="checkbox" id="admin-api-toggle" disabled>
                                     <span class="toggle-slider"></span>
                                 </span>
+                            </label>
+                        </div>
+
+                        <div class="form-group" style="margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--border-subtle);">
+                            <label class="toggle-container" style="opacity: 0.8; cursor: not-allowed;">
+                                <div class="toggle-text">
+                                    <div class="toggle-title" style="display: flex; align-items: center; gap: 8px;">
+                                        Proxy Mode
+                                        <span class="badge" style="background: rgba(251, 113, 133, 0.1); color: var(--accent-rose); border: none; font-size: 10px;">ENV ONLY</span>
+                                        <span class="badge" style="background: rgba(251, 113, 133, 0.1); color: var(--accent-rose); border: none; font-size: 10px;">⚠️ DANGEROUS</span>
+                                    </div>
+                                    <div class="toggle-desc">
+                                        When enabled, the server proxies the data. When disabled, users are redirected to the CDN (saves server bandwidth but <span style="color: var(--accent-rose); font-weight: bold;">LEAKS YOUR TORBOX API KEY</span>).
+                                        Must be changed via <code>PROXY_MODE</code> in the <code>.env</code> file.
+                                    </div>
+                                </div>
+                                <span class="toggle-switch">
+                                    <input type="checkbox" id="proxy-mode-toggle" disabled>
+                                    <span class="toggle-slider" style="background-color: var(--accent-rose);"></span>
+                                </span>
+                            </label>
                         </div>
 
 
@@ -2315,6 +2336,8 @@
                       
                       const adminApiToggle = document.getElementById('admin-api-toggle');
                       if (adminApiToggle) adminApiToggle.checked = data.admin_api_enabled;
+                      const proxyModeToggle = document.getElementById('proxy-mode-toggle');
+                      if (proxyModeToggle) proxyModeToggle.checked = data.proxy_mode;
                       
                       document.getElementById('aiostreams-url-input').value = data.aiostreams_url || '';
                       document.getElementById('aiostreams-uuid-input').value = data.aiostreams_uuid || '';

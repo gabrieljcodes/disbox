@@ -1312,6 +1312,7 @@ func (s *Server) handleAdminSettingsGet(w http.ResponseWriter, r *http.Request) 
 		"public_api_enabled":           s.store.GetSetting("public_api_enabled", "true") == "true",
 		"user_gb_limit":                s.store.GetSetting("user_gb_limit", "0"),
 		"admin_api_enabled":            s.adminAPIEnabled,
+		"proxy_mode":                   s.proxyMode,
 		"search_enabled":               s.store.GetSetting("search_enabled", "true") == "true",
 		"public_api_delay_ms":          s.store.GetSetting("public_api_delay_ms", "0"),
 		"torbox_keys":                  maskedKeys,

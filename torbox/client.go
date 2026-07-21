@@ -489,6 +489,26 @@ func (c *Client) RequestWebDownloadURL(webdlID int, fileID int, userIP string) (
 	return c.requestDLURL("webdl/requestdl", "web_id", webdlID, fileID, userIP)
 }
 
+func (c *Client) GetPermalink(downloadType string, id int, fileID int, userIP string) string {
+	endpoint := "torrents/requestdl"
+	idParam := "torrent_id"
+	if downloadType == "webdl" {
+		endpoint = "webdl/requestdl"
+		idParam = "web_id"
+	}
+	
+	urlStr := fmt.Sprintf("%s/%s?token=%s&%s=%d&redirect=true", apiBaseURL, endpoint, c.apiKey, idParam, id)
+	if fileID >= 0 {
+		urlStr += fmt.Sprintf("&file_id=%d", fileID)
+	} else {
+		urlStr += "&zip_link=true"
+	}
+	if userIP != "" {
+		urlStr += "&user_ip=" + userIP
+	}
+	return urlStr
+}
+
 func (c *Client) doRequest(req *http.Request) (*APIResponse, error) {
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
