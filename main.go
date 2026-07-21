@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 	"torbox-discord-bot/bot"
 	"torbox-discord-bot/config"
 	"torbox-discord-bot/proxy"
@@ -32,6 +33,10 @@ func main() {
 		log.Fatalf("Failed to open database: %v", err)
 	}
 	defer db.Close()
+
+	db.SetMaxOpenConns(25)
+	db.SetMaxIdleConns(5)
+	db.SetConnMaxLifetime(15 * time.Minute)
 
 	proxyServer, err := proxy.NewServer(cfg, torboxClientPool, db)
 	if err != nil {

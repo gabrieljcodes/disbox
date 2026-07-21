@@ -69,7 +69,6 @@ func (st *Store) CreateTables() error {
 			deleted BOOLEAN DEFAULT false,
 			created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 		);
-		CREATE INDEX IF NOT EXISTS idx_download_history_user_id ON download_history(user_id);
 		CREATE INDEX IF NOT EXISTS idx_download_history_token ON download_history(token);
 		CREATE INDEX IF NOT EXISTS idx_download_history_link_token ON download_history(link_token);
 
@@ -110,9 +109,30 @@ func (st *Store) CreateTables() error {
 			onefichier_token TEXT DEFAULT '',
 			pixeldrain_token TEXT DEFAULT ''
 		);
-	`)
 
-	return err
+		ALTER TABLE download_history ADD COLUMN IF NOT EXISTS source_url TEXT DEFAULT '';
+	`)
+	if err != nil {
+		return err
+	}
+
+	indexes := []string{
+		`DROP INDEX CONCURRENTLY IF EXISTS idx_download_history_user_id`,
+		`CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_download_history_user_created ON download_history(user_id, created_at)`,
+		`CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_download_history_type_download ON download_history(type, download_id) WHERE deleted = false`,
+		`CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_download_history_client_active ON download_history(client_index) WHERE deleted = false`,
+		`CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_download_history_user_active_created ON download_history(user_id, created_at DESC) WHERE deleted = false`,
+		`CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_download_history_admin_created ON download_history(created_at DESC) WHERE deleted = false`,
+		`CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_api_tokens_user_created ON api_tokens(user_id, created_at DESC)`,
+	}
+
+	for _, stmt := range indexes {
+		if _, err := st.db.Exec(stmt); err != nil {
+			log.Printf("Notice/Warning: index execution statement (%s): %v", stmt, err)
+		}
+	}
+
+	return nil
 }
 
 // ─── Download Links ───
@@ -295,23 +315,24 @@ func (st *Store) RevokeAPIToken(tokenPrefix, userID string, isMasked bool) (int6
 // ─── Download History ───
 
 type HistoryRecord struct {
-	UserID          string
-	Username        string
-	Avatar          string
-	Token           string
-	LinkToken       string
-	Name            string
-	Type            string
-	DownloadID      int
-	ClientIndex     int
-	Size            int64
-	CreatedAt       time.Time
+	UserID      string
+	Username    string
+	Avatar      string
+	Token       string
+	LinkToken   string
+	Name        string
+	Type        string
+	DownloadID  int
+	ClientIndex int
+	Size        int64
+	SourceURL   string
+	CreatedAt   time.Time
 }
 
-func (st *Store) SaveHistory(userID, token, linkToken, name, dlType string, downloadID, clientIndex int, size int64) error {
+func (st *Store) SaveHistory(userID, token, linkToken, name, dlType string, downloadID, clientIndex int, size int64, sourceURL string) error {
 	_, err := st.db.Exec(
-		"INSERT INTO download_history (user_id, token, link_token, name, type, download_id, client_index, size) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
-		userID, token, linkToken, name, dlType, downloadID, clientIndex, size,
+		"INSERT INTO download_history (user_id, token, link_token, name, type, download_id, client_index, size, source_url) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+		userID, token, linkToken, name, dlType, downloadID, clientIndex, size, sourceURL,
 	)
 	return err
 }
@@ -353,7 +374,7 @@ func (st *Store) UpdateHistoryName(token string, name string) {
 
 func (st *Store) GetUserHistory(userID string) ([]HistoryRecord, error) {
 	rows, err := st.db.Query(
-		"SELECT token, COALESCE(link_token, ''), name, type, created_at FROM download_history WHERE user_id = $1 AND deleted = false ORDER BY created_at DESC",
+		"SELECT token, COALESCE(link_token, ''), name, type, created_at, COALESCE(source_url, '') FROM download_history WHERE user_id = $1 AND deleted = false ORDER BY created_at DESC",
 		userID,
 	)
 	if err != nil {
@@ -364,7 +385,7 @@ func (st *Store) GetUserHistory(userID string) ([]HistoryRecord, error) {
 	var history []HistoryRecord
 	for rows.Next() {
 		var hr HistoryRecord
-		if err := rows.Scan(&hr.Token, &hr.LinkToken, &hr.Name, &hr.Type, &hr.CreatedAt); err != nil {
+		if err := rows.Scan(&hr.Token, &hr.LinkToken, &hr.Name, &hr.Type, &hr.CreatedAt, &hr.SourceURL); err != nil {
 			log.Printf("GetUserHistory scan error: %v", err)
 		} else {
 			history = append(history, hr)
@@ -375,7 +396,7 @@ func (st *Store) GetUserHistory(userID string) ([]HistoryRecord, error) {
 
 func (st *Store) GetUserHistoryLimited(userID string, limit int) ([]HistoryRecord, error) {
 	rows, err := st.db.Query(
-		"SELECT token, COALESCE(link_token, ''), name, type, created_at FROM download_history WHERE user_id = $1 AND deleted = false ORDER BY created_at DESC LIMIT $2",
+		"SELECT token, COALESCE(link_token, ''), name, type, created_at, COALESCE(source_url, '') FROM download_history WHERE user_id = $1 AND deleted = false ORDER BY created_at DESC LIMIT $2",
 		userID, limit,
 	)
 	if err != nil {
@@ -386,7 +407,7 @@ func (st *Store) GetUserHistoryLimited(userID string, limit int) ([]HistoryRecor
 	var history []HistoryRecord
 	for rows.Next() {
 		var hr HistoryRecord
-		if err := rows.Scan(&hr.Token, &hr.LinkToken, &hr.Name, &hr.Type, &hr.CreatedAt); err != nil {
+		if err := rows.Scan(&hr.Token, &hr.LinkToken, &hr.Name, &hr.Type, &hr.CreatedAt, &hr.SourceURL); err != nil {
 			log.Printf("GetUserHistoryLimited scan error: %v", err)
 		} else {
 			history = append(history, hr)
@@ -397,7 +418,7 @@ func (st *Store) GetUserHistoryLimited(userID string, limit int) ([]HistoryRecor
 
 func (st *Store) GetAdminHistory() ([]HistoryRecord, error) {
 	rows, err := st.db.Query(`
-		SELECT h.user_id, COALESCE(u.username, ''), COALESCE(u.avatar, ''), h.token, COALESCE(h.link_token, ''), h.name, h.type, h.created_at 
+		SELECT h.user_id, COALESCE(u.username, ''), COALESCE(u.avatar, ''), h.token, COALESCE(h.link_token, ''), h.name, h.type, h.created_at, COALESCE(h.source_url, '') 
 		FROM download_history h
 		LEFT JOIN users u ON h.user_id = u.id
 		WHERE h.deleted = false ORDER BY h.created_at DESC
@@ -410,7 +431,7 @@ func (st *Store) GetAdminHistory() ([]HistoryRecord, error) {
 	var history []HistoryRecord
 	for rows.Next() {
 		var hr HistoryRecord
-		if err := rows.Scan(&hr.UserID, &hr.Username, &hr.Avatar, &hr.Token, &hr.LinkToken, &hr.Name, &hr.Type, &hr.CreatedAt); err != nil {
+		if err := rows.Scan(&hr.UserID, &hr.Username, &hr.Avatar, &hr.Token, &hr.LinkToken, &hr.Name, &hr.Type, &hr.CreatedAt, &hr.SourceURL); err != nil {
 			log.Printf("GetAdminHistory scan error: %v", err)
 		} else {
 			history = append(history, hr)
@@ -502,11 +523,11 @@ func (st *Store) RegenerateLink(oldLinkToken, newLinkToken, dlType string, downl
 }
 
 // FindDownloadForExport looks up download info for export.
-func (st *Store) FindDownloadForExport(token, userID string) (dlType string, downloadID, clientIndex int, err error) {
+func (st *Store) FindDownloadForExport(token, userID string) (dlType string, downloadID, clientIndex int, sourceURL string, err error) {
 	err = st.db.QueryRow(
-		"SELECT type, download_id, client_index FROM download_history WHERE (token = $1 OR link_token = $2) AND user_id = $3",
+		"SELECT type, download_id, client_index, COALESCE(source_url, '') FROM download_history WHERE (token = $1 OR link_token = $2) AND user_id = $3",
 		token, token, userID,
-	).Scan(&dlType, &downloadID, &clientIndex)
+	).Scan(&dlType, &downloadID, &clientIndex, &sourceURL)
 	return
 }
 

@@ -91,6 +91,7 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 		CreatedAt   time.Time `json:"created_at"`
 		BrowseURL   string `json:"browse_url"`
 		DownloadURL string `json:"download_url"`
+		SourceURL   string `json:"source_url"`
 	}
 
 	var result []HistoryItem
@@ -107,6 +108,7 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 			CreatedAt:   item.CreatedAt,
 			BrowseURL:   fmt.Sprintf("%s/browse/%s", s.baseURL, activeToken),
 			DownloadURL: fmt.Sprintf("%s/dl/%s", s.baseURL, activeToken),
+			SourceURL:   item.SourceURL,
 		})
 	}
 	if result == nil {
@@ -882,7 +884,7 @@ func (s *Server) handleIntegration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dlType, downloadID, clientIndex, err := s.store.FindDownloadForExport(historyToken, userID)
+	dlType, downloadID, clientIndex, _, err := s.store.FindDownloadForExport(historyToken, userID)
 	if err != nil {
 		jsonError(w, http.StatusNotFound, "Download not found")
 		return
@@ -985,7 +987,7 @@ func (s *Server) handleExportData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dlType, downloadID, clientIndex, err := s.store.FindDownloadForExport(token, userID)
+	dlType, downloadID, clientIndex, sourceURL, err := s.store.FindDownloadForExport(token, userID)
 	if err != nil {
 		jsonError(w, http.StatusNotFound, "Download not found or you don't have permission")
 		return
@@ -996,30 +998,30 @@ func (s *Server) handleExportData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	client := s.clientPool.GetClient(clientIndex)
-	info, err := client.GetTorrentInfo(downloadID)
-	if err != nil {
-		jsonError(w, http.StatusInternalServerError, "Failed to fetch torrent info")
-		return
-	}
-
-	if info.Hash == "" {
-		jsonError(w, http.StatusInternalServerError, "Torrent hash is missing")
-		return
-	}
-
-	magnet := fmt.Sprintf("magnet:?xt=urn:btih:%s", info.Hash)
-
 	if exportType == "magnet" {
+		if sourceURL == "" {
+			jsonError(w, http.StatusNotFound, "Magnet link not available for this record")
+			return
+		}
+
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"success": true,
-			"data":    magnet,
+			"data":    sourceURL,
 		})
 		return
 	}
 
-	resp, err := client.MagnetToFile(magnet)
+	// exportType == "file" (.torrent file export)
+	client := s.clientPool.GetClient(clientIndex)
+	var resp *http.Response
+
+	if sourceURL != "" {
+		resp, err = client.MagnetToFile(sourceURL)
+	} else {
+		resp, err = client.ExportData(downloadID, "file")
+	}
+
 	if err != nil {
 		jsonError(w, http.StatusInternalServerError, "Failed to communicate with TorBox API")
 		return

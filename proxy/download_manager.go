@@ -489,7 +489,7 @@ func (dm *DownloadManager) executeDownload(qd *QueuedDownload) error {
 					if !okName || name == "" {
 						name = "Torrent"
 					}
-					proxyLink, _ = dm.server.RegisterDownloadWithUser("torrent", int(idFloat), clientIndex, qd.userID, name, 0)
+					proxyLink, _ = dm.server.RegisterDownloadWithUser("torrent", int(idFloat), clientIndex, qd.userID, name, 0, qd.Link)
 				}
 			}
 		}
@@ -512,7 +512,15 @@ func (dm *DownloadManager) executeDownload(qd *QueuedDownload) error {
 					if name == "" {
 						name = qd.FileName
 					}
-					proxyLink, _ = dm.server.RegisterDownloadWithUser("torrent", int(idFloat), clientIndex, qd.userID, name, 0)
+
+					magnet, mErr := ExtractMagnetFromTorrentFile(qd.FileData)
+					if mErr != nil || magnet == "" {
+						if hashStr, okHash := data["hash"].(string); okHash && hashStr != "" {
+							magnet = fmt.Sprintf("magnet:?xt=urn:btih:%s", hashStr)
+						}
+					}
+
+					proxyLink, _ = dm.server.RegisterDownloadWithUser("torrent", int(idFloat), clientIndex, qd.userID, name, 0, magnet)
 				}
 			}
 		}
@@ -535,7 +543,7 @@ func (dm *DownloadManager) executeDownload(qd *QueuedDownload) error {
 					if name == "" {
 						name = "Web Download"
 					}
-					proxyLink, _ = dm.server.RegisterDownloadWithUser("webdl", int(idFloat), clientIndex, qd.userID, name, 0)
+					proxyLink, _ = dm.server.RegisterDownloadWithUser("webdl", int(idFloat), clientIndex, qd.userID, name, 0, qd.Link)
 				}
 			}
 		}

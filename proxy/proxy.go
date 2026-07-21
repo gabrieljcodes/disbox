@@ -350,10 +350,15 @@ func (s *Server) GetBaseURL() string {
 }
 
 // RegisterDownloadWithUser registers a proxy token and also saves it to the user's history
-func (s *Server) RegisterDownloadWithUser(downloadType string, id int, clientIndex int, userID string, name string, size int64) (string, int) {
+func (s *Server) RegisterDownloadWithUser(downloadType string, id int, clientIndex int, userID string, name string, size int64, sourceURL ...string) (string, int) {
 	status := 0
 	fileToken := generateToken()
 	linkToken := generateToken()
+
+	src := ""
+	if len(sourceURL) > 0 {
+		src = sourceURL[0]
+	}
 
 	if userID != "" {
 		existingLinkToken, sameUser, exists := s.store.FindExistingDownload(downloadType, id, userID)
@@ -380,7 +385,7 @@ func (s *Server) RegisterDownloadWithUser(downloadType string, id int, clientInd
 	s.mu.Unlock()
 
 	if userID != "" {
-		if err := s.store.SaveHistory(userID, fileToken, linkToken, name, downloadType, id, clientIndex, size); err != nil {
+		if err := s.store.SaveHistory(userID, fileToken, linkToken, name, downloadType, id, clientIndex, size, src); err != nil {
 			log.Printf("Warning: failed to save download history: %v", err)
 		} else if size == 0 && status == 0 {
 			go s.pollDownloadSize(downloadType, id, clientIndex, fileToken)

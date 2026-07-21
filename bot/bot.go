@@ -348,7 +348,18 @@ func (b *Bot) handleAddTorrent(s *discordgo.Session, i *discordgo.InteractionCre
 
 	// Register a proxy link instead of using the direct TorBox URL
 	internalUserID, _ := b.proxyServer.GetOrCreateUser("discord", i.Member.User.ID, i.Member.User.Username, i.Member.User.AvatarURL(""))
-	proxyLink, status := b.proxyServer.RegisterDownloadWithUser("torrent", int(torrentID), clientIndex, internalUserID, name, size)
+	
+	sourceURL := magnetLink
+	if len(torrentFile) > 0 {
+		extracted, mErr := proxy.ExtractMagnetFromTorrentFile(torrentFile)
+		if mErr == nil && extracted != "" {
+			sourceURL = extracted
+		} else if hashStr, okHash := data["hash"].(string); okHash && hashStr != "" {
+			sourceURL = fmt.Sprintf("magnet:?xt=urn:btih:%s", hashStr)
+		}
+	}
+
+	proxyLink, status := b.proxyServer.RegisterDownloadWithUser("torrent", int(torrentID), clientIndex, internalUserID, name, size, sourceURL)
 	
 	if status == 1 {
 		err = fmt.Errorf("⚠️ **Already Added**\n\nYou have already added this torrent.\n\n💡 Use the link below or check `/list-downloads`.")
