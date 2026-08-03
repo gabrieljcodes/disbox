@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>📦 Dashboard | Disbox</title>
+    <title>Dashboard | Disbox</title>
     <link rel="icon" type="image/x-icon" href="/favicon.ico">
     <meta name="description" content="Manage your downloads with Disbox Dashboard">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Share+Tech+Mono&display=swap" rel="stylesheet">
@@ -30,6 +30,10 @@
             --accent-rose: #fb7185;
             --accent-amber: #fbbf24;
             --accent-violet: #a78bfa;
+            --color-danger: #ef4444;
+            --color-seeds: #2ecc71;
+            --color-peers: #e74c3c;
+            --color-bandwidth: #ffb86c;
             --gradient-primary: linear-gradient(135deg, #1EBF6A 0%, #5ECBA5 100%);
             --gradient-discord: linear-gradient(135deg, #5865F2 0%, #4752C4 100%);
             --shadow-lg: 0 20px 40px rgba(0,0,0,0.4);
@@ -79,12 +83,12 @@
             backdrop-filter: blur(10px);
             box-shadow: 0 4px 12px rgba(0,0,0,0.2);
             pointer-events: auto;
-            transition: margin-top 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease;
+            transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease;
             border-bottom: 1px solid rgba(255,255,255,0.2);
         }
         .announcement-banner.hiding {
             opacity: 0;
-            margin-top: -50px; /* Slide out of view */
+            transform: translateY(-100%);
         }
         .announcement-text { flex: 1; text-align: center; }
         .announcement-close {
@@ -220,7 +224,7 @@
             cursor: pointer;
             transition: var(--transition);
             text-decoration: none;
-            box-shadow: 0 4px 15px rgba(30, 191, 106, 0.2);
+            box-shadow: 0 4px 15px rgba(88, 101, 242, 0.2);
         }
 
         .btn-discord:hover {
@@ -740,7 +744,7 @@
         .token-created-banner h3 { color: var(--accent-emerald); font-size: 15px; margin-bottom: 8px; }
         .token-created-banner p { font-size: 13px; color: var(--text-primary); margin-bottom: 12px; }
         .token-created-value {
-            font-family: monospace; font-size: 16px; color: #fff; background: rgba(0,0,0,0.3);
+            font-family: monospace; font-size: 16px; color: var(--text-primary); background: rgba(0,0,0,0.3);
             padding: 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); word-break: break-all; margin-bottom: 12px;
         }
 
@@ -853,19 +857,29 @@
         }
         .badge.quality { background: rgba(30, 191, 106, 0.1); color: var(--accent-indigo); border-color: rgba(30, 191, 106, 0.2); }
         .badge.cached { background: rgba(52, 211, 153, 0.1); color: var(--accent-emerald); border-color: rgba(52, 211, 153, 0.2); }
-        .badge.seeds { background: rgba(46, 204, 113, 0.1); color: #2ecc71; border-color: rgba(46, 204, 113, 0.2); }
-        .badge.peers { background: rgba(231, 76, 60, 0.1); color: #e74c3c; border-color: rgba(231, 76, 60, 0.2); }
+        .badge.seeds { background: rgba(46, 204, 113, 0.1); color: var(--color-seeds); border-color: rgba(46, 204, 113, 0.2); }
+        .badge.peers { background: rgba(231, 76, 60, 0.1); color: var(--color-peers); border-color: rgba(231, 76, 60, 0.2); }
         
         /* ─── Responsive ─── */
+        @media (max-width: 768px) {
+            .hide-mobile { display: none !important; }
+            .admin-subtabs { flex-wrap: wrap; }
+            .admin-subtab { flex: 0 0 auto; min-width: 0; }
+            .cloud-tokens-grid { grid-template-columns: 1fr !important; }
+        }
+
         @media (max-width: 640px) {
             .topbar { padding: 12px 16px; }
             .container { padding: 16px 14px 40px; }
             .tabs { flex-direction: column; }
             .history-item { flex-direction: column; align-items: flex-start; gap: 10px; }
             .history-actions { width: 100%; }
-            .btn-sm { flex: 1; justify-content: center; }
+            .btn-sm { flex: 1; justify-content: center; min-height: 36px; }
             .user-name { display: none; }
             .add-form { padding: 20px; }
+            .announcement-close { width: 36px; height: 36px; }
+            .profile-metrics { grid-template-columns: 1fr; }
+            .cloud-grid-responsive { grid-template-columns: repeat(2, 1fr) !important; }
         }
 
         /* Custom Toggle Switch */
@@ -899,7 +913,7 @@
         input:checked + .toggle-slider:before {
             transform: translateX(20px);
             background-color: var(--accent-green);
-            box-shadow: 0 0 10px rgba(30, 191, 106, 0.5);
+            box-shadow: 0 0 6px rgba(30, 191, 106, 0.25);
         }
         .toggle-label {
             display: flex; align-items: center;
@@ -949,7 +963,6 @@
         .admin-subtab.active {
             background: rgba(30, 191, 106, 0.12); color: var(--accent-green);
             border: 1px solid rgba(30, 191, 106, 0.2);
-            box-shadow: 0 0 15px rgba(30, 191, 106, 0.1);
         }
         .admin-subtab svg { width: 14px; height: 14px; }
         .admin-subpanel { display: none; }
@@ -994,6 +1007,53 @@
             to { opacity: 1; transform: translateX(-50%) translateY(-4px); }
         }
 
+        /* ─── Reduced Motion ─── */
+        @media (prefers-reduced-motion: reduce) {
+            :root { --transition: none; }
+            .history-item,
+            .token-created-banner,
+            .toast { animation: none !important; opacity: 1; }
+            .modal-content { animation: none !important; opacity: 1; transform: none; }
+            .announcement-banner { transition: opacity 0.2s ease !important; }
+            .announcement-banner.hiding { transform: none; }
+            .tmdb-card, .search-card, .history-item { transition: none !important; }
+            .tmdb-card:hover, .search-card:hover, .history-item:hover { transform: none; }
+        }
+
+        /* ─── Focus Visible ─── */
+        .btn:focus-visible, .btn-sm:focus-visible, .btn-submit:focus-visible,
+        .tab-btn:focus-visible, .admin-subtab:focus-visible, .dropdown-item:focus-visible,
+        .btn-discord:focus-visible, .btn-logout:focus-visible, .btn-revoke:focus-visible,
+        .btn-copy:focus-visible, .btn-close:focus-visible, .announcement-close:focus-visible,
+        .toggle-container:focus-visible, .cloud-btn:focus-visible {
+            outline: 2px solid var(--accent-green);
+            outline-offset: 2px;
+        }
+
+        /* ─── Cloud Provider Buttons (moved from body) ─── */
+        .cloud-btn {
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            gap: 12px; padding: 20px 12px; border-radius: 12px; cursor: pointer;
+            transition: all 0.2s ease; border: 1px solid transparent;
+            background: rgba(255, 255, 255, 0.03); color: var(--text-secondary);
+            font-weight: 600; font-size: 13px;
+        }
+        .cloud-btn svg { width: 28px; height: 28px; opacity: 0.8; transition: all 0.2s ease; }
+        .cloud-btn:hover { transform: translateY(-3px); box-shadow: 0 8px 16px rgba(0,0,0,0.2); color: #fff; }
+        .cloud-btn:hover svg { opacity: 1; transform: scale(1.1); }
+        .cloud-btn.google:hover { background: rgba(25, 164, 99, 0.1); border-color: rgba(25, 164, 99, 0.3); }
+        .cloud-btn.google svg { color: #19a463; }
+        .cloud-btn.dropbox:hover { background: rgba(0, 97, 254, 0.1); border-color: rgba(0, 97, 254, 0.3); }
+        .cloud-btn.dropbox svg { color: #0061fe; }
+        .cloud-btn.onedrive:hover { background: rgba(0, 120, 212, 0.1); border-color: rgba(0, 120, 212, 0.3); }
+        .cloud-btn.onedrive svg { color: #0078d4; }
+        .cloud-btn.gofile:hover { background: rgba(86, 179, 255, 0.1); border-color: rgba(86, 179, 255, 0.3); }
+        .cloud-btn.gofile svg { color: #56b3ff; }
+        .cloud-btn.fichier:hover { background: rgba(230, 57, 70, 0.1); border-color: rgba(230, 57, 70, 0.3); }
+        .cloud-btn.fichier svg { color: #e63946; }
+        .cloud-btn.pixeldrain:hover { background: rgba(144, 238, 144, 0.1); border-color: rgba(144, 238, 144, 0.3); }
+        .cloud-btn.pixeldrain svg { color: #90EE90; }
+
         </style>
 </head>
 <body>
@@ -1001,7 +1061,7 @@
     <!-- Login Page -->
     <div class="login-page" id="login-page">
         <div class="login-card">
-            <div class="login-logo"><img src="/icon.png" width="48" height="48" style="vertical-align: middle;"></div>
+            <div class="login-logo"><img src="/icon.png" width="48" height="48" style="vertical-align: middle;" alt="Disbox"></div>
             <h1 class="login-title">Disbox</h1>
             <p class="login-subtitle">Sign in to manage your downloads</p>
             <a href="/auth/login" class="btn-discord" id="btn-login">
@@ -1016,7 +1076,7 @@
         <!-- Top Bar -->
         <div class="topbar">
             <div class="topbar-left">
-                <img src="/icon.png" width="28" height="28" style="vertical-align: middle;">
+                <img src="/icon.png" width="28" height="28" style="vertical-align: middle;" alt="Disbox">
                 <span class="topbar-brand">Disbox</span>
             </div>
             <div class="topbar-center hide-mobile" style="display: flex; gap: 16px; background: var(--bg-glass); padding: 6px 16px; border-radius: 8px; border: 1px solid var(--border-subtle); align-items: center;">
@@ -1032,7 +1092,7 @@
                 <div style="width: 1px; height: 24px; background: var(--border-subtle);"></div>
                 <div style="text-align: center;">
                     <div style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Bandwidth (Mo)</div>
-                    <div style="font-size: 14px; font-weight: 700; color: #ffb86c;"><span id="stats-bw-used">0</span> / <span id="stats-bw-limit">0</span> TB</div>
+                    <div style="font-size: 14px; font-weight: 700; color: var(--color-bandwidth);"><span id="stats-bw-used">0</span> / <span id="stats-bw-limit">0</span> TB</div>
                 </div>
             </div>
             <div class="topbar-right">
@@ -1046,36 +1106,36 @@
 
         <div class="container">
             <!-- Tabs -->
-            <div class="tabs">
-                <button class="tab-btn active" data-tab="history" id="tab-history">
+            <div class="tabs" role="tablist" aria-label="Dashboard navigation">
+                <button class="tab-btn active" data-tab="history" id="tab-history" role="tab" aria-selected="true" aria-controls="panel-history">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
                     My Downloads
                 </button>
-                <button class="tab-btn" data-tab="queue" id="tab-queue">
+                <button class="tab-btn" data-tab="queue" id="tab-queue" role="tab" aria-selected="false" aria-controls="panel-queue">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
                     Queue
                 </button>
 
-                <button class="tab-btn" data-tab="add" id="tab-add">
+                <button class="tab-btn" data-tab="add" id="tab-add" role="tab" aria-selected="false" aria-controls="panel-add">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
                     Add New
                 </button>
-                <button class="tab-btn" data-tab="search" id="tab-search">
+                <button class="tab-btn" data-tab="search" id="tab-search" role="tab" aria-selected="false" aria-controls="panel-search">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                     Search Torrents
                 </button>
-                <button class="tab-btn" data-tab="api" id="tab-api">
+                <button class="tab-btn" data-tab="api" id="tab-api" role="tab" aria-selected="false" aria-controls="panel-api">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
                     API Keys
                 </button>
-                <button class="tab-btn" data-tab="admin" id="tab-admin" style="display: none;">
+                <button class="tab-btn" data-tab="admin" id="tab-admin" style="display: none;" role="tab" aria-selected="false" aria-controls="panel-admin">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:20px; height:20px;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
                     Admin Panel
                 </button>
             </div>
 
             <!-- History Tab -->
-            <div class="tab-panel active" id="panel-history">
+            <div class="tab-panel active" id="panel-history" role="tabpanel" aria-labelledby="tab-history">
                 <div class="history-search-container" id="history-search-container" style="margin-bottom: 16px; display: none;">
                     <div style="position: relative; max-width: 100%;">
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; color: var(--text-muted); pointer-events: none;"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -1088,14 +1148,14 @@
                 </div>
                 <div class="history-list" id="history-list" style="display:none;"></div>
                 <div class="empty-state" id="history-empty" style="display:none;">
-                    <div class="empty-state-icon">📭</div>
+                    <div class="empty-state-icon"><svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color: var(--text-muted);"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg></div>
                     <p id="history-empty-title">No downloads yet</p>
                     <p class="hint" id="history-empty-hint">Add a torrent or web download to get started!</p>
                 </div>
             </div>
 
             <!-- Queue Tab -->
-            <div class="tab-panel" id="panel-queue">
+            <div class="tab-panel" id="panel-queue" role="tabpanel" aria-labelledby="tab-queue">
                 <div class="add-form" id="queue-admin-controls" style="display:none; max-width:100%; margin-bottom: 20px;">
                     <div style="display: flex; gap: 12px; max-width: 400px;">
                         <input type="text" id="queue-user-filter" class="form-input" placeholder="User ID to filter (leave empty for all)">
@@ -1109,14 +1169,14 @@
                 </div>
                 <div class="history-list" id="queue-list" style="display:none;"></div>
                 <div class="empty-state" id="queue-empty" style="display:none; flex-direction: column; align-items: center; justify-content: center; padding: 80px 20px; background: rgba(30, 191, 106, 0.02); border: 1px dashed rgba(30, 191, 106, 0.2); border-radius: var(--radius-lg); margin-top: 20px;">
-                    <div class="empty-state-icon" style="font-size: 48px; margin-bottom: 20px; opacity: 1; background: rgba(30, 191, 106, 0.1); width: 100px; height: 100px; display: flex; align-items: center; justify-content: center; border-radius: 50%; box-shadow: var(--shadow-glow);">✨</div>
+                    <div class="empty-state-icon" style="margin-bottom: 20px; opacity: 1; background: rgba(30, 191, 106, 0.1); width: 80px; height: 80px; display: flex; align-items: center; justify-content: center; border-radius: 50%; box-shadow: var(--shadow-glow); color: var(--accent-green);"><svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg></div>
                     <p style="font-family: var(--font-tech); font-size: 22px; color: var(--accent-green); text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 12px; font-weight: 400;">Queue is Empty</p>
                     <p class="hint" style="font-size: 14px; color: var(--text-secondary); max-width: 320px; text-align: center; line-height: 1.6;">Downloads will be queued automatically when slots are full.</p>
                 </div>
             </div>
 
             <!-- Search Tab -->
-            <div class="tab-panel" id="panel-search">
+            <div class="tab-panel" id="panel-search" role="tabpanel" aria-labelledby="tab-search">
                 <div class="add-form" style="max-width: 100%;">
                     <h2>Search Torrents</h2>
                     <p class="add-form-subtitle">Search by Movie, Series, or Anime name</p>
@@ -1140,7 +1200,7 @@
                     </div>
 
                     <div class="empty-state" id="search-empty" style="display:none; padding: 40px;">
-                        <div class="empty-state-icon">🔍</div>
+                        <div class="empty-state-icon"><svg xmlns="http://www.w3.org/2000/svg" width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color: var(--text-muted);"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></div>
                         <p id="search-empty-msg">No results found.</p>
                     </div>
 
@@ -1149,7 +1209,7 @@
             </div>
 
             <!-- Torrent Modal -->
-            <div class="modal" id="torrent-modal">
+            <div class="modal" id="torrent-modal" role="dialog" aria-modal="true" aria-label="Stream results">
                 <div class="modal-content" style="max-width: 800px; max-height: 90vh; display: flex; flex-direction: column;">
                     <button class="btn-close" onclick="document.getElementById('torrent-modal').style.display='none'">
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
@@ -1177,7 +1237,7 @@
                             <span>Searching AIOStreams...</span>
                         </div>
                         <div class="empty-state" id="torrent-empty" style="display:none;">
-                            <div class="empty-state-icon">🔍</div>
+                            <div class="empty-state-icon"><svg xmlns="http://www.w3.org/2000/svg" width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color: var(--text-muted);"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></div>
                             <p id="torrent-empty-msg">No streams found.</p>
                         </div>
                         <div class="search-grid" id="search-results" style="margin-top:0;"></div>
@@ -1255,7 +1315,7 @@
             </div>
 
             <!-- Add Tab -->
-            <div class="tab-panel" id="panel-add">
+            <div class="tab-panel" id="panel-add" role="tabpanel" aria-labelledby="tab-add">
                 <div class="add-form">
                     <h2>Add a Download</h2>
                     <p class="add-form-subtitle">Paste a magnet link, a direct download URL, or upload a .torrent file</p>
@@ -1324,7 +1384,7 @@
                                         font-family: inherit;
                                         transition: var(--transition);
                                         margin-left: 8px;
-                                    ">✕ Remove</button>
+                                    ">Remove</button>
                                 </div>
                             </div>
                         </div>
@@ -1341,7 +1401,7 @@
         </div>
 
             <!-- API Keys Tab -->
-            <div class="tab-panel" id="panel-api">
+            <div class="tab-panel" id="panel-api" role="tabpanel" aria-labelledby="tab-api">
                 <div class="add-form">
                     <h2>API Keys</h2>
                     <p class="add-form-subtitle">Generate tokens to interact with Disbox via the public REST API.</p>
@@ -1369,14 +1429,14 @@
                     </div>
                     <div class="token-list" id="token-list"></div>
                     <div class="empty-state" id="tokens-empty" style="display:none; padding: 30px;">
-                        <div class="empty-state-icon">🔑</div>
+                        <div class="empty-state-icon"><svg xmlns="http://www.w3.org/2000/svg" width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color: var(--text-muted);"><path d="M2 18v3c0 .6.4 1 1 1h4v-3h3v-3h2l1.4-1.4a6.5 6.5 0 1 0-4-4Z"/><circle cx="16.5" cy="7.5" r=".5"/></svg></div>
                         <p>No active API keys</p>
                     </div>
                 </div>
             </div>
 
             <!-- Admin Tab -->
-            <div class="tab-panel" id="panel-admin">
+            <div class="tab-panel" id="panel-admin" role="tabpanel" aria-labelledby="tab-admin">
                 <!-- Admin Sub-tabs -->
                 <div class="admin-subtabs">
                     <button class="admin-subtab active" data-admin-tab="users">
@@ -1422,7 +1482,7 @@
                 <div class="admin-subpanel active" id="admin-panel-users">
                     <div class="add-form">
                         <div class="admin-section-header">
-                            <div class="admin-section-icon">👥</div>
+                            <div class="admin-section-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
                             <div>
                                 <div class="admin-section-title">Access Control</div>
                                 <div class="admin-section-desc">Manage who can access the bot</div>
@@ -1436,7 +1496,7 @@
                                     <div class="toggle-desc">Only users in the whitelist can access the bot</div>
                                 </div>
                                 <span class="toggle-switch">
-                                    <input type="checkbox" id="whitelist-toggle">
+                                    <input type="checkbox" id="whitelist-toggle" aria-label="Toggle whitelist mode">
                                     <span class="toggle-slider"></span>
                                 </span>
                             </label>
@@ -1447,7 +1507,7 @@
                                     <div class="toggle-desc">Users in the blacklist are blocked from accessing the bot</div>
                                 </div>
                                 <span class="toggle-switch">
-                                    <input type="checkbox" id="blacklist-toggle">
+                                    <input type="checkbox" id="blacklist-toggle" aria-label="Toggle blacklist mode">
                                     <span class="toggle-slider"></span>
                                 </span>
                             </label>
@@ -1491,7 +1551,7 @@
                 <div class="admin-subpanel" id="admin-panel-settings">
                     <div class="add-form">
                         <div class="admin-section-header">
-                            <div class="admin-section-icon">⚙️</div>
+                            <div class="admin-section-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></div>
                             <div style="flex: 1;">
                                 <div class="admin-section-title">Global Settings</div>
                                 <div class="admin-section-desc">Configure bot behavior and API settings</div>
@@ -1505,7 +1565,7 @@
                                     <div class="toggle-desc">Only cached torrents are downloaded. Web downloads are disabled.</div>
                                 </div>
                                 <span class="toggle-switch">
-                                    <input type="checkbox" id="cache-toggle">
+                                    <input type="checkbox" id="cache-toggle" aria-label="Toggle cache only mode">
                                     <span class="toggle-slider"></span>
                                 </span>
                             </label>
@@ -1516,7 +1576,7 @@
                                     <div class="toggle-desc">Allow public use of API without session</div>
                                 </div>
                                 <span class="toggle-switch">
-                                    <input type="checkbox" id="public-api-toggle">
+                                    <input type="checkbox" id="public-api-toggle" aria-label="Toggle public API">
                                     <span class="toggle-slider"></span>
                                 </span>
                             </label>
@@ -1527,7 +1587,7 @@
                                     <div class="toggle-desc">Allow users to search TMDB and AIOStreams</div>
                                 </div>
                                 <span class="toggle-switch">
-                                    <input type="checkbox" id="search-enabled-toggle">
+                                    <input type="checkbox" id="search-enabled-toggle" aria-label="Toggle torrent search">
                                     <span class="toggle-slider"></span>
                                 </span>
                             </label>
@@ -1537,7 +1597,7 @@
                                     <div class="toggle-desc">When a user deletes a download, remove it from TorBox as well</div>
                                 </div>
                                 <span class="toggle-switch">
-                                    <input type="checkbox" id="torbox-delete-toggle">
+                                    <input type="checkbox" id="torbox-delete-toggle" aria-label="Toggle remove from TorBox on delete">
                                     <span class="toggle-slider"></span>
                                 </span>
                             </label>
@@ -1585,7 +1645,7 @@
                                     <div class="toggle-desc">Must be changed via <code>ADMIN_API_ENABLED</code> in the <code>.env</code> file.</div>
                                 </div>
                                 <span class="toggle-switch">
-                                    <input type="checkbox" id="admin-api-toggle" disabled>
+                                    <input type="checkbox" id="admin-api-toggle" disabled aria-label="Toggle admin API">
                                     <span class="toggle-slider"></span>
                                 </span>
                             </label>
@@ -1597,7 +1657,7 @@
                                     <div class="toggle-title" style="display: flex; align-items: center; gap: 8px;">
                                         Proxy Mode
                                         <span class="badge" style="background: rgba(251, 113, 133, 0.1); color: var(--accent-rose); border: none; font-size: 10px;">ENV ONLY</span>
-                                        <span class="badge" style="background: rgba(251, 113, 133, 0.1); color: var(--accent-rose); border: none; font-size: 10px;">⚠️ DANGEROUS</span>
+                                        <span class="badge" style="background: rgba(251, 113, 133, 0.1); color: var(--accent-rose); border: none; font-size: 10px;">DANGEROUS</span>
                                     </div>
                                     <div class="toggle-desc">
                                         When enabled, the server proxies the data. When disabled, users are redirected to the CDN (saves server bandwidth but <span style="color: var(--accent-rose); font-weight: bold;">LEAKS YOUR TORBOX API KEY</span>).
@@ -1605,7 +1665,7 @@
                                     </div>
                                 </div>
                                 <span class="toggle-switch">
-                                    <input type="checkbox" id="proxy-mode-toggle" disabled>
+                                    <input type="checkbox" id="proxy-mode-toggle" disabled aria-label="Toggle proxy mode">
                                     <span class="toggle-slider"></span>
                                 </span>
                             </label>
@@ -1619,7 +1679,7 @@
                 <div class="admin-subpanel" id="admin-panel-integrations">
                     <div class="add-form">
                         <div class="admin-section-header">
-                            <div class="admin-section-icon">🔑</div>
+                            <div class="admin-section-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg></div>
                             <div>
                                 <div class="admin-section-title">Torbox API Keys</div>
                                 <div class="admin-section-desc">Manage Torbox accounts used for downloading</div>
@@ -1643,7 +1703,7 @@
 
                     <div class="add-form" style="margin-top: 20px;">
                         <div class="admin-section-header">
-                            <div class="admin-section-icon">🔌</div>
+                            <div class="admin-section-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v6"/><path d="M17 2v4"/><path d="M7 2v4"/><path d="M5 8h14a2 2 0 0 1 2 2v3a7 7 0 0 1-7 7v2H10v-2a7 7 0 0 1-7-7v-3a2 2 0 0 1 2-2Z"/></svg></div>
                             <div>
                                 <div class="admin-section-title">AIOStreams Config</div>
                                 <div class="admin-section-desc">Configure your AIOStreams search integration</div>
@@ -1678,7 +1738,7 @@
                 <div class="admin-subpanel" id="admin-panel-admin-history">
                     <div class="add-form">
                         <div class="admin-section-header">
-                            <div class="admin-section-icon">📊</div>
+                            <div class="admin-section-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg></div>
                             <div>
                                 <div class="admin-section-title">Global History</div>
                                 <div class="admin-section-desc">Recent downloads across all users</div>
@@ -1691,7 +1751,7 @@
                         </div>
                         <div class="history-list" id="admin-list" style="display:none;"></div>
                         <div class="empty-state" id="admin-empty" style="display:none;">
-                            <div class="empty-state-icon">📭</div>
+                            <div class="empty-state-icon"><svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color: var(--text-muted);"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg></div>
                             <p>No downloads across all users</p>
                         </div>
                     </div>
@@ -1761,23 +1821,49 @@
                 dashboard.classList.remove('active');
             });
 
-        // ─── Tabs ───
-        document.querySelectorAll('.tab-btn').forEach(btn => {
+        // ─── Tabs & Modals Navigation ───
+        const tabBtns = Array.from(document.querySelectorAll('.tab-btn'));
+        tabBtns.forEach((btn, idx) => {
             btn.addEventListener('click', () => {
-                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                tabBtns.forEach(b => { b.classList.remove('active'); b.setAttribute('aria-selected', 'false'); });
                 document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
                 btn.classList.add('active');
+                btn.setAttribute('aria-selected', 'true');
                 document.getElementById('panel-' + btn.dataset.tab).classList.add('active');
                 if (btn.dataset.tab === 'queue') {
                     loadQueue();
                 }
             });
+            btn.addEventListener('keydown', (e) => {
+                let nextIdx = null;
+                if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+                    nextIdx = (idx + 1) % tabBtns.length;
+                } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+                    nextIdx = (idx - 1 + tabBtns.length) % tabBtns.length;
+                }
+                if (nextIdx !== null && tabBtns[nextIdx]) {
+                    e.preventDefault();
+                    tabBtns[nextIdx].focus();
+                    tabBtns[nextIdx].click();
+                }
+            });
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                ['torrent-modal', 'user-profile-modal', 'cloud-modal'].forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el && el.style.display !== 'none') {
+                        el.style.display = 'none';
+                    }
+                });
+            }
         });
 
         const userBadgeBtn = document.getElementById('user-badge-btn');
         if (userBadgeBtn) {
             userBadgeBtn.addEventListener('click', () => {
-                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                tabBtns.forEach(b => { b.classList.remove('active'); b.setAttribute('aria-selected', 'false'); });
                 document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
                 document.getElementById('panel-profile').classList.add('active');
                 loadUserProfile();
@@ -1841,6 +1927,12 @@
         // ─── Progress Polling ───
         let progressInterval = null;
 
+        function formatBytes(bytes) {
+            if (!bytes || bytes <= 0) return '0 B';
+            const k = 1024, sizes = ['B', 'KB', 'MB', 'GB', 'TB'], i = Math.floor(Math.log(bytes) / Math.log(k));
+            if (i >= sizes.length) return parseFloat((bytes / Math.pow(k, sizes.length - 1)).toFixed(2)) + ' ' + sizes[sizes.length - 1];
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
         function formatSpeed(bytes) {
             if (!bytes || bytes <= 0) return '0 B/s';
             const k = 1024, sizes = ['B/s', 'KB/s', 'MB/s', 'GB/s', 'TB/s'], i = Math.floor(Math.log(bytes) / Math.log(k));
@@ -1879,7 +1971,9 @@
                                 const stats = document.getElementById('progress-stats-' + token);
                                 
                                 const pct = data.Progress * 100;
-                                bar.style.width = pct + '%';
+                                bar.style.width = '100%';
+                                bar.style.transformOrigin = 'left';
+                                bar.style.transform = 'scaleX(' + (pct / 100) + ')';
                                 let stateText = data.DownloadState || 'Active';
                                 let statsText = pct.toFixed(1) + '%';
                                 
@@ -1951,7 +2045,7 @@
                 const el = document.createElement('div');
                 el.className = 'history-item';
                 el.style.animationDelay = (i * 0.04) + 's';
-                const icon = item.type === 'torrent' ? '🌊' : '🌐';
+                const icon = item.type === 'torrent' ? '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>' : '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>';
                 const typeLabel = item.type === 'torrent' ? 'Torrent' : 'Web DL';
                 const date = new Date(item.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
                 // Add a cache buster to bypass Cloudflare/browser redirect caches
@@ -1972,7 +2066,7 @@
                                 <span id="progress-stats-${item.token}">0%</span>
                             </div>
                             <div style="width: 100%; background: var(--bg-input); border-radius: 4px; height: 6px; overflow: hidden; border: 1px solid var(--border-subtle);">
-                                <div id="progress-bar-${item.token}" style="width: 0%; height: 100%; background: var(--accent-emerald); transition: width 0.5s ease; box-shadow: 0 0 10px var(--accent-emerald);"></div>
+                                <div id="progress-bar-${item.token}" style="width: 100%; transform: scaleX(0); transform-origin: left; height: 100%; background: var(--accent-emerald); transition: transform 0.5s ease; box-shadow: 0 0 10px var(--accent-emerald);"></div>
                             </div>
                         </div>
                     </div>
@@ -2022,7 +2116,7 @@
                             Export Magnet
                         </button>
                         ` : ''}
-                        <button class="dropdown-item" onclick="removeDownload('${item.token}', this)" style="color: #ef4444;">
+                        <button class="dropdown-item" onclick="removeDownload('${item.token}', this)" style="color: var(--color-danger);">
                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
                             Delete
                         </button>
@@ -2130,8 +2224,8 @@ function loadHistory() {
                 .then(r => r.json())
                 .then(res => {
                     if(!res.success) return;
-                    document.getElementById('profile-total-dl').textContent = formatFileSizeSimple(res.data.total_downloaded);
-                    document.getElementById('profile-monthly-dl').textContent = formatFileSizeSimple(res.data.monthly_downloaded);
+                    document.getElementById('profile-total-dl').textContent = formatBytes(res.data.total_downloaded);
+                    document.getElementById('profile-monthly-dl').textContent = formatBytes(res.data.monthly_downloaded);
                     document.getElementById('input-ftp-host').value = res.data.ftp_host || '';
                     document.getElementById('input-ftp-user').value = res.data.ftp_username || '';
                     if (res.data.has_ftp_password) {
@@ -2616,7 +2710,7 @@ function loadHistory() {
                         const el = document.createElement('div');
                         el.className = 'history-item';
                         el.style.animationDelay = (i * 0.04) + 's';
-                        const icon = item.type === 'torrent' ? '🌊' : '🌐';
+                        const icon = item.type === 'torrent' ? '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>' : '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>';
                         const typeLabel = item.type === 'torrent' ? 'Torrent' : 'Web DL';
                         const date = new Date(item.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
                         const cacheBuster = '?v=' + Date.now();
@@ -2675,7 +2769,7 @@ function loadHistory() {
                                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
                                         </button>
                                         <button class="danger" onclick="removeDownload('${item.token}', this)" data-tooltip="Delete">
-                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" width="40" height="40" fill="#ef4444" stroke="#ef4444"><path d="m20,39C9.52,39,1,30.48,1,20S9.52,1,20,1s19,8.52,19,19-8.52,19-19,19Zm0-36C10.63,3,3,10.63,3,20s7.63,17,17,17,17-7.63,17-17S29.37,3,20,3Z"/><path d="m26.67,30.24c-.92,0-1.83-.35-2.53-1.04l-4.14-4.14-4.14,4.14c-1.39,1.39-3.66,1.39-5.05,0s-1.39-3.66,0-5.05l4.14-4.14-4.14-4.14c-1.39-1.39-1.39-3.66,0-5.05s3.66-1.39,5.05,0l4.14,4.14,4.14-4.14c1.39-1.39,3.66-1.39,5.05,0s1.39,3.66,0,5.05l-4.14,4.14,4.14,4.14c1.39,1.39,1.39,3.66,0,5.05-.7.7-1.61,1.04-2.53,1.04Zm-6.67-7.6c.26,0,.51.1.71.29l4.85,4.85c.61.61,1.61.61,2.22,0,.61-.61.61-1.61,0-2.22l-4.85-4.85c-.39-.39-.39-1.02,0-1.41l4.85-4.85c.61-.61.61-1.61,0-2.22-.61-.61-1.61-.61-2.22,0l-4.85,4.85c-.39.39-1.02.39-1.41,0l-4.85-4.85c-.61-.61-1.61-.61-2.22,0-.61.61-.61,1.61,0,2.22l4.85,4.85c.39.39.39,1.02,0,1.41l-4.85,4.85c-.61.61-.61,1.61,0,2.22.61.61,1.61.61,2.22,0l4.85-4.85c.2-.2.45-.29.71-.29Z"/></svg>
+                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" width="40" height="40" fill="var(--color-danger)" stroke="var(--color-danger)"><path d="m20,39C9.52,39,1,30.48,1,20S9.52,1,20,1s19,8.52,19,19-8.52,19-19,19Zm0-36C10.63,3,3,10.63,3,20s7.63,17,17,17,17-7.63,17-17S29.37,3,20,3Z"/><path d="m26.67,30.24c-.92,0-1.83-.35-2.53-1.04l-4.14-4.14-4.14,4.14c-1.39,1.39-3.66,1.39-5.05,0s-1.39-3.66,0-5.05l4.14-4.14-4.14-4.14c-1.39-1.39-1.39-3.66,0-5.05s3.66-1.39,5.05,0l4.14,4.14,4.14-4.14c1.39-1.39,3.66-1.39,5.05,0s1.39,3.66,0,5.05l-4.14,4.14,4.14,4.14c1.39,1.39,1.39,3.66,0,5.05-.7.7-1.61,1.04-2.53,1.04Zm-6.67-7.6c.26,0,.51.1.71.29l4.85,4.85c.61.61,1.61.61,2.22,0,.61-.61.61-1.61,0-2.22l-4.85-4.85c-.39-.39-.39-1.02,0-1.41l4.85-4.85c.61-.61.61-1.61,0-2.22-.61-.61-1.61-.61-2.22,0l-4.85,4.85c-.39.39-1.02.39-1.41,0l-4.85-4.85c-.61-.61-1.61-.61-2.22,0-.61.61-.61,1.61,0,2.22l4.85,4.85c.39.39.39,1.02,0,1.41l-4.85,4.85c-.61.61-.61,1.61,0,2.22.61.61,1.61.61,2.22,0l4.85-4.85c.2-.2.45-.29.71-.29Z"/></svg>
                                         </button>
                                     </div>
                                 </div>
@@ -2787,12 +2881,7 @@ function loadHistory() {
         const selectedFileSize = document.getElementById('selected-file-size');
         const clearFileBtn = document.getElementById('clear-file-btn');
 
-        function formatFileSizeSimple(bytes) {
-            if (bytes === 0) return '0 B';
-            const k = 1024, sizes = ['B', 'KB', 'MB', 'GB'];
-            const i = Math.floor(Math.log(bytes) / Math.log(k));
-            return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
-        }
+        // formatFileSizeSimple removed; using consolidated formatBytes
 
         function handleFileSelect(file) {
             if (!file) return;
@@ -2811,7 +2900,7 @@ function loadHistory() {
             // Clear the link input since file takes priority
             inputLink.value = '';
             typeIndicator.className = 'type-indicator torrent';
-            typeIndicator.innerHTML = '<span>📄 .torrent File Selected</span>';
+            typeIndicator.innerHTML = '<span>.torrent File Selected</span>';
             btnSubmit.disabled = false;
         }
 
@@ -2883,11 +2972,11 @@ function loadHistory() {
             typeIndicator.className = 'type-indicator';
             if (val.startsWith('magnet:')) {
                 typeIndicator.classList.add('torrent');
-                typeIndicator.innerHTML = '<span>🌊 Magnet Link Detected</span>';
+                typeIndicator.innerHTML = '<span>Magnet Link Detected</span>';
                 btnSubmit.disabled = false;
             } else if (val.startsWith('http://') || val.startsWith('https://')) {
                 typeIndicator.classList.add('webdl');
-                typeIndicator.innerHTML = '<span>🌐 Web Download Link Detected</span>';
+                typeIndicator.innerHTML = '<span>Web Download Link Detected</span>';
                 btnSubmit.disabled = false;
             } else {
                 typeIndicator.classList.add('unknown');
@@ -2904,11 +2993,7 @@ function loadHistory() {
         const searchEmpty = document.getElementById('search-empty');
         const searchEmptyMsg = document.getElementById('search-empty-msg');
 
-        function formatBytes(bytes) {
-            if (bytes === 0) return '0 B';
-            const k = 1024, sizes = ['B', 'KB', 'MB', 'GB', 'TB'], i = Math.floor(Math.log(bytes) / Math.log(k));
-            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-        }
+        // formatBytes consolidated at top of script
 
 
         btnSearch.addEventListener('click', () => {
@@ -3058,8 +3143,8 @@ function loadHistory() {
                     if (!qualityStr) qualityStr = 'Unknown Quality';
 
                     const isCached = t.cached === true;
-                    const cachedBadge = isCached ? '<span class="badge cached">⚡ Cached</span>' : '<span class="badge">⏳ Not Cached</span>';
-                    const addonBadge = t.addon ? `<span class="badge quality" style="background: rgba(30, 191, 106, 0.15); color: var(--accent-indigo);">🔌 ${escapeHtml(t.addon)}</span>` : '';
+                    const cachedBadge = isCached ? '<span class="badge cached">Cached</span>' : '<span class="badge">Not Cached</span>';
+                    const addonBadge = t.addon ? `<span class="badge quality" style="background: rgba(30, 191, 106, 0.15); color: var(--accent-indigo);">${escapeHtml(t.addon)}</span>` : '';
 
                     card.innerHTML = `
                         <div class="search-card-title" title="${escapeHtml(t.filename || titleStr)}">${escapeHtml(titleStr)}</div>
@@ -3067,8 +3152,8 @@ function loadHistory() {
                             ${addonBadge}
                             <span class="badge quality">${escapeHtml(qualityStr)}</span>
                             ${cachedBadge}
-                            <span class="badge">📦 ${formatBytes(t.size || 0)}</span>
-                            <span class="badge seeds">🌱 ${t.seeders || 0}</span>
+                            <span class="badge">${formatBytes(t.size || 0)}</span>
+                            <span class="badge seeds">Seeds: ${t.seeders || 0}</span>
                         </div>
                         <div style="flex:1;"></div>
                         <button class="btn-submit" style="width: 100%; padding: 10px; margin-top: 8px;" onclick="addTorrentFromSearch('', '${escapeHtml(t.infoHash || '')}', this)">
@@ -3189,21 +3274,21 @@ function loadHistory() {
 
             if (errors.length === 0) {
                 toast.className = 'toast success';
-                toast.innerHTML = `✅ Successfully added ${successes} download(s)!`;
+                toast.innerHTML = `Successfully added ${successes} download(s)!`;
                 inputLink.value = '';
                 clearFileSelection();
                 typeIndicator.className = 'type-indicator unknown';
                 typeIndicator.innerHTML = 'Paste a link to detect type';
             } else if (successes > 0) {
                 toast.className = 'toast success';
-                toast.innerHTML = `✅ Added ${successes} download(s). ❌ Failed ${errors.length}.<br><span style="font-size:11px">${escapeHtml(errors[0])}</span>`;
+                toast.innerHTML = `Added ${successes} download(s). Failed ${errors.length}.<br><span style="font-size:11px">${escapeHtml(errors[0])}</span>`;
                 inputLink.value = '';
                 clearFileSelection();
                 typeIndicator.className = 'type-indicator unknown';
                 typeIndicator.innerHTML = 'Paste a link to detect type';
             } else {
                 toast.className = 'toast error';
-                toast.innerHTML = `❌ Failed to add: ${escapeHtml(errors[0])}`;
+                toast.innerHTML = `Failed to add: ${escapeHtml(errors[0])}`;
             }
 
             loadHistory();
@@ -3301,7 +3386,7 @@ function loadHistory() {
                 inputTokenName.value = '';
                 newTokenContainer.innerHTML = `
                     <div class="token-created-banner">
-                        <h3>✅ Token Generated Successfully</h3>
+                        <h3>Token Generated Successfully</h3>
                         <p>Copy your new API token below. <strong>You will not be able to see it again!</strong></p>
                         <div class="token-created-value" id="new-token-val">${escapeHtml(res.data.token)}</div>
                         <button class="btn-copy" onclick="navigator.clipboard.writeText(document.getElementById('new-token-val').textContent); this.textContent='Copied!'; setTimeout(()=>this.textContent='Copy to Clipboard', 2000);">Copy to Clipboard</button>
@@ -3332,11 +3417,7 @@ function loadHistory() {
         };
 
         // ─── User Profile Modal ───
-        function formatBytes(bytes) {
-            if (bytes === 0) return '0 B';
-            const k = 1024, sizes = ['B', 'KB', 'MB', 'GB', 'TB'], i = Math.floor(Math.log(bytes) / Math.log(k));
-            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-        }
+        // formatBytes consolidated at top of script
 
         window.openUserProfile = function(discordId) {
             if (!discordId) return;
@@ -3630,10 +3711,10 @@ function loadHistory() {
                     const isFirst = index === 0;
                     const isLast = index === data.data.length - 1;
 
-                    let icon = '⏳';
-                    if (item.type === 'torrent') icon = '🌊';
-                    else if (item.type === 'webdl') icon = '🌐';
-                    else if (item.type === 'ftp') icon = '📤';
+                    let icon = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>';
+                    if (item.type === 'torrent') icon = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';
+                    else if (item.type === 'webdl') icon = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>';
+                    else if (item.type === 'ftp') icon = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>';
 
                     row.innerHTML = `
                         <div class="history-icon ${item.type}" style="opacity: 0.7;">${icon}</div>
@@ -3655,16 +3736,16 @@ function loadHistory() {
                                     <span>${(item.progress * 100).toFixed(1)}% ${item.speed ? ' • ' + formatSpeed(item.speed) : ''} ${item.eta ? ' • ' + formatETA(item.eta) : ''}</span>
                                 </div>
                                 <div style="width: 100%; background: var(--bg-input); border-radius: 4px; height: 6px; overflow: hidden; border: 1px solid var(--border-subtle);">
-                                    <div style="width: ${item.progress * 100}%; height: 100%; background: ${item.status === 'error' ? 'var(--accent-rose)' : 'var(--accent-emerald)'}; transition: width 0.5s ease; box-shadow: 0 0 10px ${item.status === 'error' ? 'var(--accent-rose)' : 'var(--accent-emerald)'};"></div>
+                                    <div style="width: 100%; transform: scaleX(${item.progress}); transform-origin: left; height: 100%; background: ${item.status === 'error' ? 'var(--accent-rose)' : 'var(--accent-emerald)'}; transition: transform 0.5s ease; box-shadow: 0 0 10px ${item.status === 'error' ? 'var(--accent-rose)' : 'var(--accent-emerald)'};"></div>
                                 </div>
                             </div>
                             ` : ''}
                         </div>
                         <div class="history-actions" style="display:flex; gap:4px; margin-left:16px;">
-                            ${isFirst ? '' : `<button class="btn-sm" style="background:rgba(255,255,255,0.05); color:var(--text-secondary); border:1px solid var(--border-subtle); cursor:pointer;" onclick="moveQueueItem('${item.id}', 0)" title="Move to Top">⬆️</button>`}
-                            ${isFirst ? '' : `<button class="btn-sm" style="background:rgba(255,255,255,0.05); color:var(--text-secondary); border:1px solid var(--border-subtle); cursor:pointer;" onclick="moveQueueItem('${item.id}', ${index - 1})" title="Move Up">🔼</button>`}
-                            ${isLast ? '' : `<button class="btn-sm" style="background:rgba(255,255,255,0.05); color:var(--text-secondary); border:1px solid var(--border-subtle); cursor:pointer;" onclick="moveQueueItem('${item.id}', ${index + 1})" title="Move Down">🔽</button>`}
-                            <button class="btn-sm" style="background:rgba(239,68,68,0.1); color:#ef4444; border:1px solid rgba(239,68,68,0.2); cursor:pointer;" onclick="removeQueueItem('${item.id}')" title="Remove">❌</button>
+                            ${isFirst ? '' : `<button class="btn-sm" style="background:rgba(255,255,255,0.05); color:var(--text-secondary); border:1px solid var(--border-subtle); cursor:pointer;" onclick="moveQueueItem('${item.id}', 0)" title="Move to Top"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 11 12 6 7 11"/><polyline points="17 18 12 13 7 18"/></svg></button>`}
+                            ${isFirst ? '' : `<button class="btn-sm" style="background:rgba(255,255,255,0.05); color:var(--text-secondary); border:1px solid var(--border-subtle); cursor:pointer;" onclick="moveQueueItem('${item.id}', ${index - 1})" title="Move Up"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg></button>`}
+                            ${isLast ? '' : `<button class="btn-sm" style="background:rgba(255,255,255,0.05); color:var(--text-secondary); border:1px solid var(--border-subtle); cursor:pointer;" onclick="moveQueueItem('${item.id}', ${index + 1})" title="Move Down"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></button>`}
+                            <button class="btn-sm" style="background:rgba(239,68,68,0.1); color:var(--color-danger); border:1px solid rgba(239,68,68,0.2); cursor:pointer;" onclick="removeQueueItem('${item.id}')" title="Remove"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
                         </div>
                     `;
                     list.appendChild(row);
@@ -3732,7 +3813,7 @@ function loadHistory() {
     </script>
 
     <!-- User Profile Modal -->
-    <div id="user-profile-modal" class="modal" style="display: none; align-items: center; justify-content: center; z-index: 1000; padding: 20px;">
+    <div id="user-profile-modal" class="modal" role="dialog" aria-modal="true" aria-label="User Profile" style="display: none; align-items: center; justify-content: center; z-index: 1000; padding: 20px;">
         <div class="modal-content" style="max-height: 90vh; display: flex; flex-direction: column;">
             <button class="btn-close" onclick="document.getElementById('user-profile-modal').style.display='none'">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
@@ -3787,50 +3868,19 @@ function loadHistory() {
         </div>
     </div>
     <!-- Cloud Integration Modal -->
-    <div id="cloud-modal" class="modal" style="display: none; align-items: center; justify-content: center; z-index: 1000; padding: 20px;">
+    <div id="cloud-modal" class="modal" role="dialog" aria-modal="true" aria-label="Cloud Integration" style="display: none; align-items: center; justify-content: center; z-index: 1000; padding: 20px;">
         <div class="modal-content" style="max-height: 90vh; display: flex; flex-direction: column; width: 450px; background: rgba(20, 20, 25, 0.85); backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; box-shadow: 0 24px 48px rgba(0,0,0,0.4);">
             <button class="btn-close" onclick="document.getElementById('cloud-modal').style.display='none'" style="position: absolute; top: 16px; right: 16px; background: rgba(255,255,255,0.1); border-radius: 50%; padding: 6px; color: #fff; cursor: pointer; border: none;">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 18px; height: 18px;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
             </button>
             
             <div style="padding: 32px 32px 24px;">
-                <h2 style="margin-bottom: 8px; font-size: 22px; font-weight: 700; background: linear-gradient(135deg, #fff, #aaa); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">Send to Cloud</h2>
+                <h2 style="margin-bottom: 8px; font-size: 22px; font-weight: 700; color: var(--text-primary);">Send to Cloud</h2>
                 <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 24px; line-height: 1.5;">Select a configured cloud provider to instantly transfer this file directly to your drive.</p>
                 
                 <input type="hidden" id="cloud-target-token" value="">
                 
-                <style>
-                    .cloud-btn {
-                        display: flex; flex-direction: column; align-items: center; justify-content: center;
-                        gap: 12px; padding: 20px 12px; border-radius: 12px; cursor: pointer;
-                        transition: all 0.2s ease; border: 1px solid transparent;
-                        background: rgba(255, 255, 255, 0.03); color: var(--text-secondary);
-                        font-weight: 600; font-size: 13px;
-                    }
-                    .cloud-btn svg { width: 28px; height: 28px; opacity: 0.8; transition: all 0.2s ease; }
-                    .cloud-btn:hover { transform: translateY(-3px); box-shadow: 0 8px 16px rgba(0,0,0,0.2); color: #fff; }
-                    .cloud-btn:hover svg { opacity: 1; transform: scale(1.1); }
-                    
-                    .cloud-btn.google:hover { background: rgba(25, 164, 99, 0.1); border-color: rgba(25, 164, 99, 0.3); }
-                    .cloud-btn.google svg { color: #19a463; }
-                    
-                    .cloud-btn.dropbox:hover { background: rgba(0, 97, 254, 0.1); border-color: rgba(0, 97, 254, 0.3); }
-                    .cloud-btn.dropbox svg { color: #0061fe; }
-                    
-                    .cloud-btn.onedrive:hover { background: rgba(0, 120, 212, 0.1); border-color: rgba(0, 120, 212, 0.3); }
-                    .cloud-btn.onedrive svg { color: #0078d4; }
-                    
-                    .cloud-btn.gofile:hover { background: rgba(86, 179, 255, 0.1); border-color: rgba(86, 179, 255, 0.3); }
-                    .cloud-btn.gofile svg { color: #56b3ff; }
-                    
-                    .cloud-btn.fichier:hover { background: rgba(230, 57, 70, 0.1); border-color: rgba(230, 57, 70, 0.3); }
-                    .cloud-btn.fichier svg { color: #e63946; }
-                    
-                    .cloud-btn.pixeldrain:hover { background: rgba(144, 238, 144, 0.1); border-color: rgba(144, 238, 144, 0.3); }
-                    .cloud-btn.pixeldrain svg { color: #90EE90; }
-                </style>
-                
-                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;">
+                <div class="cloud-grid-responsive" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;">
                     <div class="cloud-btn google" onclick="sendToCloud('googledrive', this)">
                         <svg id="Layer_1" data-name="Layer 1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" width="32" height="32" fill="currentColor" stroke="currentColor"><defs><style>
       .cls-1 {

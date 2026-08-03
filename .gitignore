@@ -28,3 +28,8 @@ go.work
 *.db
 *.db-shm
 *.db-wal
+
+# Agent and tool specific files
+.agents/
+.impeccable/
+skills-lock.json
