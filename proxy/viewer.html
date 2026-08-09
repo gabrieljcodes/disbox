@@ -14,14 +14,17 @@
         :root {
             --bg-primary: #0d1117;
             --bg-secondary: #161b22;
+            --bg-navbar: rgba(13, 17, 23, 0.95);
+            --bg-controls: rgba(13, 17, 23, 0.85);
             --bg-card: rgba(22, 27, 34, 0.8);
             --bg-card-hover: rgba(30, 37, 46, 0.9);
-            --border-subtle: rgba(255, 255, 255, 0.08);
-            --border-accent: rgba(30, 191, 106, 0.4);
+            --border-subtle: rgba(var(--white-rgb), 0.08);
+            --border-accent: rgba(var(--accent-green-rgb), 0.4);
             --text-primary: #e6edf3;
             --text-secondary: #8b949e;
             --text-muted: #484f58;
             --accent-green: #1EBF6A;
+            --accent-green-rgb: 30, 191, 106;
             --accent-green-light: #5ECBA5;
             --accent-emerald: #34d399;
             --gradient-primary: linear-gradient(135deg, #1EBF6A 0%, #5ECBA5 100%);
@@ -30,6 +33,27 @@
             --radius: 8px;
             --transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
             --font-tech: 'Share Tech Mono', monospace;
+            --white-rgb: 255, 255, 255;
+            --black-rgb: 0, 0, 0;
+        }
+
+        @media (prefers-color-scheme: light) {
+            :root {
+                --bg-primary: #f6f8fa;
+                --bg-secondary: #ffffff;
+                --bg-navbar: rgba(255, 255, 255, 0.95);
+                --bg-controls: rgba(255, 255, 255, 0.85);
+                --bg-card: rgba(255, 255, 255, 0.8);
+                --bg-card-hover: rgba(243, 244, 246, 0.9);
+                --border-subtle: rgba(0, 0, 0, 0.08);
+                --text-primary: #1f2328;
+                --text-secondary: #656d76;
+                --text-muted: #8c959f;
+                --shadow-lg: 0 20px 40px rgba(0,0,0,0.1);
+                --shadow-glow: 0 8px 24px rgba(30, 191, 106, 0.25);
+                --white-rgb: 0, 0, 0;
+                --black-rgb: 255, 255, 255;
+            }
         }
 
         body {
@@ -48,7 +72,7 @@
             align-items: center;
             justify-content: space-between;
             padding: 14px 24px;
-            background: rgba(13, 17, 23, 0.95);
+            background: var(--bg-navbar);
             backdrop-filter: blur(16px);
             -webkit-backdrop-filter: blur(16px);
             border-bottom: 1px solid var(--border-subtle);
@@ -124,22 +148,22 @@
         .nav-btn svg { width: 15px; height: 15px; }
 
         .nav-btn-default {
-            background: rgba(255, 255, 255, 0.04);
+            background: rgba(var(--white-rgb), 0.04);
             color: var(--text-secondary);
         }
         .nav-btn-default:hover {
-            background: rgba(255, 255, 255, 0.08);
+            background: rgba(var(--white-rgb), 0.08);
             color: var(--text-primary);
-            border-color: rgba(255, 255, 255, 0.15);
+            border-color: rgba(var(--white-rgb), 0.15);
         }
 
         .nav-btn-primary {
-            background: rgba(30, 191, 106, 0.1);
+            background: rgba(var(--accent-green-rgb), 0.1);
             color: var(--accent-green);
-            border-color: rgba(30, 191, 106, 0.3);
+            border-color: rgba(var(--accent-green-rgb), 0.3);
         }
         .nav-btn-primary:hover {
-            background: rgba(30, 191, 106, 0.18);
+            background: rgba(var(--accent-green-rgb), 0.18);
             box-shadow: var(--shadow-glow);
         }
 
@@ -183,11 +207,11 @@
             height: 100%;
             border-radius: 8px;
             overflow: hidden;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(var(--white-rgb), 0.05);
         }
 
         .vjs-big-play-button {
-            background-color: rgba(30, 191, 106, 0.85) !important;
+            background-color: rgba(var(--accent-green-rgb), 0.85) !important;
             border-color: transparent !important;
             border-radius: 50% !important;
             width: 80px !important;
@@ -201,7 +225,7 @@
         }
 
         .vjs-big-play-button:hover {
-            background-color: rgba(30, 191, 106, 1) !important;
+            background-color: rgba(var(--accent-green-rgb), 1) !important;
             box-shadow: 0 16px 40px rgba(0, 0, 0, 0.7) !important;
             transform: translate(-50%, -50%) scale(1.08) !important;
         }
@@ -237,7 +261,7 @@
             display: flex;
             align-items: center;
             gap: 4px;
-            background: rgba(13, 17, 23, 0.85);
+            background: var(--bg-controls);
             backdrop-filter: blur(16px);
             -webkit-backdrop-filter: blur(16px);
             padding: 6px 12px;
@@ -264,7 +288,7 @@
         }
         .img-ctrl-btn:hover {
             color: var(--text-primary);
-            background: rgba(255,255,255,0.08);
+            background: rgba(var(--white-rgb), 0.08);
         }
         .img-ctrl-btn svg { width: 18px; height: 18px; }
 
@@ -339,8 +363,8 @@
         }
 
         .sidebar-count {
-            background: rgba(30, 191, 106, 0.1);
-            border: 1px solid rgba(30, 191, 106, 0.2);
+            background: rgba(var(--accent-green-rgb), 0.1);
+            border: 1px solid rgba(var(--accent-green-rgb), 0.2);
             font-size: 11px;
             color: var(--accent-green-light);
             padding: 3px 10px;
@@ -374,12 +398,12 @@
         }
 
         .playlist-item:hover {
-            background: rgba(30, 191, 106, 0.06);
-            border-left-color: rgba(30, 191, 106, 0.3);
+            background: rgba(var(--accent-green-rgb), 0.06);
+            border-left-color: rgba(var(--accent-green-rgb), 0.3);
         }
 
         .playlist-item.active {
-            background: rgba(30, 191, 106, 0.1);
+            background: rgba(var(--accent-green-rgb), 0.1);
             border-left-color: var(--accent-green);
         }
 
@@ -420,7 +444,7 @@
             min-height: 36px;
             margin-right: 4px;
             border-radius: 6px;
-            background: rgba(255,255,255,0.04);
+            background: rgba(var(--white-rgb), 0.04);
             border: 1px solid var(--border-subtle);
             color: var(--text-muted);
             text-decoration: none;
@@ -435,9 +459,9 @@
         }
 
         .playlist-dl-btn:hover {
-            background: rgba(30, 191, 106, 0.15);
+            background: rgba(var(--accent-green-rgb), 0.15);
             color: var(--accent-green);
-            border-color: rgba(30, 191, 106, 0.3);
+            border-color: rgba(var(--accent-green-rgb), 0.3);
         }
         .playlist-dl-btn svg { width: 18px; height: 18px; }
 
@@ -445,11 +469,11 @@
         .playlist-scroll::-webkit-scrollbar { width: 5px; }
         .playlist-scroll::-webkit-scrollbar-track { background: transparent; }
         .playlist-scroll::-webkit-scrollbar-thumb {
-            background: rgba(255, 255, 255, 0.08);
+            background: rgba(var(--white-rgb), 0.08);
             border-radius: 10px;
         }
         .playlist-scroll::-webkit-scrollbar-thumb:hover {
-            background: rgba(255, 255, 255, 0.15);
+            background: rgba(var(--white-rgb), 0.15);
         }
 
         /* ─── Accessibility & Focus Rings ─── */
@@ -627,8 +651,21 @@
         if (isImage) {
             // Keyboard navigation and zoom shortcuts for images
             window.addEventListener('keydown', (e) => {
-                if (e.key === 'ArrowLeft') goPrev();
-                if (e.key === 'ArrowRight') goNext();
+                const panStep = 50;
+                if (e.key === 'ArrowLeft') {
+                    if (scale > 1) { pointX += panStep; setTransform(); }
+                    else goPrev();
+                }
+                if (e.key === 'ArrowRight') {
+                    if (scale > 1) { pointX -= panStep; setTransform(); }
+                    else goNext();
+                }
+                if (e.key === 'ArrowUp' && scale > 1) {
+                    pointY += panStep; setTransform();
+                }
+                if (e.key === 'ArrowDown' && scale > 1) {
+                    pointY -= panStep; setTransform();
+                }
                 if (e.key === '+' || e.key === '=') {
                     scale = Math.min(scale * 1.25, 15);
                     pointX = pointX * 1.25; pointY = pointY * 1.25;
