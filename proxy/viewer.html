@@ -26,7 +26,7 @@
             --accent-emerald: #34d399;
             --gradient-primary: linear-gradient(135deg, #1EBF6A 0%, #5ECBA5 100%);
             --shadow-lg: 0 20px 40px rgba(0,0,0,0.4);
-            --shadow-glow: 0 0 20px rgba(30, 191, 106, 0.15);
+            --shadow-glow: 0 8px 24px rgba(0, 0, 0, 0.45);
             --radius: 8px;
             --transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
             --font-tech: 'Share Tech Mono', monospace;
@@ -196,13 +196,13 @@
             top: 50% !important;
             left: 50% !important;
             transform: translate(-50%, -50%) !important;
-            box-shadow: 0 0 40px rgba(30, 191, 106, 0.3) !important;
+            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6) !important;
             transition: all 0.3s ease !important;
         }
 
         .vjs-big-play-button:hover {
             background-color: rgba(30, 191, 106, 1) !important;
-            box-shadow: 0 0 60px rgba(30, 191, 106, 0.5) !important;
+            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.7) !important;
             transform: translate(-50%, -50%) scale(1.08) !important;
         }
 
@@ -249,7 +249,9 @@
         .img-controls:hover, .img-controls.visible { opacity: 1; }
 
         .img-ctrl-btn {
-            padding: 6px;
+            padding: 8px;
+            min-width: 36px;
+            min-height: 36px;
             background: transparent;
             border: none;
             color: var(--text-secondary);
@@ -413,7 +415,9 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            padding: 6px;
+            padding: 8px;
+            min-width: 36px;
+            min-height: 36px;
             margin-right: 4px;
             border-radius: 6px;
             background: rgba(255,255,255,0.04);
@@ -447,6 +451,28 @@
         .playlist-scroll::-webkit-scrollbar-thumb:hover {
             background: rgba(255, 255, 255, 0.15);
         }
+
+        /* ─── Accessibility & Focus Rings ─── */
+        :focus-visible {
+            outline: 2px solid var(--accent-green) !important;
+            outline-offset: 2px;
+        }
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+            }
+        }
+
+        /* ─── Responsive & Touch Targets ─── */
+        @media (max-width: 640px) {
+            .navbar { padding: 12px 16px; flex-wrap: wrap; gap: 12px; }
+            .navbar-actions { width: 100%; justify-content: flex-end; gap: 8px; }
+            .nav-btn { min-width: 44px; min-height: 44px; justify-content: center; padding: 10px; }
+            .img-ctrl-btn, .playlist-dl-btn { min-width: 44px; min-height: 44px; }
+            .sidebar { height: 260px; }
+        }
     </style>
 </head>
 <body>
@@ -454,27 +480,31 @@
     <!-- Navbar -->
     <nav class="navbar">
         <div class="navbar-left">
-            <span class="navbar-icon">🎬</span>
+            <span class="navbar-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent-green)">
+                    <rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="2" y1="7" x2="7" y2="7"/><line x1="2" y1="17" x2="7" y2="17"/><line x1="17" y1="17" x2="22" y2="17"/><line x1="17" y1="7" x2="22" y2="7"/>
+                </svg>
+            </span>
             <div class="navbar-info">
                 <h1 class="navbar-title" title="{{.Title}}">{{.Title}}</h1>
                 <p class="navbar-subtitle">Web Media Player</p>
             </div>
         </div>
         <div class="navbar-actions">
-            <a href="{{.ActiveStreamURL}}" download class="nav-btn nav-btn-default">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <a href="{{.ActiveStreamURL}}" download class="nav-btn nav-btn-default" aria-label="Download Current File">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                 </svg>
                 <span class="label">Download Current</span>
             </a>
-            <a href="{{.DownloadURL}}" class="nav-btn nav-btn-primary">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <a href="{{.DownloadURL}}" class="nav-btn nav-btn-primary" aria-label="Download Full ZIP">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
                 </svg>
                 <span class="label">Download Full ZIP</span>
             </a>
-            <a href="{{.BrowseURL}}" class="nav-btn nav-btn-default">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <a href="{{.BrowseURL}}" class="nav-btn nav-btn-default" aria-label="Browse Files">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
                 </svg>
                 <span class="label">Browse Files</span>
@@ -509,26 +539,28 @@
                 
                 <!-- Image Controls Overlay -->
                 <div class="img-controls" id="img-controls">
-                    <button id="btn-prev" class="img-ctrl-btn" title="Previous (Left Arrow)">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd" /></svg>
+                    <button id="btn-prev" class="img-ctrl-btn" title="Previous (Left Arrow)" aria-label="Previous Image">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd" /></svg>
                     </button>
                     <div class="img-divider"></div>
-                    <button id="btn-zoom-out" class="img-ctrl-btn" title="Zoom Out">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5 10a1 1 0 011-1h8a1 1 0 110 2H6a1 1 0 01-1-1z" clip-rule="evenodd" /></svg>
+                    <button id="btn-zoom-out" class="img-ctrl-btn" title="Zoom Out" aria-label="Zoom Out">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M5 10a1 1 0 011-1h8a1 1 0 110 2H6a1 1 0 01-1-1z" clip-rule="evenodd" /></svg>
                     </button>
-                    <button id="btn-zoom-reset" class="img-ctrl-zoom-text" title="Reset Zoom">100%</button>
-                    <button id="btn-zoom-in" class="img-ctrl-btn" title="Zoom In">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clip-rule="evenodd" /></svg>
+                    <button id="btn-zoom-reset" class="img-ctrl-zoom-text" title="Reset Zoom" aria-label="Reset Zoom">100%</button>
+                    <button id="btn-zoom-in" class="img-ctrl-btn" title="Zoom In" aria-label="Zoom In">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clip-rule="evenodd" /></svg>
                     </button>
                     <div class="img-divider"></div>
-                    <button id="btn-next" class="img-ctrl-btn" title="Next (Right Arrow)">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" /></svg>
+                    <button id="btn-next" class="img-ctrl-btn" title="Next (Right Arrow)" aria-label="Next Image">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" /></svg>
                     </button>
                 </div>
             </div>
             {{else}}
             <div class="no-media">
-                <span class="no-media-icon">📄</span>
+                <span class="no-media-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin: 0 auto 12px; display: block; opacity: 0.6;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                </span>
                 <p>No supported media selected.</p>
             </div>
             {{end}}
@@ -536,20 +568,24 @@
 
         <!-- Sidebar / Playlist (only if there are multiple files) -->
         {{if gt (len .MediaList) 1}}
-        <aside class="sidebar">
+        <aside class="sidebar" aria-labelledby="sidebar-title">
             <div class="sidebar-header">
-                <h2 class="sidebar-title">Media Files</h2>
+                <h2 id="sidebar-title" class="sidebar-title">Media Files</h2>
                 <span class="sidebar-count">{{len .MediaList}} items</span>
             </div>
             <div class="playlist-scroll">
                 {{range .MediaList}}
                 <div class="playlist-row">
-                    <a href="{{.ViewerURL}}" class="playlist-item {{if eq .ID $.ActiveID}}active{{end}}">
-                        <div class="playlist-icon">
+                    <a href="{{.ViewerURL}}" class="playlist-item {{if eq .ID $.ActiveID}}active{{end}}" aria-current="{{if eq .ID $.ActiveID}}page{{else}}false{{end}}">
+                        <div class="playlist-icon" aria-hidden="true">
                             {{if eq .Type "video"}}
-                            <span class="playlist-icon-video">🎥</span>
+                            <span class="playlist-icon-video">
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+                            </span>
                             {{else}}
-                            <span class="playlist-icon-image">🖼️</span>
+                            <span class="playlist-icon-image">
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                            </span>
                             {{end}}
                         </div>
                         <div class="playlist-info">
@@ -557,8 +593,8 @@
                             <p class="playlist-size">{{.SizeStr}}</p>
                         </div>
                     </a>
-                    <a href="{{.DownloadURL}}" title="Download File" class="playlist-dl-btn">
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <a href="{{.DownloadURL}}" title="Download File" aria-label="Download {{.Name}}" class="playlist-dl-btn">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                         </svg>
                     </a>
@@ -589,10 +625,23 @@
         const isImage = {{if eq .ActiveType "image"}}true{{else}}false{{end}};
 
         if (isImage) {
-            // Keyboard navigation for images
+            // Keyboard navigation and zoom shortcuts for images
             window.addEventListener('keydown', (e) => {
                 if (e.key === 'ArrowLeft') goPrev();
                 if (e.key === 'ArrowRight') goNext();
+                if (e.key === '+' || e.key === '=') {
+                    scale = Math.min(scale * 1.25, 15);
+                    pointX = pointX * 1.25; pointY = pointY * 1.25;
+                    setTransform();
+                }
+                if (e.key === '-' || e.key === '_') {
+                    scale = Math.max(scale / 1.25, 0.1);
+                    pointX = pointX / 1.25; pointY = pointY / 1.25;
+                    setTransform();
+                }
+                if (e.key === '0' || e.key === 'Escape') {
+                    scale = 1; pointX = 0; pointY = 0; setTransform();
+                }
             });
 
             // Image Pan and Zoom Logic
@@ -600,12 +649,19 @@
             const img = document.getElementById('image-preview');
             const controls = document.getElementById('img-controls');
             
-            // Show controls permanently if mouse is moving
+            // Show controls permanently if mouse is moving (throttled timer resets)
             let hideTimeout;
+            let timerResetPending = false;
             container.addEventListener('mousemove', () => {
                 controls.classList.add('visible');
-                clearTimeout(hideTimeout);
-                hideTimeout = setTimeout(() => { controls.classList.remove('visible'); }, 2000);
+                if (!timerResetPending) {
+                    timerResetPending = true;
+                    clearTimeout(hideTimeout);
+                    hideTimeout = setTimeout(() => {
+                        controls.classList.remove('visible');
+                        timerResetPending = false;
+                    }, 2000);
+                }
             });
 
             let scale = 1;
@@ -613,10 +669,18 @@
             let pointY = 0;
             let panning = false;
             let start = { x: 0, y: 0 };
+            let renderScheduled = false;
 
             function setTransform() {
-                img.style.transform = `translate(${pointX}px, ${pointY}px) scale(${scale})`;
-                document.getElementById('btn-zoom-reset').textContent = Math.round(scale * 100) + '%';
+                if (!renderScheduled) {
+                    renderScheduled = true;
+                    requestAnimationFrame(() => {
+                        img.style.transform = `translate(${pointX}px, ${pointY}px) scale(${scale})`;
+                        const zoomResetBtn = document.getElementById('btn-zoom-reset');
+                        if (zoomResetBtn) zoomResetBtn.textContent = Math.round(scale * 100) + '%';
+                        renderScheduled = false;
+                    });
+                }
             }
 
             container.addEventListener('mousedown', (e) => {

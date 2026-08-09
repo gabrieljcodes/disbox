@@ -219,6 +219,8 @@ func (dm *DownloadManager) RefreshActiveCount() {
 		newActiveCount[i] = active
 
 		// Sync with DB: Mark local items as deleted if they are missing from TorBox
+		// Skip items created within the last 5 minutes to avoid race conditions
+		// where the TorBox API hasn't yet reflected a newly added torrent/webdl.
 		if errTorrents == nil && errWebDLs == nil {
 			go func(cIndex int, tList []torbox.TorrentInfo, wList []torbox.WebDownloadInfo) {
 				validIDs := make(map[string]bool)
@@ -245,7 +247,7 @@ func (dm *DownloadManager) RefreshActiveCount() {
 				for _, token := range toDelete {
 					dm.server.store.MarkDeleted(token)
 					dm.server.store.DeleteDownloadLink(token)
-					
+
 					dm.server.mu.Lock()
 					delete(dm.server.downloads, token)
 					dm.server.mu.Unlock()

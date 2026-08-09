@@ -541,17 +541,19 @@ func (st *Store) FindDownloadForFTP(token, userID string) (dlType, name string, 
 }
 
 // GetNonDeletedHistory returns non-deleted download history for a client index (for sync).
-func (st *Store) GetNonDeletedHistory(clientIndex int) ([]struct{ Token, Type string; DownloadID int }, error) {
-	rows, err := st.db.Query("SELECT token, type, download_id FROM download_history WHERE client_index = $1 AND deleted = false", clientIndex)
+// It excludes items created within the last 5 minutes to avoid race conditions with
+// the TorBox API not yet reflecting newly added torrents/webdls.
+func (st *Store) GetNonDeletedHistory(clientIndex int) ([]struct{ Token, Type string; DownloadID int; CreatedAt time.Time }, error) {
+	rows, err := st.db.Query("SELECT token, type, download_id, created_at FROM download_history WHERE client_index = $1 AND deleted = false AND created_at <= NOW() - INTERVAL '5 minutes'", clientIndex)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var results []struct{ Token, Type string; DownloadID int }
+	var results []struct{ Token, Type string; DownloadID int; CreatedAt time.Time }
 	for rows.Next() {
-		var r struct{ Token, Type string; DownloadID int }
-		if err := rows.Scan(&r.Token, &r.Type, &r.DownloadID); err == nil {
+		var r struct{ Token, Type string; DownloadID int; CreatedAt time.Time }
+		if err := rows.Scan(&r.Token, &r.Type, &r.DownloadID, &r.CreatedAt); err == nil {
 			results = append(results, r)
 		}
 	}

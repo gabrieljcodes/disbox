@@ -2893,7 +2893,7 @@ function loadHistory() {
             dropZoneContent.style.display = 'none';
             dropZoneSelected.style.display = 'block';
             selectedFileName.textContent = file.name;
-            selectedFileSize.textContent = formatFileSizeSimple(file.size);
+            selectedFileSize.textContent = formatBytes(file.size);
             dropZone.style.borderColor = 'var(--accent-blue)';
             dropZone.style.background = 'rgba(96, 165, 250, 0.05)';
 
@@ -3579,13 +3579,13 @@ function loadHistory() {
                     }
                     showToast('Link regenerated successfully!');
                 } else {
-                    showToast(data.error || 'Failed to regenerate link', true);
+                    showToast(data.error || 'Failed to regenerate link', 'error');
                 }
             })
             .catch(err => {
                 btnElement.innerHTML = originalHtml;
                 btnElement.disabled = false;
-                showToast('Error regenerating link', true);
+                showToast('Error regenerating link', 'error');
             });
         };
 
