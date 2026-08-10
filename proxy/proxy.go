@@ -576,7 +576,7 @@ func isSocialCrawler(userAgent string) bool {
 	bots := []string{
 		"discordbot", "slackbot", "twitterbot", "facebookexternalhit",
 		"telegrambot", "whatsapp", "vkshare", "skypeuripreview",
-		"linkedinbot", "embedly", "pinterest",
+		"linkedinbot", "embedly", "pinterest", "fluxerbot",
 	}
 	for _, bot := range bots {
 		if strings.Contains(userAgent, bot) {
