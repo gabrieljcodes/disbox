@@ -213,6 +213,7 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/v1/tokens", s.handleTokens)
 	mux.HandleFunc("/v1/tokens/revoke", s.handleTokenRevoke)
 	mux.HandleFunc("/v1/remove-download", s.handleRemoveDownload)
+	mux.HandleFunc("/v1/remove-downloads", s.handleRemoveDownloads)
 	mux.HandleFunc("/v1/regenerate", s.handleRegenerate)
 	mux.HandleFunc("/v1/queue-status", s.handleQueueStatus)
 	mux.HandleFunc("/v1/speedtest", s.handleSpeedtest)

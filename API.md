@@ -86,8 +86,29 @@ Adds a direct download link.
 
 #### Remove Download
 `POST /v1/remove-download`
-Body: `{"token": "download_token_here"}`
-Removes a download from the Disbox proxy and deletes it from TorBox as well.
+Body: `{"token": "download_token_here"}` or `{"tokens": ["token1", "token2"]}`
+Removes one or more downloads from the Disbox proxy and deletes them from TorBox as well.
+
+#### Remove Downloads (Mass Delete)
+`POST /v1/remove-downloads`
+Body:
+```json
+{
+  "tokens": ["token_1", "token_2", "token_3"]
+}
+```
+Deletes multiple downloads in a single batch request from Disbox and TorBox. Returns details on successfully removed and failed items:
+```json
+{
+  "success": true,
+  "data": {
+    "deleted": ["token_1", "token_2"],
+    "failed": [],
+    "count": 2,
+    "message": "2 download(s) removed"
+  }
+}
+```
 
 #### Get History
 `GET /v1/history`

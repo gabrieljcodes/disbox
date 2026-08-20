@@ -484,7 +484,7 @@ paths:
   /v1/remove-download:
     post:
       summary: Remove a download
-      description: Deletes a download from your history and cancels it if active.
+      description: Deletes one or more downloads from your history and cancels them if active.
       tags: [Downloads]
       requestBody:
         required: true
@@ -492,14 +492,62 @@ paths:
           application/json:
             schema:
               type: object
-              required: [token]
               properties:
                 token:
                   type: string
-                  description: The proxy link token
+                  description: The proxy link token (for single removal)
+                tokens:
+                  type: array
+                  items:
+                    type: string
+                  description: Array of proxy link tokens (for batch removal)
       responses:
         '200':
-          description: Download removed successfully
+          description: Download(s) removed successfully
+
+  /v1/remove-downloads:
+    post:
+      summary: Mass remove downloads
+      description: Deletes multiple downloads from history and cancels them from TorBox.
+      tags: [Downloads]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tokens]
+              properties:
+                tokens:
+                  type: array
+                  items:
+                    type: string
+                  description: Array of download tokens to remove
+      responses:
+        '200':
+          description: Bulk removal results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      deleted:
+                        type: array
+                        items:
+                          type: string
+                      failed:
+                        type: array
+                        items:
+                          type: object
+                      count:
+                        type: integer
+                      message:
+                        type: string
 
   /v1/regenerate:
     post:

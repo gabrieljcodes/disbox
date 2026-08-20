@@ -376,30 +376,10 @@ func (s *Server) handleAddWebdl(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) handleRemoveDownload(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
-		return
-	}
-
-	userID, ok := s.resolveUser(w, r)
-	if !ok {
-		return
-	}
-	isAdmin := s.IsAdmin(userID)
-
-	var req struct {
-		Token string `json:"token"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Token == "" {
-		jsonError(w, http.StatusBadRequest, "Field 'token' is required")
-		return
-	}
-
-	dlType, downloadID, clientIndex, err := s.store.FindDownloadForRemoval(req.Token, userID, isAdmin)
+func (s *Server) removeSingleDownload(token string, userID string, isAdmin bool) error {
+	dlType, downloadID, clientIndex, err := s.store.FindDownloadForRemoval(token, userID, isAdmin)
 	if err != nil {
-		jsonError(w, http.StatusNotFound, "Download not found or you don't have permission")
-		return
+		return fmt.Errorf("download not found or permission denied")
 	}
 
 	if s.store.GetSetting("remove_from_torbox_on_delete", "true") == "true" {
@@ -414,14 +394,140 @@ func (s *Server) handleRemoveDownload(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	s.store.MarkDeleted(req.Token)
-	s.store.DeleteDownloadLink(req.Token)
+	s.store.MarkDeleted(token)
+	s.store.DeleteDownloadLink(token)
 
 	s.mu.Lock()
-	delete(s.downloads, req.Token)
+	delete(s.downloads, token)
 	s.mu.Unlock()
 
-	jsonOK(w, map[string]string{"message": "Download removed"})
+	return nil
+}
+
+type RemoveDownloadsRequest struct {
+	Token  string   `json:"token,omitempty"`
+	Tokens []string `json:"tokens,omitempty"`
+}
+
+type FailedDownloadItem struct {
+	Token string `json:"token"`
+	Error string `json:"error"`
+}
+
+func (s *Server) handleRemoveDownload(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	userID, ok := s.resolveUser(w, r)
+	if !ok {
+		return
+	}
+	isAdmin := s.IsAdmin(userID)
+
+	var req RemoveDownloadsRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, http.StatusBadRequest, "Invalid JSON payload")
+		return
+	}
+
+	tokens := req.Tokens
+	if len(tokens) == 0 && req.Token != "" {
+		tokens = []string{req.Token}
+	}
+
+	if len(tokens) == 0 {
+		jsonError(w, http.StatusBadRequest, "Field 'token' or 'tokens' is required")
+		return
+	}
+
+	// Single token request
+	if len(tokens) == 1 && req.Token != "" {
+		if err := s.removeSingleDownload(req.Token, userID, isAdmin); err != nil {
+			jsonError(w, http.StatusNotFound, "Download not found or you don't have permission")
+			return
+		}
+		jsonOK(w, map[string]interface{}{
+			"message": "Download removed",
+			"deleted": []string{req.Token},
+		})
+		return
+	}
+
+	// Multi tokens request
+	var deleted []string
+	var failed []FailedDownloadItem
+
+	for _, token := range tokens {
+		token = strings.TrimSpace(token)
+		if token == "" {
+			continue
+		}
+		if err := s.removeSingleDownload(token, userID, isAdmin); err != nil {
+			failed = append(failed, FailedDownloadItem{Token: token, Error: err.Error()})
+		} else {
+			deleted = append(deleted, token)
+		}
+	}
+
+	jsonOK(w, map[string]interface{}{
+		"deleted": deleted,
+		"failed":  failed,
+		"count":   len(deleted),
+		"message": fmt.Sprintf("%d download(s) removed", len(deleted)),
+	})
+}
+
+func (s *Server) handleRemoveDownloads(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	userID, ok := s.resolveUser(w, r)
+	if !ok {
+		return
+	}
+	isAdmin := s.IsAdmin(userID)
+
+	var req RemoveDownloadsRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, http.StatusBadRequest, "Invalid JSON payload")
+		return
+	}
+
+	tokens := req.Tokens
+	if len(tokens) == 0 && req.Token != "" {
+		tokens = []string{req.Token}
+	}
+
+	if len(tokens) == 0 {
+		jsonError(w, http.StatusBadRequest, "Field 'tokens' is required")
+		return
+	}
+
+	var deleted []string
+	var failed []FailedDownloadItem
+
+	for _, token := range tokens {
+		token = strings.TrimSpace(token)
+		if token == "" {
+			continue
+		}
+		if err := s.removeSingleDownload(token, userID, isAdmin); err != nil {
+			failed = append(failed, FailedDownloadItem{Token: token, Error: err.Error()})
+		} else {
+			deleted = append(deleted, token)
+		}
+	}
+
+	jsonOK(w, map[string]interface{}{
+		"deleted": deleted,
+		"failed":  failed,
+		"count":   len(deleted),
+		"message": fmt.Sprintf("%d download(s) removed", len(deleted)),
+	})
 }
 
 func (s *Server) handleRegenerate(w http.ResponseWriter, r *http.Request) {
