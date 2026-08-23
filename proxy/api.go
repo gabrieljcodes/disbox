@@ -84,14 +84,15 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 	}
 
 	type HistoryItem struct {
-		Token       string `json:"token"`
-		LinkToken   string `json:"link_token"`
-		Name        string `json:"name"`
-		Type        string `json:"type"`
+		Token       string    `json:"token"`
+		LinkToken   string    `json:"link_token"`
+		Name        string    `json:"name"`
+		Type        string    `json:"type"`
+		Size        int64     `json:"size"`
 		CreatedAt   time.Time `json:"created_at"`
-		BrowseURL   string `json:"browse_url"`
-		DownloadURL string `json:"download_url"`
-		SourceURL   string `json:"source_url"`
+		BrowseURL   string    `json:"browse_url"`
+		DownloadURL string    `json:"download_url"`
+		SourceURL   string    `json:"source_url"`
 	}
 
 	var result []HistoryItem
@@ -105,6 +106,7 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 			LinkToken:   item.LinkToken,
 			Name:        item.Name,
 			Type:        item.Type,
+			Size:        item.Size,
 			CreatedAt:   item.CreatedAt,
 			BrowseURL:   fmt.Sprintf("%s/browse/%s", s.baseURL, activeToken),
 			DownloadURL: fmt.Sprintf("%s/dl/%s", s.baseURL, activeToken),
@@ -115,14 +117,14 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 		result = []HistoryItem{}
 	}
 
-	// Asynchronously repair any entries with generic placeholder names
+	// Asynchronously repair any entries with generic placeholder names or zero sizes
 	go s.repairGenericNames(userID)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(result)
 }
 
-// repairGenericNames checks for history entries with placeholder names and updates them from TorBox.
+// repairGenericNames checks for history entries with placeholder names or missing sizes and updates them from TorBox.
 func (s *Server) repairGenericNames(userID string) {
 	entries, err := s.store.GetGenericNamedEntries(userID)
 	if err != nil || len(entries) == 0 {
@@ -138,9 +140,13 @@ func (s *Server) repairGenericNames(userID string) {
 		if err != nil {
 			continue
 		}
+		name := entry.Name
 		if info.Name != "" && info.Name != "Getting info..." && info.Name != "Torrent" && info.Name != "Web Download" {
-			s.store.UpdateHistoryName(entry.Token, info.Name)
-			log.Printf("Repaired name for %s: %s -> %s", entry.Token, entry.Type, info.Name)
+			name = info.Name
+		}
+		if info.Size > 0 || (name != "" && name != entry.Name) {
+			s.store.UpdateHistorySize(entry.Token, info.Size, name)
+			log.Printf("Repaired entry for %s: name=%s, size=%d", entry.Token, name, info.Size)
 		}
 	}
 }
@@ -592,12 +598,12 @@ func (s *Server) handleQueueStatus(w http.ResponseWriter, r *http.Request) {
 
 	status := s.downloadManager.Status()
 	jsonOK(w, map[string]interface{}{
-		"total_capacity":           status.TotalCapacity,
-		"active_jobs":              status.ActiveJobs,
-		"queued_jobs":              status.QueuedJobs,
-		"available_slots":          status.TotalCapacity - status.ActiveJobs,
-		"global_bandwidth_limit":   status.GlobalBandwidthLimit,
-		"global_bandwidth_used":    status.GlobalBandwidthUsed,
+		"total_capacity":         status.TotalCapacity,
+		"active_jobs":            status.ActiveJobs,
+		"queued_jobs":            status.QueuedJobs,
+		"available_slots":        status.TotalCapacity - status.ActiveJobs,
+		"global_bandwidth_limit": status.GlobalBandwidthLimit,
+		"global_bandwidth_used":  status.GlobalBandwidthUsed,
 	})
 }
 
@@ -1476,20 +1482,67 @@ func (s *Server) handleAdminSettingsUpdate(w http.ResponseWriter, r *http.Reques
 }
 
 func (s *Server) handleAdminTorboxKeys(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+	_, ok := s.resolveAdmin(w, r)
+	if !ok {
 		return
 	}
 
-	_, ok := s.resolveAdmin(w, r)
-	if !ok {
+	if r.Method == http.MethodGet {
+		keys := s.clientPool.GetKeys()
+		type keyEntry struct {
+			Index      int    `json:"index"`
+			KeyPreview string `json:"key_preview"`
+			Status     string `json:"status"`
+			Plan       string `json:"plan,omitempty"`
+			Error      string `json:"error,omitempty"`
+		}
+		result := make([]keyEntry, len(keys))
+		for i, k := range keys {
+			preview := "••••••••"
+			if len(k) > 8 {
+				preview = k[:4] + "..." + k[len(k)-4:]
+			}
+			client := torbox.NewClient(k)
+			info, err := client.GetUserInfo()
+			status := "valid"
+			planStr := ""
+			errMsg := ""
+			if err != nil {
+				status = "invalid"
+				errMsg = err.Error()
+			} else if info != nil {
+				switch info.Plan {
+				case 1:
+					planStr = "Essential"
+				case 2:
+					planStr = "Pro"
+				case 3:
+					planStr = "Standard"
+				default:
+					planStr = "Free"
+				}
+			}
+			result[i] = keyEntry{
+				Index:      i,
+				KeyPreview: preview,
+				Status:     status,
+				Plan:       planStr,
+				Error:      errMsg,
+			}
+		}
+		jsonOK(w, result)
+		return
+	}
+
+	if r.Method != http.MethodPost && r.Method != http.MethodDelete {
+		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
 
 	var req struct {
 		Action string `json:"action"`
 		Key    string `json:"key"`
-		Index  int    `json:"index"`
+		Index  *int   `json:"index"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonError(w, http.StatusBadRequest, "Invalid payload")
@@ -1498,14 +1551,28 @@ func (s *Server) handleAdminTorboxKeys(w http.ResponseWriter, r *http.Request) {
 
 	currentKeys := s.clientPool.GetKeys()
 
-	if req.Action == "add" {
-		if strings.TrimSpace(req.Key) == "" {
+	if req.Action == "add" || (req.Action == "" && req.Key != "" && req.Index == nil) {
+		newKey := strings.TrimSpace(req.Key)
+		if newKey == "" {
 			jsonError(w, http.StatusBadRequest, "Key is required")
 			return
 		}
-		currentKeys = append(currentKeys, strings.TrimSpace(req.Key))
-	} else if req.Action == "remove" {
-		if req.Index < 0 || req.Index >= len(currentKeys) {
+		testClient := torbox.NewClient(newKey)
+		info, err := testClient.GetUserInfo()
+		if err != nil {
+			jsonError(w, http.StatusBadRequest, "Invalid TorBox API key: "+err.Error())
+			return
+		}
+		currentKeys = append(currentKeys, newKey)
+		if info != nil {
+			log.Printf("Added valid TorBox API key (Plan: %d)", info.Plan)
+		}
+	} else if req.Action == "remove" || req.Action == "delete" || r.Method == http.MethodDelete || req.Index != nil {
+		idx := -1
+		if req.Index != nil {
+			idx = *req.Index
+		}
+		if idx < 0 || idx >= len(currentKeys) {
 			jsonError(w, http.StatusBadRequest, "Invalid index")
 			return
 		}
@@ -1513,7 +1580,7 @@ func (s *Server) handleAdminTorboxKeys(w http.ResponseWriter, r *http.Request) {
 			jsonError(w, http.StatusBadRequest, "Cannot remove the last API key")
 			return
 		}
-		currentKeys = append(currentKeys[:req.Index], currentKeys[req.Index+1:]...)
+		currentKeys = append(currentKeys[:idx], currentKeys[idx+1:]...)
 	} else {
 		jsonError(w, http.StatusBadRequest, "Invalid action")
 		return

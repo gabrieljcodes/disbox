@@ -1,0 +1,852 @@
+openapi: 3.0.3
+info:
+  title: Disbox API
+  description: Public API for managing Disbox downloads, history, and search.
+  version: "1.0.0"
+servers:
+  - url: /
+    description: Current Server
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: Disbox Token
+  schemas:
+    ApiResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+        error:
+          type: string
+    HistoryItem:
+      type: object
+      properties:
+        token:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+        created_at:
+          type: string
+        browse_url:
+          type: string
+        download_url:
+          type: string
+    QueueItem:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+        name:
+          type: string
+        queued_at:
+          type: string
+          format: date-time
+        position:
+          type: integer
+        status:
+          type: string
+        progress:
+          type: number
+        speed:
+          type: integer
+        eta:
+          type: integer
+security:
+  - bearerAuth: []
+
+tags:
+  - name: User
+    description: User information and limits
+  - name: FTP
+    description: FTP integration and upload
+  - name: Downloads
+    description: Add and manage downloads
+  - name: Search
+    description: Search for media content
+  - name: Admin
+    description: Administrative endpoints for access control
+
+paths:
+  /v1/me:
+    get:
+      summary: Get current user info
+      tags: [User]
+      responses:
+        '200':
+          description: User profile information
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                      username:
+                        type: string
+                      avatar_url:
+                        type: string
+
+  /v1/user/profile:
+    get:
+      summary: Get user profile and stats
+      tags: [User]
+      responses:
+        '200':
+          description: User statistics and FTP configuration state
+
+  /v1/user/ftp:
+    post:
+      summary: Update FTP settings
+      tags: [FTP]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [host, username, password]
+              properties:
+                host:
+                  type: string
+                username:
+                  type: string
+                password:
+                  type: string
+      responses:
+        '200':
+          description: FTP settings saved successfully
+
+  /v1/ftp/send:
+    post:
+      summary: Send download to FTP
+      tags: [FTP]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token:
+                  type: string
+      responses:
+        '200':
+          description: FTP upload started successfully
+
+  /v1/hosters:
+    get:
+      summary: Get supported hosters
+      description: Returns a dynamic, aggregated list of hosters that TorBox supports with combined limits across all API keys.
+      tags: [Downloads]
+      responses:
+        '200':
+          description: Hoster list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      type: object
+
+  /v1/history:
+    get:
+      summary: Get download history
+      tags: [User]
+      responses:
+        '200':
+          description: List of user's past downloads
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/HistoryItem'
+
+  /v1/queue-status:
+    get:
+      summary: Get Queue Status
+      description: Returns the global slots capacity, active jobs, and queued jobs. This helps identify if a new download will be queued or start immediately.
+      tags: [Downloads]
+      responses:
+        '200':
+          description: Queue status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      total_capacity:
+                        type: integer
+                      active_jobs:
+                        type: integer
+                      queued_jobs:
+                        type: integer
+                      available_slots:
+                        type: integer
+
+  /v1/queue:
+    get:
+      summary: Get Queue Items
+      description: Returns the user's queued downloads. Administrators can pass user_id to view another user's queue or omit it to see the global queue.
+      tags: [Downloads]
+      parameters:
+        - name: user_id
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Optional. Admin only. Filter by user Discord ID. Omit for all global items.
+      responses:
+        '200':
+          description: List of queue items
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/QueueItem'
+
+  /v1/queue/{id}:
+    delete:
+      summary: Remove from Queue
+      description: Removes an item from the queue. Admin users can remove any user's item.
+      tags: [Downloads]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Item removed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      message:
+                        type: string
+
+  /v1/queue/{id}/position:
+    patch:
+      summary: Move Queue Item
+      description: Changes the position of an item in the queue. Admin users can move any user's item.
+      tags: [Downloads]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [new_position]
+              properties:
+                new_position:
+                  type: integer
+      responses:
+        '200':
+          description: Item moved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      message:
+                        type: string
+
+  /v1/add-torrent:
+    post:
+      summary: Add a Torrent
+      description: Adds a magnet link or torrent to your Disbox.
+      tags: [Downloads]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [link]
+              properties:
+                link:
+                  type: string
+                  description: Magnet URI
+      responses:
+        '200':
+          description: Download added successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                      status:
+                        type: string
+                        enum: [ready, monitoring]
+                      download_url:
+                        type: string
+                      browse_url:
+                        type: string
+                      message:
+                        type: string
+
+  /v1/torrents/magnettofile:
+    post:
+      summary: Magnet To File
+      description: Converts any magnet to a torrent file object. Free endpoint.
+      tags: [Downloads]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [magnet]
+              properties:
+                magnet:
+                  type: string
+                  description: Magnet URI
+      responses:
+        '200':
+          description: Torrent file object
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /v1/torrents/exportdata:
+    get:
+      summary: Export Torrent Data
+      description: Exports the magnet or torrent file.
+      tags: [Downloads]
+      parameters:
+        - name: token
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: type
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [magnet, file]
+      responses:
+        '200':
+          description: Magnet JSON or .torrent file
+          content:
+            application/json:
+              schema:
+                type: object
+            application/x-bittorrent:
+              schema:
+                type: string
+                format: binary
+
+  /v1/add-torrent-file:
+    post:
+      summary: Add a Torrent File
+      description: Adds a .torrent file to your Disbox.
+      tags: [Downloads]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: The .torrent file
+      responses:
+        '200':
+          description: Download added successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                      status:
+                        type: string
+                        enum: [ready, monitoring]
+                      download_url:
+                        type: string
+                      browse_url:
+                        type: string
+                      message:
+                        type: string
+
+  /v1/add-webdl:
+    post:
+      summary: Add a Web Download
+      description: Adds a direct URL (HTTP/HTTPS) to your Disbox.
+      tags: [Downloads]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [link]
+              properties:
+                link:
+                  type: string
+                  description: Direct download URL
+      responses:
+        '200':
+          description: Web download added successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                      status:
+                        type: string
+                        enum: [ready, monitoring]
+                      download_url:
+                        type: string
+                      browse_url:
+                        type: string
+                      message:
+                        type: string
+
+  /v1/remove-download:
+    post:
+      summary: Remove a download
+      description: Deletes one or more downloads from your history and cancels them if active.
+      tags: [Downloads]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                token:
+                  type: string
+                  description: The proxy link token (for single removal)
+                tokens:
+                  type: array
+                  items:
+                    type: string
+                  description: Array of proxy link tokens (for batch removal)
+      responses:
+        '200':
+          description: Download(s) removed successfully
+
+  /v1/remove-downloads:
+    post:
+      summary: Mass remove downloads
+      description: Deletes multiple downloads from history and cancels them from TorBox.
+      tags: [Downloads]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tokens]
+              properties:
+                tokens:
+                  type: array
+                  items:
+                    type: string
+                  description: Array of download tokens to remove
+      responses:
+        '200':
+          description: Bulk removal results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      deleted:
+                        type: array
+                        items:
+                          type: string
+                      failed:
+                        type: array
+                        items:
+                          type: object
+                      count:
+                        type: integer
+                      message:
+                        type: string
+
+  /v1/regenerate:
+    post:
+      summary: Regenerate a download link
+      description: Regenerates the public proxy link token for a download.
+      tags: [Downloads]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token:
+                  type: string
+                  description: The stable file token
+      responses:
+        '200':
+          description: Link regenerated successfully
+
+  /v1/search:
+    get:
+      summary: Search AIOStreams
+      tags: [Search]
+      parameters:
+        - name: query
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: type
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [movie, series, anime]
+            default: movie
+      responses:
+        '200':
+          description: Search results
+
+  /v1/tmdb/search:
+    get:
+      summary: Search TMDB
+      tags: [Search]
+      parameters:
+        - name: query
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 1
+      responses:
+        '200':
+          description: TMDB Search results
+
+  /v1/anilist/search:
+    get:
+      summary: Search AniList
+      tags: [Search]
+      parameters:
+        - name: query
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: AniList Search results
+
+  /v1/announcements:
+    get:
+      summary: Get Global Announcements
+      description: Returns an array of active global announcements.
+      tags: [User]
+      responses:
+        '200':
+          description: Announcements list
+
+  /v1/admin/announcements/add:
+    post:
+      summary: Create Global Announcement
+      tags: [Admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [message]
+              properties:
+                message:
+                  type: string
+      responses:
+        '200':
+          description: Announcement created
+
+  /v1/admin/announcements/clear:
+    post:
+      summary: Clear All Global Announcements
+      tags: [Admin]
+      responses:
+        '200':
+          description: Announcements cleared
+
+  /v1/admin/announcements/remove:
+    post:
+      summary: Remove Global Announcement
+      tags: [Admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id]
+              properties:
+                id:
+                  type: string
+      responses:
+        '200':
+          description: Announcement removed
+
+  /v1/admin/access:
+    get:
+      summary: Get access control list
+      tags: [Admin]
+      responses:
+        '200':
+          description: The whitelist/blacklist settings and users
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      whitelist_enabled:
+                        type: boolean
+                      blacklist_enabled:
+                        type: boolean
+                      users:
+                        type: array
+                        items:
+                          type: object
+
+  /v1/admin/access/check:
+    get:
+      summary: Check user access status
+      tags: [Admin]
+      parameters:
+        - name: user_id
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: User status
+
+  /v1/admin/access/add:
+    post:
+      summary: Add user to access list
+      tags: [Admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_id, type]
+              properties:
+                user_id:
+                  type: string
+                type:
+                  type: string
+                  enum: [whitelist, blacklist]
+      responses:
+        '200':
+          description: User added
+
+  /v1/admin/access/remove:
+    post:
+      summary: Remove user from access list
+      tags: [Admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_id]
+              properties:
+                user_id:
+                  type: string
+      responses:
+        '200':
+          description: User removed
+
+  /v1/admin/access/toggle:
+    post:
+      summary: Toggle access lists
+      tags: [Admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [list_type, enabled]
+              properties:
+                list_type:
+                  type: string
+                  enum: [whitelist, blacklist]
+                enabled:
+                  type: boolean
+      responses:
+        '200':
+          description: List toggled
+
+  /v1/user/cloud:
+    post:
+      summary: Update user cloud tokens
+      tags: [User]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                google:
+                  type: string
+                dropbox:
+                  type: string
+                onedrive:
+                  type: string
+                gofile:
+                  type: string
+                onefichier:
+                  type: string
+                pixeldrain:
+                  type: string
+      responses:
+        '200':
+          description: Cloud tokens updated successfully
+
+  /v1/integration/{provider}:
+    post:
+      summary: Upload a downloaded file to a cloud provider
+      tags: [Integration]
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [googledrive, dropbox, onedrive, gofile, 1fichier, pixeldrain]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token:
+                  type: string
+                  description: The proxy history link token
+      responses:
+        '200':
+          description: Upload started
+  /v1/speedtest:
+    get:
+      summary: Server Speed Test
+      description: Returns a stream of dummy data to measure download speed from the Disbox server.
+      tags: [Downloads]
+      parameters:
+        - name: size
+          in: query
+          required: false
+          description: Size of the dummy file in bytes (default 10MB, max 100MB)
+          schema:
+            type: integer
+            default: 10485760
+      responses:
+        '200':
+          description: Binary dummy data stream
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary

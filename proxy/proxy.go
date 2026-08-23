@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"html/template"
 	"io"
+	"io/fs"
 	"log"
 	"net/http"
 	"net/url"
@@ -28,42 +29,22 @@ func (s *Server) GetDownloadManager() *DownloadManager {
 	return s.downloadManager
 }
 
-//go:embed viewer.html
-var viewerFS embed.FS
+//go:embed dist/*
+var distFS embed.FS
 
-//go:embed browser.html
-var browserFS embed.FS
+var (
+	viewerTemplate    = template.Must(template.ParseFS(distFS, "dist/viewer/index.html"))
+	browserTemplate   = template.Must(template.ParseFS(distFS, "dist/browser/index.html"))
+	readerTemplate    = template.Must(template.ParseFS(distFS, "dist/reader/index.html"))
+	dashboardTemplate = template.Must(template.ParseFS(distFS, "dist/dashboard/index.html"))
+	previewTemplate   = template.Must(template.ParseFS(distFS, "dist/preview/index.html"))
+	hostersTemplate   = template.Must(template.ParseFS(distFS, "dist/hosters/index.html"))
 
-//go:embed reader.html
-var readerFS embed.FS
-
-//go:embed dashboard.html
-var dashboardFS embed.FS
-
-//go:embed preview.html
-var previewFS embed.FS
-
-//go:embed hosters.html
-var hostersFS embed.FS
-
-//go:embed favicon.ico
-var faviconBytes []byte
-
-//go:embed icon_transparent.png
-var iconTransparentBytes []byte
-
-//go:embed scalar.html
-var scalarBytes []byte
-
-//go:embed openapi.yaml
-var openapiBytes []byte
-
-var viewerTemplate = template.Must(template.ParseFS(viewerFS, "viewer.html"))
-var browserTemplate = template.Must(template.ParseFS(browserFS, "browser.html"))
-var readerTemplate = template.Must(template.ParseFS(readerFS, "reader.html"))
-var dashboardTemplate = template.Must(template.ParseFS(dashboardFS, "dashboard.html"))
-var previewTemplate = template.Must(template.ParseFS(previewFS, "preview.html"))
-var hostersTemplate = template.Must(template.ParseFS(hostersFS, "hosters.html"))
+	scalarBytes, _          = distFS.ReadFile("dist/scalar/index.html")
+	openapiBytes, _         = distFS.ReadFile("dist/openapi.yaml")
+	faviconBytes, _         = distFS.ReadFile("dist/favicon.ico")
+	iconTransparentBytes, _ = distFS.ReadFile("dist/icon_transparent.png")
+)
 
 type DownloadEntry struct {
 	Type        string // "torrent" or "webdl"
@@ -149,6 +130,11 @@ func NewServer(cfg *config.Config, clientPool *torbox.ClientPool, db *sql.DB) (*
 }
 
 func (s *Server) registerRoutes(mux *http.ServeMux) {
+	// Static assets from Vite build
+	if assetsFS, err := fs.Sub(distFS, "dist/assets"); err == nil {
+		mux.Handle("/assets/", http.StripPrefix("/assets/", http.FileServer(http.FS(assetsFS))))
+	}
+
 	// Static / content routes
 	mux.HandleFunc("/dl/", s.handleDownload)
 	mux.HandleFunc("/view/", s.handleView)

@@ -1,32 +1,45 @@
-FROM golang:alpine AS builder
+# ─── Stage 1: Build Frontend (TypeScript + Vite) ───
+FROM node:20-alpine AS frontend-builder
 
 WORKDIR /app
 
-# Install git for downloading dependencies
+COPY package.json package-lock.json ./
+RUN npm ci
+
+COPY tsconfig.json vite.config.ts ./
+COPY public/ ./public/
+COPY src/ ./src/
+
+RUN npm run build
+
+# ─── Stage 2: Build Go Backend ───
+FROM golang:alpine AS go-builder
+
+WORKDIR /app
+
 RUN apk add --no-cache git
 
-# Download dependencies
 COPY go.mod go.sum ./
 RUN go mod download
 
-# Copy the source code
+# Copy backend source code
 COPY . .
 
-# Build the application
+# Copy built frontend dist into proxy/dist
+COPY --from=frontend-builder /app/proxy/dist ./proxy/dist
+
+# Build the Go application
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o disbox .
 
+# ─── Stage 3: Minimal Production Runtime ───
 FROM alpine:latest
 
-# Install CA certificates and tzdata for SSL and timezones
 RUN apk --no-cache add ca-certificates tzdata
 
 WORKDIR /app
 
-# Copy the binary from the builder stage
-COPY --from=builder /app/disbox /app/disbox
+COPY --from=go-builder /app/disbox /app/disbox
 
-# Expose the default port
 EXPOSE 8080
 
-# Run the binary
 CMD ["/app/disbox"]

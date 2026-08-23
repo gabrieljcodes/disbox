@@ -345,10 +345,10 @@ func (st *Store) UpdateHistorySize(token string, size int64, name string) {
 	}
 }
 
-// GetGenericNamedEntries returns history entries with placeholder names that need to be updated.
+// GetGenericNamedEntries returns history entries with placeholder names or zero sizes that need to be updated.
 func (st *Store) GetGenericNamedEntries(userID string) ([]HistoryRecord, error) {
 	rows, err := st.db.Query(
-		"SELECT token, type, download_id, client_index FROM download_history WHERE user_id = $1 AND deleted = false AND (name = 'Torrent' OR name = 'Web Download') ORDER BY created_at DESC LIMIT 10",
+		"SELECT token, type, download_id, client_index, name FROM download_history WHERE user_id = $1 AND deleted = false AND (name = 'Torrent' OR name = 'Web Download' OR name = 'Getting info...' OR size = 0) ORDER BY created_at DESC LIMIT 20",
 		userID,
 	)
 	if err != nil {
@@ -359,7 +359,7 @@ func (st *Store) GetGenericNamedEntries(userID string) ([]HistoryRecord, error) 
 	var records []HistoryRecord
 	for rows.Next() {
 		var hr HistoryRecord
-		if err := rows.Scan(&hr.Token, &hr.Type, &hr.DownloadID, &hr.ClientIndex); err == nil {
+		if err := rows.Scan(&hr.Token, &hr.Type, &hr.DownloadID, &hr.ClientIndex, &hr.Name); err == nil {
 			records = append(records, hr)
 		}
 	}
@@ -371,10 +371,9 @@ func (st *Store) UpdateHistoryName(token string, name string) {
 	st.db.Exec("UPDATE download_history SET name = $1 WHERE token = $2", name, token)
 }
 
-
 func (st *Store) GetUserHistory(userID string) ([]HistoryRecord, error) {
 	rows, err := st.db.Query(
-		"SELECT token, COALESCE(link_token, ''), name, type, created_at, COALESCE(source_url, '') FROM download_history WHERE user_id = $1 AND deleted = false ORDER BY created_at DESC",
+		"SELECT token, COALESCE(link_token, ''), name, type, created_at, COALESCE(source_url, ''), COALESCE(size, 0) FROM download_history WHERE user_id = $1 AND deleted = false ORDER BY created_at DESC",
 		userID,
 	)
 	if err != nil {
@@ -385,7 +384,7 @@ func (st *Store) GetUserHistory(userID string) ([]HistoryRecord, error) {
 	var history []HistoryRecord
 	for rows.Next() {
 		var hr HistoryRecord
-		if err := rows.Scan(&hr.Token, &hr.LinkToken, &hr.Name, &hr.Type, &hr.CreatedAt, &hr.SourceURL); err != nil {
+		if err := rows.Scan(&hr.Token, &hr.LinkToken, &hr.Name, &hr.Type, &hr.CreatedAt, &hr.SourceURL, &hr.Size); err != nil {
 			log.Printf("GetUserHistory scan error: %v", err)
 		} else {
 			history = append(history, hr)
@@ -396,7 +395,7 @@ func (st *Store) GetUserHistory(userID string) ([]HistoryRecord, error) {
 
 func (st *Store) GetUserHistoryLimited(userID string, limit int) ([]HistoryRecord, error) {
 	rows, err := st.db.Query(
-		"SELECT token, COALESCE(link_token, ''), name, type, created_at, COALESCE(source_url, '') FROM download_history WHERE user_id = $1 AND deleted = false ORDER BY created_at DESC LIMIT $2",
+		"SELECT token, COALESCE(link_token, ''), name, type, created_at, COALESCE(source_url, ''), COALESCE(size, 0) FROM download_history WHERE user_id = $1 AND deleted = false ORDER BY created_at DESC LIMIT $2",
 		userID, limit,
 	)
 	if err != nil {
@@ -407,7 +406,7 @@ func (st *Store) GetUserHistoryLimited(userID string, limit int) ([]HistoryRecor
 	var history []HistoryRecord
 	for rows.Next() {
 		var hr HistoryRecord
-		if err := rows.Scan(&hr.Token, &hr.LinkToken, &hr.Name, &hr.Type, &hr.CreatedAt, &hr.SourceURL); err != nil {
+		if err := rows.Scan(&hr.Token, &hr.LinkToken, &hr.Name, &hr.Type, &hr.CreatedAt, &hr.SourceURL, &hr.Size); err != nil {
 			log.Printf("GetUserHistoryLimited scan error: %v", err)
 		} else {
 			history = append(history, hr)
@@ -711,6 +710,9 @@ func (st *Store) ListAccessUsers() ([]AccessUser, error) {
 		if err := rows.Scan(&u.UserID, &u.Username, &u.Avatar, &u.Type, &u.AddedBy, &u.AddedAt); err != nil {
 			log.Printf("ListAccessUsers scan error: %v", err)
 		} else {
+			if u.Avatar == "" {
+				u.Avatar = "https://cdn.discordapp.com/embed/avatars/0.png"
+			}
 			users = append(users, u)
 		}
 	}

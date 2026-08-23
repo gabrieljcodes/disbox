@@ -1,0 +1,20 @@
+{
+  "name": "disbox-frontend",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "video.js": "^8.21.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.4",
+    "@types/video.js": "^7.3.58",
+    "typescript": "^5.7.3",
+    "vite": "^6.1.0"
+  }
+}

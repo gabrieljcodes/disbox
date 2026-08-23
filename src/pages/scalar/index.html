@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Disbox API Reference</title>
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --scalar-font: 'Inter', system-ui, sans-serif;
+      --scalar-font-code: 'JetBrains Mono', monospace;
+      --scalar-color-1: #f0f4f8;
+      --scalar-color-2: #94a3b8;
+      --scalar-color-3: #566579;
+      --scalar-color-accent: #1EBF6A;
+      --scalar-background-1: #0a0d12;
+      --scalar-background-2: #111620;
+      --scalar-background-3: rgba(18, 24, 34, 0.95);
+      --scalar-background-accent: #1EBF6A;
+      --scalar-border-color: rgba(255, 255, 255, 0.08);
+      --scalar-button-1: #1EBF6A;
+      --scalar-button-1-color: #0a0d12;
+      --scalar-button-1-hover: #5ECBA5;
+    }
+    body {
+      margin: 0;
+      padding: 0;
+      background: #0a0d12;
+    }
+  </style>
+</head>
+<body>
+  <script
+    id="api-reference"
+    data-url="/openapi.yaml"
+  ></script>
+
+  <script>
+    document.getElementById('api-reference').dataset.configuration = JSON.stringify({
+      theme: 'custom',
+      layout: 'modern',
+      showSidebar: true,
+      darkMode: true,
+      metaData: {
+        title: 'Disbox API Reference',
+        description: 'Complete API reference for Disbox TorBox Proxy.',
+      },
+    });
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"></script>
+</body>
+</html>

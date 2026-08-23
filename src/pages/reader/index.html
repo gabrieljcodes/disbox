@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{.FileName}} - Text Reader</title>
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../styles/base.css">
+  <link rel="stylesheet" href="../../styles/components.css">
+</head>
+<body style="height: 100vh; display: flex; flex-direction: column; overflow: hidden;">
+  <!-- Header Toolbar -->
+  <header class="reader-toolbar">
+    <div class="toolbar-left">
+      <a href="{{.BrowseURL}}" class="btn btn-secondary btn-sm" title="Back to File Browser">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        <span class="btn-label">Back</span>
+      </a>
+      <span class="toolbar-filename" title="{{.FileName}}">{{.FileName}}</span>
+    </div>
+    <div class="toolbar-right">
+      <button class="btn btn-secondary btn-sm" id="btn-wrap" title="Toggle Word Wrap">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M3 12h15a3 3 0 1 1 0 6h-4"/><polyline points="16 16 14 18 16 20"/><path d="M3 18h7"/></svg>
+        <span class="btn-label">Wrap</span>
+      </button>
+      <button class="btn btn-secondary btn-sm" id="btn-copy" title="Copy to Clipboard">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+        <span class="btn-label" id="copy-label">Copy</span>
+      </button>
+      <a href="{{.DownloadURL}}" class="btn btn-primary btn-sm" title="Download File">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <span class="btn-label">Download</span>
+      </a>
+    </div>
+  </header>
+
+  <!-- Info Bar -->
+  <div class="reader-info-bar">
+    <span class="info-item" id="info-lines">Lines: —</span>
+    <span class="info-item">Size: {{.FileSize}}</span>
+    <span class="info-item">Encoding: UTF-8</span>
+  </div>
+
+  <!-- Content / Editor Area -->
+  <main class="editor-container" id="editor-container" data-content-url="{{.ContentURL}}">
+    <div class="empty-state" id="loading-state">
+      <div class="spinner"></div>
+      <p>Loading file content...</p>
+    </div>
+  </main>
+
+  <script type="module" src="./reader.ts"></script>
+</body>
+</html>

@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{.FileName}} - Disbox Download</title>
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  
+  <!-- Open Graph Meta Tags -->
+  <meta property="og:title" content="{{.FileName}}">
+  <meta property="og:description" content="Type: {{.FileType}} • Size: {{.FileSize}}">
+  <meta property="og:image" content="{{.OgImageURL}}">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:url" content="{{.DownloadURL}}">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Disbox">
+  
+  <!-- Twitter Card Meta Tags -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="{{.FileName}}">
+  <meta name="twitter:description" content="Type: {{.FileType}} • Size: {{.FileSize}}">
+  <meta name="twitter:image" content="{{.OgImageURL}}">
+  
+  <!-- Theme Color for Discord & Social Embeds -->
+  <meta name="theme-color" content="#1EBF6A">
+  <link rel="stylesheet" href="../../styles/base.css">
+  <link rel="stylesheet" href="../../styles/components.css">
+</head>
+<body class="preview-page-body">
+  <div class="preview-card">
+    <div class="brand-header">
+      <img src="/icon.png" width="16" height="16" alt="Disbox">
+      <span>Disbox File Proxy</span>
+    </div>
+    <h1 class="file-name">{{.FileName}}</h1>
+    <div class="meta-bar">
+      <span class="meta-item">{{.FileType}}</span>
+      <span class="meta-divider"></span>
+      <span class="meta-item">{{.FileSize}}</span>
+    </div>
+    <a href="{{.DownloadURL}}" class="btn-download">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      Download File
+    </a>
+  </div>
+</body>
+</html>

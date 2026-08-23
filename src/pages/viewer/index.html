@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{.Title}} - Web Media Player</title>
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link href="https://vjs.zencdn.net/8.21.0/video-js.css" rel="stylesheet" />
+  <link rel="stylesheet" href="../../styles/base.css">
+  <link rel="stylesheet" href="../../styles/components.css">
+</head>
+<body style="height: 100vh; display: flex; flex-direction: column; overflow: hidden; background-color: var(--bg-primary);">
+  <!-- Top Navbar -->
+  <header class="viewer-navbar">
+    <div class="navbar-brand-section">
+      <div class="navbar-title-group">
+        <h1 class="navbar-title" title="{{.Title}}">{{.Title}}</h1>
+        <div class="navbar-subtitle">Web Media Player</div>
+      </div>
+    </div>
+    <div class="navbar-actions">
+      <a href="{{.ActiveStreamURL}}" download class="btn btn-secondary btn-sm" aria-label="Download Current File">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <span class="btn-label">Current File</span>
+      </a>
+      <a href="{{.DownloadURL}}" class="btn btn-primary btn-sm" aria-label="Download Full ZIP Archive">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M10 12h4"/></svg>
+        <span class="btn-label">Full Archive</span>
+      </a>
+      <a href="{{.BrowseURL}}" class="btn btn-secondary btn-sm" aria-label="Browse Files">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
+        <span class="btn-label">Browse</span>
+      </a>
+    </div>
+  </header>
+
+  <!-- Main Player & Playlist Content -->
+  <main class="viewer-main">
+    <div class="player-viewport" id="player-viewport" data-active-type="{{.ActiveType}}">
+      {{if eq .ActiveType "video"}}
+      <video
+        id="main-player"
+        class="video-js vjs-theme-city vjs-big-play-centered"
+        controls
+        preload="auto"
+        data-setup='{"fluid": true}'
+      >
+        <source src="{{.ActiveStreamURL}}" type="{{.ActiveMime}}">
+        {{range .Subtitles}}
+        <track kind="captions" src="{{.URL}}" srclang="en" label="{{.Name}}" default>
+        {{end}}
+        <p class="vjs-no-js">To view this video please enable JavaScript in your browser.</p>
+      </video>
+      {{else if eq .ActiveType "image"}}
+      <div id="image-viewport" class="image-viewport">
+        <img id="image-preview" src="{{.ActiveStreamURL}}" alt="Media Preview" class="image-preview" draggable="false">
+
+        <!-- Floating Image Overlay Controls -->
+        <div class="img-floating-controls" id="img-floating-controls">
+          <button id="btn-img-prev" class="img-ctrl-btn" title="Previous Image (Left Arrow)">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+          </button>
+          <div class="img-divider"></div>
+          <button id="btn-zoom-out" class="img-ctrl-btn" title="Zoom Out (-)">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+          <button id="btn-zoom-reset" class="img-zoom-label" title="Reset Zoom (0)">100%</button>
+          <button id="btn-zoom-in" class="img-ctrl-btn" title="Zoom In (+)">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+          <div class="img-divider"></div>
+          <button id="btn-img-next" class="img-ctrl-btn" title="Next Image (Right Arrow)">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          </button>
+        </div>
+      </div>
+      {{else}}
+      <div class="empty-state">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/></svg>
+        <div class="empty-state-title">No Supported Media Selected</div>
+        <div class="empty-state-desc">Select a video or image file from the browser.</div>
+      </div>
+      {{end}}
+    </div>
+
+    <!-- Sidebar Media Playlist -->
+    {{if gt (len .MediaList) 1}}
+    <aside class="viewer-sidebar" aria-label="Media Playlist">
+      <div class="sidebar-header">
+        <span class="sidebar-title">Media Files</span>
+        <span class="badge badge-green">{{len .MediaList}} items</span>
+      </div>
+      <div class="playlist-scroll" id="playlist-scroll">
+        {{range .MediaList}}
+        <div class="playlist-row">
+          <a href="{{.ViewerURL}}" class="playlist-item {{if eq .ID $.ActiveID}}active{{end}}">
+            <span class="playlist-item-icon {{.Type}}" style="display:inline-flex;">
+              {{if eq .Type "video"}}
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+              {{else}}
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
+              {{end}}
+            </span>
+            <div class="playlist-item-info">
+              <div class="playlist-item-name" title="{{.Name}}">{{.Name}}</div>
+              <div class="playlist-item-size">{{.SizeStr}}</div>
+            </div>
+          </a>
+          <a href="{{.DownloadURL}}" class="playlist-dl-btn" title="Download {{.Name}}">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          </a>
+        </div>
+        {{end}}
+      </div>
+    </aside>
+    {{end}}
+  </main>
+
+  <script src="https://vjs.zencdn.net/8.21.0/video.min.js"></script>
+  <script type="module" src="./viewer.ts"></script>
+</body>
+</html>

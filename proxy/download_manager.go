@@ -43,10 +43,10 @@ type QueueStatusItem struct {
 }
 
 type CachedProgress struct {
-	Progress      float64
-	DownloadSpeed int64
-	DownloadState string
-	ETA           int64 // seconds
+	Progress      float64 `json:"progress"`
+	DownloadSpeed int64   `json:"download_speed"`
+	DownloadState string  `json:"download_state"`
+	ETA           int64   `json:"eta"` // seconds
 }
 
 type DownloadManager struct {

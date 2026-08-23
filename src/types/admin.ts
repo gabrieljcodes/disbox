@@ -1,0 +1,48 @@
+export interface AccessSettings {
+  whitelist_enabled: boolean;
+  blacklist_enabled: boolean;
+  users: AccessUser[];
+}
+
+export interface AccessUser {
+  user_id: string;
+  username?: string;
+  avatar?: string;
+  type: 'whitelist' | 'blacklist';
+  added_by: string;
+  added_at?: string;
+}
+
+export interface AdminSettingsMap {
+  cache_only: boolean | string;
+  public_api_enabled: boolean | string;
+  public_api_delay_ms: string;
+  search_enabled: boolean | string;
+  user_gb_limit: string;
+  max_concurrent_per_user: string;
+  torbox_keys?: string[];
+  [key: string]: unknown;
+}
+
+export interface TorboxKeyEntry {
+  index: number;
+  key_preview: string;
+  full_key?: string;
+  status: 'valid' | 'invalid' | 'unknown';
+  error?: string;
+  plan?: string;
+  expires_at?: string;
+}
+
+export interface AdminGlobalHistoryItem {
+  token: string;
+  link_token?: string;
+  user_id: string;
+  username: string;
+  name: string;
+  type: string;
+  size: number;
+  created_at: string;
+  browse_url: string;
+  download_url: string;
+}
