@@ -52,7 +52,11 @@ export type IconName =
   | 'tv'
   | 'star'
   | 'clock'
-  | 'user';
+  | 'user'
+  | 'grid'
+  | 'list'
+  | 'waves'
+  | 'magnet';
 
 const ICONS: Record<IconName, string> = {
   download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
@@ -106,14 +110,22 @@ const ICONS: Record<IconName, string> = {
   star: '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>',
   clock: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
   user: '<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+  grid: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/>',
+  list: '<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>',
+  magnet: '<path d="M4 8V12C4 16.4183 7.58172 20 12 20V20C16.4183 20 20 16.4183 20 12V8M4 8V5C4 4.44772 4.44772 4 5 4H8C8.55228 4 9 4.44772 9 5V8M4 8H9M9 8V12C9 13.6569 10.3431 15 12 15V15C13.6569 15 15 13.6569 15 12V8M15 8V5C15 4.44772 15.4477 4 16 4H19C19.5523 4 20 4.44772 20 5V8M15 8H20" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>',
+  waves: '',
 };
 
 /**
  * Returns an SVG string for the given icon name.
  */
 export function icon(name: IconName, size = 16, className = ''): string {
+  if (name === 'waves') {
+    return `<svg width="${size}" height="${size}" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" role="img" class="${className}" preserveAspectRatio="xMidYMid meet"><path d="M14.66 115.74c1.37 1.06 5.32-5.77 20.2-6.68c15.93-.98 33.56 11.69 57.71 11.69c21.41 0 32.5-10.48 31.74-12.15c-.51-1.11-8.96-3.15-18.68-8.2c-11.69-6.07-24-12.15-33.41-25.82c-6.03-8.75-10.33-18.83-4.4-26.73c5.92-7.9 20.96-4.25 20.96-4.25l-20.5-22.17l-39.03 10.64L9.5 81.58l2.13 25.21l3.03 8.95z" fill="currentColor" fill-opacity="0.3"></path><path d="M59.26 36.11s4.77 1.52 11.16 4.85c10.63 5.55 17.07 14.28 23.64 14.82c6.82.55 10.31-3.38 8.82-11.58c-1.39-7.65-12.68-16.63-12.68-16.63s10.31 1.94 10.31-3.97c0-6.07-5.56-8.99-14.31-12c-5.83-2-21.51-6.44-42.53 1.52c-9.04 3.42-20.08 9.74-28.46 21.85C4.25 50.81 2.03 71.41 4.11 87.05c2.52 18.89 10.38 28.63 10.57 28.71c.19.08 1.22-22.21 10.01-31.88c7.49-8.24 15.15-4.86 24.25-5.31c10.73-.53 15.52-11.61 7.33-20.06c-7.03-7.26-18.68-6.61-18.68-6.61s3.86-1.54 11.19-2.2c8.42-.77 10.08-5.66 10.68-7.49c1.33-4.04-.2-6.1-.2-6.1z" fill="currentColor"></path><path d="M38.15 36.3c-.56-3.3 9.16-6.28 19.34-4.68c15.84 2.49 28.38 16.94 33.7 19.05c7.84 3.12 10.6-3.29 6.67-10.23c-4.05-7.17-14.77-13.27-14.37-15.64c.72-4.21 11.7 2.2 12.37-2.48c.45-3.1-7.75-7.56-15.54-9.55c-6.27-1.6-19.44-3.57-37.64 4.36C19.02 27.46 8.79 48.01 7.1 69.54c-1.6 20.42 6.2 35.64 6.2 35.64s.53-15.24 8.17-23.63c5.58-6.12 12.74-8.42 20.51-6.94c12.96 2.48 18.61-6.89 12.38-13.66c-4.08-4.43-9.31-5.81-14.72-5.99c-9.35-.3-14.38 2.83-14.65 1.77c-.4-1.61 4.67-5.34 11.1-8.02c8.46-3.52 18.67-1.11 20.27-8.19c.78-3.45-1.17-5.34-6.75-5.75c-7.05-.51-11.42 1.77-11.46 1.53z" fill="currentColor" fill-opacity="0.85"></path></svg>`;
+  }
+  const renderSize = name === 'magnet' ? size + 2 : size;
   const body = ICONS[name] || ICONS.file;
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="${className}">${body}</svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${renderSize}" height="${renderSize}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="${className}">${body}</svg>`;
 }
 
 export function iconCategory(category: string, size = 20): string {

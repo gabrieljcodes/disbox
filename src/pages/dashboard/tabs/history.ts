@@ -1,22 +1,31 @@
-import { fetchHistory, fetchProgress, removeDownload, removeDownloads, regenerateDownload, exportTorrentMagnet } from '../../../api/downloads';
+import {
+  fetchHistory,
+  fetchProgress,
+  removeDownload,
+  removeDownloads,
+  regenerateDownload,
+} from '../../../api/downloads';
 import { sendToFtp } from '../../../api/integrations';
-import type { HistoryItem, ProgressMap } from '../../../types/downloads';
-import { formatBytes, formatSpeed, formatEta, formatRelativeTime, escapeHtml } from '../../../utils/format';
+import type { HistoryItem, ProgressMap, CachedProgress } from '../../../types/downloads';
+import { formatBytes, formatRelativeTime, formatSpeed, formatEta, escapeHtml } from '../../../utils/format';
 import { copyToClipboard } from '../../../utils/clipboard';
 import { toastSuccess, toastError, toastInfo, toastUndo } from '../../../components/toast';
 import { icon } from '../../../components/icons';
 import { Modal } from '../../../components/modal';
+import { SpeedGraph } from '../components/SpeedGraph';
 
 let historyItems: HistoryItem[] = [];
 let selectedTokens = new Set<string>();
-let pollTimer: ReturnType<typeof setInterval> | null = null;
+let pollTimer: any = null;
 let massDeleteModal: Modal | null = null;
-let cloudModal: Modal | null = null;
 let activeCloudToken = '';
-const pendingDeletes = new Map<string, ReturnType<typeof setTimeout>>();
+let speedGraph: SpeedGraph | null = null;
 
-export function initHistoryTab(cloudModalInstance: Modal) {
-  cloudModal = cloudModalInstance;
+export function getActiveCloudToken(): string {
+  return activeCloudToken;
+}
+
+export function initHistoryTab(cloudModal?: Modal) {
   massDeleteModal = new Modal('mass-delete-modal');
 
   const searchInput = document.getElementById('history-search') as HTMLInputElement | null;
@@ -26,6 +35,9 @@ export function initHistoryTab(cloudModalInstance: Modal) {
   const btnRefresh = document.getElementById('btn-refresh-history');
   const btnMassDelete = document.getElementById('btn-mass-delete');
   const btnConfirmMassDelete = document.getElementById('btn-confirm-mass-delete');
+
+  // Initialize Canvas Speed Graph
+  speedGraph = new SpeedGraph('download-speed-canvas');
 
   searchInput?.addEventListener('input', () => filterAndRender());
   filterStatus?.addEventListener('change', () => filterAndRender());
@@ -111,91 +123,92 @@ export function initHistoryTab(cloudModalInstance: Modal) {
         toastError(res.error || 'Failed to re-add download');
       }
     } else if (action === 'export-magnet') {
-      const res = await exportTorrentMagnet(token);
-      if (res.success && res.data?.magnet) {
-        await copyToClipboard(res.data.magnet);
-        toastSuccess('Magnet URI copied to clipboard');
+      const item = historyItems.find((h) => h.token === token);
+      if (!item) return;
+
+      const magnet = (item as any).magnet_link || ((item as any).hash ? `magnet:?xt=urn:btih:${(item as any).hash}&dn=${encodeURIComponent(item.name)}` : '');
+      if (magnet) {
+        const ok = await copyToClipboard(magnet);
+        if (ok) toastSuccess('Magnet link copied to clipboard');
+        else toastError('Failed to copy magnet link');
       } else {
-        toastError(res.error || 'Magnet export not available');
+        toastError('No magnet link available for this item');
       }
     } else if (action === 'ftp') {
       toastInfo('Sending to FTP...');
       const res = await sendToFtp(token);
-      if (res.success) toastSuccess(res.message || 'Download sent to FTP');
+      if (res.success) toastSuccess('Queued for FTP transfer');
       else toastError(res.error || 'Failed to send to FTP');
     } else if (action === 'cloud') {
       activeCloudToken = token;
       cloudModal?.open();
     } else if (action === 'delete') {
-      handleSingleDelete(token);
+      // Optimistic delete with Undo Toast pattern
+      const itemEl = document.getElementById(`hist-${token}`);
+      const itemIndex = historyItems.findIndex((h) => h.token === token);
+      const deletedItem = itemIndex !== -1 ? historyItems[itemIndex] : null;
+
+      if (!deletedItem) return;
+
+      // Temporarily remove from UI
+      historyItems.splice(itemIndex, 1);
+      selectedTokens.delete(token);
+      updateMassDeleteButton();
+      updateMetrics();
+      if (itemEl) itemEl.style.display = 'none';
+
+      let isUndone = false;
+      toastUndo(
+        `Deleted "${deletedItem.name}"`,
+        () => {
+          isUndone = true;
+          historyItems.splice(itemIndex, 0, deletedItem);
+          updateMetrics();
+          filterAndRender();
+        },
+        5000
+      );
+
+      // Perform actual API deletion after delay if not undone
+      setTimeout(async () => {
+        if (!isUndone) {
+          const res = await removeDownload(token);
+          if (!res.success) {
+            toastError(res.error || 'Failed to delete download');
+            // Revert if failed
+            historyItems.splice(itemIndex, 0, deletedItem);
+            updateMetrics();
+            filterAndRender();
+          }
+        }
+      }, 5200);
     }
   });
 
+  // Load initial history
   loadHistory(true);
-  startProgressPolling();
 }
 
-function handleSingleDelete(token: string) {
-  const itemIndex = historyItems.findIndex((h) => h.token === token);
-  if (itemIndex === -1) return;
-
-  const deletedItem = historyItems[itemIndex];
-  // Optimistically remove from state & UI
-  historyItems.splice(itemIndex, 1);
-  selectedTokens.delete(token);
-  updateMetrics();
-  filterAndRender();
-
-  // Schedule API delete after 5 seconds
-  const timer = setTimeout(async () => {
-    pendingDeletes.delete(token);
-    const res = await removeDownload(token);
-    if (!res.success) {
-      toastError(res.error || 'Failed to remove download from server');
-      // Restore on failure
-      historyItems.splice(itemIndex, 0, deletedItem);
-      updateMetrics();
-      filterAndRender();
-    }
-  }, 5000);
-
-  pendingDeletes.set(token, timer);
-
-  // Show Undo toast
-  toastUndo('Download removed from history', () => {
-    const activeTimer = pendingDeletes.get(token);
-    if (activeTimer) {
-      clearTimeout(activeTimer);
-      pendingDeletes.delete(token);
-      historyItems.splice(itemIndex, 0, deletedItem);
-      updateMetrics();
-      filterAndRender();
-      toastSuccess('Download deletion undone');
-    }
-  });
-}
-
-export function getActiveCloudToken(): string {
-  return activeCloudToken;
-}
-
-export async function loadHistory(showLoading = false) {
+export async function loadHistory(showSpinner = false) {
   const container = document.getElementById('history-items-container');
-  if (showLoading && container && historyItems.length === 0) {
-    container.innerHTML = `<div class="empty-state"><div class="spinner"></div><p>Loading download history...</p></div>`;
+  if (!container) return;
+
+  if (showSpinner) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <div class="spinner"></div>
+        <p>Loading download history...</p>
+      </div>
+    `;
   }
 
   const res = await fetchHistory();
-  if (res.success) {
-    historyItems = res.data || [];
-    updateMetrics();
-    filterAndRender();
-  } else if (container && historyItems.length === 0) {
+  if (!res.success) {
     container.innerHTML = `
       <div class="empty-state">
         <div class="empty-state-icon" style="color: var(--status-danger);">${icon('alertTriangle', 36)}</div>
-        <div class="empty-state-title">Failed to load history</div>
-        <div class="empty-state-desc">${escapeHtml(res.error || 'Unknown error')}</div>
+        <div class="empty-state-title">Failed to Load History</div>
+        <div class="empty-state-desc">${escapeHtml(res.error || 'Unknown error occurred while fetching history.')}</div>
         <div class="empty-state-actions">
           <button class="btn btn-secondary btn-sm" id="btn-retry-history">
             ${icon('refresh', 13)}
@@ -205,31 +218,37 @@ export async function loadHistory(showLoading = false) {
       </div>
     `;
     document.getElementById('btn-retry-history')?.addEventListener('click', () => loadHistory(true));
+    return;
   }
+
+  historyItems = res.data || [];
+  updateMetrics();
+  filterAndRender();
+  startProgressPolling();
 }
 
 function updateMetrics() {
   const total = historyItems.length;
   const completed = historyItems.filter((h) => h.size && h.size > 0).length;
-  const totalSize = historyItems.reduce((acc, h) => acc + (h.size || 0), 0);
+  const totalBytes = historyItems.reduce((acc, curr) => acc + (curr.size || 0), 0);
 
-  const totalEl = document.getElementById('metric-total-downloads');
-  const completedEl = document.getElementById('metric-completed');
-  const bwEl = document.getElementById('metric-bandwidth');
+  const metricTotal = document.getElementById('metric-total-downloads');
+  const metricCompleted = document.getElementById('metric-completed');
+  const metricBandwidth = document.getElementById('metric-bandwidth');
 
-  if (totalEl) totalEl.textContent = total.toString();
-  if (completedEl) completedEl.textContent = completed.toString();
-  if (bwEl) bwEl.textContent = formatBytes(totalSize);
+  if (metricTotal) metricTotal.textContent = total.toString();
+  if (metricCompleted) metricCompleted.textContent = completed.toString();
+  if (metricBandwidth) metricBandwidth.textContent = formatBytes(totalBytes);
 }
 
 function updateMassDeleteButton() {
   const btn = document.getElementById('btn-mass-delete');
-  const countSpan = document.getElementById('mass-delete-count');
-  if (!btn || !countSpan) return;
+  const countEl = document.getElementById('mass-delete-count');
+  if (!btn) return;
 
   if (selectedTokens.size > 0) {
     btn.style.display = 'inline-flex';
-    countSpan.textContent = `Delete Selected (${selectedTokens.size})`;
+    if (countEl) countEl.textContent = `Delete Selected (${selectedTokens.size})`;
   } else {
     btn.style.display = 'none';
   }
@@ -239,30 +258,30 @@ function filterAndRender() {
   const container = document.getElementById('history-items-container');
   if (!container) return;
 
+  renderHistoryItems(container, historyItems);
+}
+
+function renderHistoryItems(container: HTMLElement, items: HistoryItem[]) {
+  if (items.length === 0) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-state-icon">${icon('download', 40)}</div>
+        <div class="empty-state-title">No Downloads Yet</div>
+        <div class="empty-state-desc">Add a torrent or web link to start downloading.</div>
+      </div>
+    `;
+    return;
+  }
+
   const query = (document.getElementById('history-search') as HTMLInputElement)?.value.toLowerCase().trim() || '';
   const filterStatus = (document.getElementById('history-filter-status') as HTMLSelectElement)?.value || 'all';
   const filterType = (document.getElementById('history-filter-type') as HTMLSelectElement)?.value || 'all';
   const sortBy = (document.getElementById('history-sort') as HTMLSelectElement)?.value || 'newest';
 
-  let filtered = historyItems.filter((item) => {
-    if (query) {
-      const matchName = item.name.toLowerCase().includes(query);
-      const matchToken = item.token.toLowerCase().includes(query);
-      const matchSrc = (item.source_url || '').toLowerCase().includes(query);
-      if (!matchName && !matchToken && !matchSrc) return false;
-    }
-
-    if (filterStatus === 'completed' && (!item.size || item.size <= 0)) {
-      return false;
-    }
-    if (filterStatus === 'active' && item.size && item.size > 0) {
-      return false;
-    }
-
-    if (filterType !== 'all') {
-      if (item.type !== filterType) return false;
-    }
-
+  let filtered = items.filter((item) => {
+    if (query && !item.name.toLowerCase().includes(query) && !item.token.toLowerCase().includes(query)) return false;
+    if (filterType !== 'all' && item.type !== filterType) return false;
+    if (filterStatus === 'completed' && (!item.size || item.size === 0)) return false;
     return true;
   });
 
@@ -285,28 +304,28 @@ function filterAndRender() {
     return;
   }
 
+  // Render TorBox-Style Download Cards
   container.innerHTML = filtered
     .map((item) => {
       const isSelected = selectedTokens.has(item.token);
-      const typeBadgeClass = item.type === 'torrent' ? 'badge-green' : 'badge-blue';
+      const isTorrent = item.type === 'torrent';
+      const typeBadgeClass = isTorrent ? 'badge-green' : 'badge-blue';
+      const typeIcon = isTorrent ? 'waves' : 'globe';
       const sizeStr = item.size ? formatBytes(item.size) : 'Calculating...';
 
       return `
-      <div class="history-item-card" id="hist-${item.token}" data-token="${item.token}">
-        <div class="history-item-top">
-          <div class="history-item-left">
+      <div class="torbox-card" id="hist-${item.token}" data-token="${item.token}">
+        <!-- Top: Checkbox, Icon, Title, Actions -->
+        <div class="torbox-card-top">
+          <div class="torbox-card-left">
             <input type="checkbox" class="history-item-checkbox" data-hist-action="select" data-token="${item.token}" ${isSelected ? 'checked' : ''} aria-label="Select ${escapeHtml(item.name)}">
-            <div style="min-width:0; flex:1;">
-              <div class="history-item-title mono" title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</div>
-              <div class="history-item-meta">
-                <span class="badge ${typeBadgeClass}">${item.type}</span>
-                <span>${sizeStr}</span>
-                <span class="meta-dot"></span>
-                <span>${formatRelativeTime(item.created_at)}</span>
-              </div>
+            <div class="history-item-icon-box ${isTorrent ? 'icon-torrent' : 'icon-webdl'}">
+              ${icon(typeIcon, 16)}
             </div>
+            <a href="${item.browse_url}" class="torbox-card-title" title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</a>
           </div>
-          <div class="history-item-actions">
+
+          <div class="torbox-card-actions">
             <a href="${item.browse_url}" class="btn btn-secondary btn-icon btn-sm" title="Browse Files" aria-label="Browse Files">
               ${icon('folder', 14)}
             </a>
@@ -319,8 +338,8 @@ function filterAndRender() {
               </button>
               <div class="dropdown-menu">
                 <button class="dropdown-item" data-hist-action="export-magnet" data-token="${item.token}">
-                  ${icon('zap', 14)}
-                  <span>Export Magnet URI</span>
+                  ${icon('magnet', 14)}
+                  <span>Export Magnet URL</span>
                 </button>
                 <button class="dropdown-item" data-hist-action="ftp" data-token="${item.token}">
                   ${icon('server', 14)}
@@ -342,13 +361,36 @@ function filterAndRender() {
           </div>
         </div>
 
-        <div class="progress-track" id="prog-track-${item.token}">
-          <div class="progress-fill complete" id="prog-fill-${item.token}" style="width: 100%;"></div>
+        <!-- Badges Row -->
+        <div class="torbox-card-badges">
+          <span class="badge ${typeBadgeClass}">${item.type}</span>
+          <span class="badge badge-blue">Cached</span>
+          <div class="history-status-badge" id="prog-status-${item.token}">
+            <span class="badge badge-green">
+              ${icon('checkCircle', 12)}
+              <span>Download Ready</span>
+            </span>
+          </div>
         </div>
 
-        <div class="history-progress-details" id="prog-details-${item.token}" style="display:none;">
-          <span id="prog-state-${item.token}">Downloading...</span>
-          <span id="prog-stats-${item.token}">0 B/s • ETA: —</span>
+        <!-- Progress Bar (shown when active) -->
+        <div class="history-card-progress" id="prog-section-${item.token}">
+          <div class="progress-track" id="prog-track-${item.token}" style="display: none;">
+            <div class="progress-fill active" id="prog-fill-${item.token}" style="width: 0%;"></div>
+          </div>
+          <div class="history-progress-details" id="prog-details-${item.token}" style="display: none;">
+            <span class="mono" id="prog-state-${item.token}">Downloading</span>
+            <span class="mono" id="prog-stats-${item.token}">0 B/s</span>
+          </div>
+        </div>
+
+        <!-- Bottom: Meta Info -->
+        <div class="torbox-card-bottom">
+          <div class="torbox-card-meta">
+            <span>Added ${formatRelativeTime(item.created_at)}</span>
+            <span class="meta-dot"></span>
+            <span>${sizeStr} Total Size</span>
+          </div>
         </div>
       </div>
     `;
@@ -369,11 +411,14 @@ function startProgressPolling() {
 
     const data: ProgressMap = res.data;
     let activeCount = 0;
+    let totalSpeed = 0;
     let shouldReloadHistory = false;
 
-    Object.entries(data).forEach(([token, prog]) => {
+    Object.entries(data).forEach(([token, prog]: [string, CachedProgress]) => {
       const fill = document.getElementById(`prog-fill-${token}`);
+      const track = document.getElementById(`prog-track-${token}`);
       const details = document.getElementById(`prog-details-${token}`);
+      const statusBadge = document.getElementById(`prog-status-${token}`);
       const stateEl = document.getElementById(`prog-state-${token}`);
       const statsEl = document.getElementById(`prog-stats-${token}`);
 
@@ -399,6 +444,9 @@ function startProgressPolling() {
 
       if (!isCompleted && (pct > 0 || (downloadState !== '' && downloadState !== 'none'))) {
         activeCount++;
+        totalSpeed += downloadSpeed;
+        if (track) track.style.display = 'block';
+        if (statusBadge) statusBadge.style.display = 'none';
         details.style.display = 'flex';
         fill.className = 'progress-fill active';
         fill.style.width = `${Math.max(1, pct)}%`;
@@ -411,8 +459,8 @@ function startProgressPolling() {
           statsEl.textContent = `${speed} • ETA: ${etaStr}${seeds}`;
         }
       } else {
-        fill.className = 'progress-fill complete';
-        fill.style.width = '100%';
+        if (track) track.style.display = 'none';
+        if (statusBadge) statusBadge.style.display = 'flex';
         details.style.display = 'none';
 
         const item = historyItems.find((h) => h.token === token);
@@ -421,6 +469,15 @@ function startProgressPolling() {
         }
       }
     });
+
+    // Update real-time speed graph & active metric
+    if (speedGraph) {
+      speedGraph.addSpeed(totalSpeed);
+    }
+    const graphLiveSpeed = document.getElementById('graph-live-speed');
+    if (graphLiveSpeed) {
+      graphLiveSpeed.textContent = formatSpeed(totalSpeed);
+    }
 
     const activeMetricEl = document.getElementById('metric-active-downloads');
     if (activeMetricEl) activeMetricEl.textContent = activeCount.toString();

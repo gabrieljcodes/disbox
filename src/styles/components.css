@@ -911,75 +911,252 @@
   font-family: var(--font-mono);
 }
 
-/* ─── History & Items Lists ─── */
-.history-items-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+/* ─── 2-Column Dashboard Layout (TorBox Style) ─── */
+.dashboard-layout-2col {
+  display: grid;
+  grid-template-columns: 310px minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
   padding-bottom: 60px;
 }
-.history-item-card {
+
+@media (max-width: 1080px) {
+  .dashboard-layout-2col {
+    grid-template-columns: 1fr;
+  }
+}
+
+.dashboard-sidebar-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  position: sticky;
+  top: 80px;
+}
+
+.speed-graph-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.speed-graph-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.speed-graph-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.live-speed-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  border-radius: var(--radius-full);
+  padding: 3px 10px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--brand-green-light);
+}
+.pulse-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 8px #10b981;
+  animation: pulse-glow 1.8s infinite;
+}
+@keyframes pulse-glow {
+  0% { opacity: 0.4; transform: scale(0.9); }
+  50% { opacity: 1; transform: scale(1.2); }
+  100% { opacity: 0.4; transform: scale(0.9); }
+}
+
+.speed-graph-canvas-wrap {
+  width: 100%;
+  height: 155px;
+  position: relative;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.speed-graph-canvas-wrap canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* Sidebar mini metrics */
+.sidebar-metrics-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.sidebar-metric-box {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.sidebar-metric-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.sidebar-metric-val {
+  font-size: 18px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+}
+
+/* ─── Main Panel Downloads ─── */
+.dashboard-main-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.history-header-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.history-count-heading {
+  font-size: 16px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+/* TorBox Download Cards List */
+.torbox-downloads-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.torbox-card {
   background: var(--bg-card);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   padding: 14px 18px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   transition: var(--transition-fast);
+  position: relative;
 }
-.history-item-card:hover {
+.torbox-card:hover {
   border-color: var(--border-medium);
   background: var(--bg-card-hover);
 }
-.history-item-top {
+
+.torbox-card-top {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
 }
-.history-item-left {
+.torbox-card-left {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   min-width: 0;
   flex: 1;
 }
-.history-item-checkbox {
-  width: 16px;
-  height: 16px;
-  cursor: pointer;
-  accent-color: var(--brand-green);
-}
-.history-item-title {
+.torbox-card-title {
   font-size: 14px;
   font-weight: 600;
   color: var(--text-primary);
+  font-family: var(--font-mono);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  text-decoration: none;
+  transition: color 0.15s;
 }
-.history-item-meta {
+.torbox-card-title:hover {
+  color: var(--brand-green-light);
+}
+
+.torbox-card-badges {
   display: flex;
   align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.torbox-card-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 12px;
   font-size: 12px;
   font-family: var(--font-mono);
   color: var(--text-muted);
 }
-.history-item-actions {
+.torbox-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.torbox-card-actions {
   display: flex;
   align-items: center;
   gap: 6px;
   flex-shrink: 0;
 }
-.history-progress-details {
+
+.history-item-checkbox {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: var(--brand-green);
+  flex-shrink: 0;
+}
+
+.history-item-icon-box {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-xs);
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  font-size: 11px;
-  font-family: var(--font-mono);
-  color: var(--text-secondary);
+  justify-content: center;
+  flex-shrink: 0;
+}
+.history-item-icon-box.icon-torrent {
+  color: var(--brand-green-light);
+  background: rgba(var(--brand-green-rgb), 0.12);
+  border: 1px solid rgba(var(--brand-green-rgb), 0.25);
+}
+.history-item-icon-box.icon-webdl {
+  color: #60a5fa;
+  background: rgba(59, 130, 246, 0.12);
+  border: 1px solid rgba(59, 130, 246, 0.25);
 }
 
 /* ─── Media Cards Grid (Search) ─── */

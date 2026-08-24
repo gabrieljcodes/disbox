@@ -2,84 +2,97 @@ import { icon } from '../../../components/icons';
 
 export function renderPanels(): string {
   return `
-    <!-- ═══ TAB 1: HISTORY ═══ -->
+    <!-- ═══ TAB 1: HISTORY (TorBox 2-Column Dashboard) ═══ -->
     <div class="tab-panel active" id="panel-history">
-      <!-- Summary Metrics Cards -->
-      <div class="metrics-grid">
-        <div class="metric-card">
-          <div class="metric-header">
-            <span>Total Downloads</span>
-            ${icon('download', 16)}
+      <div class="dashboard-layout-2col">
+        <!-- ── Left Column: Live Speed Graph & Stats ── -->
+        <div class="dashboard-sidebar-panel">
+          <!-- Live Speed Graph -->
+          <div class="speed-graph-card">
+            <div class="speed-graph-header">
+              <div class="speed-graph-title">
+                ${icon('activity', 16, '#10b981')}
+                <span>Download Speed</span>
+              </div>
+              <div class="live-speed-indicator">
+                <span class="pulse-dot"></span>
+                <span id="graph-live-speed">0 B/s</span>
+              </div>
+            </div>
+            <div class="speed-graph-canvas-wrap">
+              <canvas id="download-speed-canvas" width="280" height="155"></canvas>
+            </div>
           </div>
-          <div class="metric-value" id="metric-total-downloads">0</div>
-        </div>
-        <div class="metric-card">
-          <div class="metric-header">
-            <span>Active Downloads</span>
-            ${icon('zap', 16, '#3b82f6')}
+
+          <!-- Quick Metrics 2x2 -->
+          <div class="sidebar-metrics-grid">
+            <div class="sidebar-metric-box">
+              <span class="sidebar-metric-label">Active</span>
+              <span class="sidebar-metric-val" id="metric-active-downloads" style="color: var(--status-active);">0</span>
+            </div>
+            <div class="sidebar-metric-box">
+              <span class="sidebar-metric-label">Completed</span>
+              <span class="sidebar-metric-val" id="metric-completed" style="color: var(--brand-green-light);">0</span>
+            </div>
+            <div class="sidebar-metric-box">
+              <span class="sidebar-metric-label">Total Items</span>
+              <span class="sidebar-metric-val" id="metric-total-downloads">0</span>
+            </div>
+            <div class="sidebar-metric-box">
+              <span class="sidebar-metric-label">Bandwidth</span>
+              <span class="sidebar-metric-val" id="metric-bandwidth">0 B</span>
+            </div>
           </div>
-          <div class="metric-value" id="metric-active-downloads" style="color: var(--status-active);">0</div>
         </div>
-        <div class="metric-card">
-          <div class="metric-header">
-            <span>Bandwidth Used</span>
-            ${icon('activity', 16, '#10b981')}
+
+        <!-- ── Right Column: Downloads Header & List ── -->
+        <div class="dashboard-main-panel">
+          <!-- Toolbar -->
+          <div class="toolbar">
+            <div class="toolbar-search">
+              <span class="search-icon">
+                ${icon('search', 16)}
+              </span>
+              <input type="text" id="history-search" class="input" placeholder="Search history by name, source or token..." aria-label="Search history">
+            </div>
+
+            <select class="select" id="history-filter-status" aria-label="Filter by status">
+              <option value="all">Status: All</option>
+              <option value="active">Active / Downloading</option>
+              <option value="completed">Completed</option>
+              <option value="error">Failed / Error</option>
+            </select>
+
+            <select class="select" id="history-filter-type" aria-label="Filter by type">
+              <option value="all">Type: All</option>
+              <option value="torrent">Torrent</option>
+              <option value="webdl">WebDL / Direct</option>
+            </select>
+
+            <select class="select" id="history-sort" aria-label="Sort history items">
+              <option value="newest">Newest first</option>
+              <option value="oldest">Oldest first</option>
+              <option value="largest">Largest first</option>
+              <option value="smallest">Smallest first</option>
+            </select>
+
+            <button class="btn btn-secondary btn-sm" id="btn-refresh-history" title="Refresh history (R)" aria-label="Refresh history">
+              ${icon('refresh', 14)}
+            </button>
+
+            <button class="btn btn-danger btn-sm" id="btn-mass-delete" style="display: none;" aria-label="Delete selected downloads">
+              ${icon('trash', 14)}
+              <span id="mass-delete-count">Delete Selected</span>
+            </button>
           </div>
-          <div class="metric-value" id="metric-bandwidth">0 B</div>
-        </div>
-        <div class="metric-card">
-          <div class="metric-header">
-            <span>Completed</span>
-            ${icon('checkCircle', 16, '#10b981')}
+
+          <!-- History Items Container -->
+          <div class="torbox-downloads-list" id="history-items-container">
+            <div class="empty-state">
+              <div class="spinner"></div>
+              <p>Loading download history...</p>
+            </div>
           </div>
-          <div class="metric-value" id="metric-completed">0</div>
-        </div>
-      </div>
-
-      <!-- History Toolbar -->
-      <div class="toolbar">
-        <div class="toolbar-search">
-          <span class="search-icon">
-            ${icon('search', 16)}
-          </span>
-          <input type="text" id="history-search" class="input" placeholder="Search history by name, source or token..." aria-label="Search history">
-        </div>
-
-        <select class="select" id="history-filter-status" aria-label="Filter by status">
-          <option value="all">Status: All</option>
-          <option value="active">Active / Downloading</option>
-          <option value="completed">Completed</option>
-          <option value="error">Failed / Error</option>
-        </select>
-
-        <select class="select" id="history-filter-type" aria-label="Filter by type">
-          <option value="all">Type: All</option>
-          <option value="torrent">Torrent</option>
-          <option value="webdl">WebDL / Direct</option>
-        </select>
-
-        <select class="select" id="history-sort" aria-label="Sort history items">
-          <option value="newest">Newest first</option>
-          <option value="oldest">Oldest first</option>
-          <option value="largest">Largest first</option>
-          <option value="smallest">Smallest first</option>
-        </select>
-
-        <button class="btn btn-secondary btn-sm" id="btn-refresh-history" title="Refresh history (R)" aria-label="Refresh history">
-          ${icon('refresh', 14)}
-        </button>
-
-        <button class="btn btn-danger btn-sm" id="btn-mass-delete" style="display: none;" aria-label="Delete selected downloads">
-          ${icon('trash', 14)}
-          <span id="mass-delete-count">Delete Selected</span>
-        </button>
-      </div>
-
-      <!-- History Items Container -->
-      <div class="history-items-list" id="history-items-container">
-        <div class="empty-state">
-          <div class="spinner"></div>
-          <p>Loading download history...</p>
         </div>
       </div>
     </div>
@@ -113,7 +126,7 @@ export function renderPanels(): string {
         <!-- Card: Magnet / InfoHash -->
         <div class="card">
           <div class="section-header">
-            <span class="section-icon-green">${icon('zap', 20)}</span>
+            <span class="section-icon-green">${icon('magnet', 20)}</span>
             <div class="section-title-group">
               <h2 class="section-title">Add Magnet Link / InfoHash</h2>
               <p class="section-desc">Paste any magnet URI or 40-character torrent hash</p>
