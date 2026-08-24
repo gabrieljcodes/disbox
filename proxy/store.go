@@ -110,6 +110,13 @@ func (st *Store) CreateTables() error {
 			pixeldrain_token TEXT DEFAULT ''
 		);
 
+		CREATE TABLE IF NOT EXISTS discord_guilds (
+			id TEXT PRIMARY KEY,
+			name TEXT NOT NULL,
+			icon TEXT DEFAULT '',
+			updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+		);
+
 		ALTER TABLE download_history ADD COLUMN IF NOT EXISTS source_url TEXT DEFAULT '';
 	`)
 	if err != nil {
@@ -371,6 +378,11 @@ func (st *Store) UpdateHistoryName(token string, name string) {
 	st.db.Exec("UPDATE download_history SET name = $1 WHERE token = $2", name, token)
 }
 
+// UpdateHistorySourceURL updates the source_url (magnet/link) of a history record.
+func (st *Store) UpdateHistorySourceURL(token string, sourceURL string) {
+	st.db.Exec("UPDATE download_history SET source_url = $1 WHERE token = $2 OR link_token = $2", sourceURL, token)
+}
+
 func (st *Store) GetUserHistory(userID string) ([]HistoryRecord, error) {
 	rows, err := st.db.Query(
 		"SELECT token, COALESCE(link_token, ''), name, type, created_at, COALESCE(source_url, ''), COALESCE(size, 0) FROM download_history WHERE user_id = $1 AND deleted = false ORDER BY created_at DESC",
@@ -417,7 +429,7 @@ func (st *Store) GetUserHistoryLimited(userID string, limit int) ([]HistoryRecor
 
 func (st *Store) GetAdminHistory() ([]HistoryRecord, error) {
 	rows, err := st.db.Query(`
-		SELECT h.user_id, COALESCE(u.username, ''), COALESCE(u.avatar, ''), h.token, COALESCE(h.link_token, ''), h.name, h.type, h.created_at, COALESCE(h.source_url, '') 
+		SELECT h.user_id, COALESCE(u.username, ''), COALESCE(u.avatar, ''), h.token, COALESCE(h.link_token, ''), h.name, h.type, h.size, h.created_at, COALESCE(h.source_url, '') 
 		FROM download_history h
 		LEFT JOIN users u ON h.user_id = u.id
 		WHERE h.deleted = false ORDER BY h.created_at DESC
@@ -430,7 +442,7 @@ func (st *Store) GetAdminHistory() ([]HistoryRecord, error) {
 	var history []HistoryRecord
 	for rows.Next() {
 		var hr HistoryRecord
-		if err := rows.Scan(&hr.UserID, &hr.Username, &hr.Avatar, &hr.Token, &hr.LinkToken, &hr.Name, &hr.Type, &hr.CreatedAt, &hr.SourceURL); err != nil {
+		if err := rows.Scan(&hr.UserID, &hr.Username, &hr.Avatar, &hr.Token, &hr.LinkToken, &hr.Name, &hr.Type, &hr.Size, &hr.CreatedAt, &hr.SourceURL); err != nil {
 			log.Printf("GetAdminHistory scan error: %v", err)
 		} else {
 			history = append(history, hr)
@@ -681,6 +693,64 @@ func (st *Store) GetGuildRolesWhitelist() map[string][]string {
 		return map[string][]string{}
 	}
 	return rolesMap
+}
+
+type DiscordGuildInfo struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Icon    string `json:"icon"`
+	IconURL string `json:"icon_url"`
+}
+
+func (st *Store) SaveDiscordGuild(id, name, icon string) {
+	if id == "" {
+		return
+	}
+	st.db.Exec(`
+		INSERT INTO discord_guilds (id, name, icon, updated_at) 
+		VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
+		ON CONFLICT (id) DO UPDATE SET name = $2, icon = $3, updated_at = CURRENT_TIMESTAMP
+	`, id, name, icon)
+}
+
+func (st *Store) GetDiscordGuilds() map[string]DiscordGuildInfo {
+	rows, err := st.db.Query("SELECT id, name, icon FROM discord_guilds")
+	if err != nil {
+		return map[string]DiscordGuildInfo{}
+	}
+	defer rows.Close()
+
+	res := make(map[string]DiscordGuildInfo)
+	for rows.Next() {
+		var g DiscordGuildInfo
+		if err := rows.Scan(&g.ID, &g.Name, &g.Icon); err == nil {
+			if g.Icon != "" {
+				ext := "png"
+				if strings.HasPrefix(g.Icon, "a_") {
+					ext = "gif"
+				}
+				g.IconURL = fmt.Sprintf("https://cdn.discordapp.com/icons/%s/%s.%s", g.ID, g.Icon, ext)
+			}
+			res[g.ID] = g
+		}
+	}
+	return res
+}
+
+func (st *Store) GetDiscordGuild(id string) (DiscordGuildInfo, bool) {
+	var g DiscordGuildInfo
+	err := st.db.QueryRow("SELECT id, name, icon FROM discord_guilds WHERE id = $1", id).Scan(&g.ID, &g.Name, &g.Icon)
+	if err != nil {
+		return g, false
+	}
+	if g.Icon != "" {
+		ext := "png"
+		if strings.HasPrefix(g.Icon, "a_") {
+			ext = "gif"
+		}
+		g.IconURL = fmt.Sprintf("https://cdn.discordapp.com/icons/%s/%s.%s", g.ID, g.Icon, ext)
+	}
+	return g, true
 }
 
 type AccessUser struct {

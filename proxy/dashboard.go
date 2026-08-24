@@ -29,7 +29,7 @@ func (s *Server) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
 	q.Set("client_id", s.discordClientID)
 	q.Set("redirect_uri", redirectURI)
 	q.Set("response_type", "code")
-	q.Set("scope", "identify guilds.members.read")
+	q.Set("scope", "identify guilds guilds.members.read")
 	u.RawQuery = q.Encode()
 
 	http.Redirect(w, r, u.String(), http.StatusTemporaryRedirect)
@@ -109,6 +109,28 @@ func (s *Server) handleAuthCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Fetch & Cache User's Guilds (Provides Server Name & Icon without needing bot in server)
+	go func(accessToken string) {
+		reqGuilds, _ := http.NewRequest("GET", "https://discord.com/api/users/@me/guilds", nil)
+		reqGuilds.Header.Set("Authorization", "Bearer "+accessToken)
+		respGuilds, errGuilds := client.Do(reqGuilds)
+		if errGuilds == nil {
+			defer respGuilds.Body.Close()
+			if respGuilds.StatusCode == http.StatusOK {
+				var guildsList []struct {
+					ID   string `json:"id"`
+					Name string `json:"name"`
+					Icon string `json:"icon"`
+				}
+				if err := json.NewDecoder(respGuilds.Body).Decode(&guildsList); err == nil {
+					for _, g := range guildsList {
+						s.store.SaveDiscordGuild(g.ID, g.Name, g.Icon)
+					}
+				}
+			}
+		}
+	}(tokenRes.AccessToken)
+
 	// Guild/Role Whitelist Check
 	whitelistEnabled, _ := s.store.GetAccessSettings()
 	if whitelistEnabled == "true" {
@@ -132,7 +154,9 @@ func (s *Server) handleAuthCallback(w http.ResponseWriter, r *http.Request) {
 					if err := json.NewDecoder(respMember.Body).Decode(&memberRes); err == nil {
 						for _, userRole := range memberRes.Roles {
 							for _, reqRole := range requiredRoles {
-								if userRole == reqRole {
+								cleanReqRole := strings.TrimSpace(strings.Split(reqRole, ":")[0])
+								cleanReqRole = strings.TrimSpace(strings.Split(cleanReqRole, " ")[0])
+								if userRole == cleanReqRole {
 									// Automatically add to whitelist
 									s.store.AddToAccessList(userID, "whitelist", "AutoRoleSync")
 									log.Printf("User %s added to whitelist via AutoRoleSync (Guild: %s, Role: %s)", userID, guildID, reqRole)
@@ -195,5 +219,5 @@ func (s *Server) handleAuthLogout(w http.ResponseWriter, r *http.Request) {
 		HttpOnly: true,
 	})
 
-	http.Redirect(w, r, "/dashboard", http.StatusTemporaryRedirect)
+	http.Redirect(w, r, "/auth/login", http.StatusTemporaryRedirect)
 }

@@ -169,6 +169,7 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	if s.discordClientID != "" && s.discordClientSecret != "" {
 		// Dashboard UI routes
 		mux.HandleFunc("/dashboard", s.handleDashboard)
+		mux.HandleFunc("/login", s.handleDashboard)
 		mux.HandleFunc("/hosters", s.handleHostersPage)
 		mux.HandleFunc("/auth/login", s.handleAuthLogin)
 		mux.HandleFunc("/auth/callback", s.handleAuthCallback)
@@ -228,6 +229,7 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/v1/admin/announcements/add", s.handleAdminAnnouncementsAdd)
 	mux.HandleFunc("/v1/admin/announcements/remove", s.handleAdminAnnouncementsRemove)
 	mux.HandleFunc("/v1/admin/announcements/clear", s.handleAdminAnnouncementsClear)
+	mux.HandleFunc("/v1/admin/discord/guild", s.handleAdminDiscordGuild)
 }
 
 func (s *Server) Start() error {

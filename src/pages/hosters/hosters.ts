@@ -7,15 +7,24 @@ let allHosters: HosterItem[] = [];
 
 function renderHostersLayout(): string {
   return `
-    <header class="topbar">
-      <a href="/dashboard" class="topbar-brand">
-        <img src="/icon.png" width="24" height="24" alt="Disbox">
-        <span class="topbar-title">DISBOX</span>
-      </a>
-      <a href="/dashboard" class="btn btn-secondary btn-sm">
-        ${icon('arrowLeft', 14)}
-        <span>Dashboard</span>
-      </a>
+    <header class="dash-topbar">
+      <div class="topbar-left">
+        <a href="/dashboard" class="topbar-brand">
+          <img src="/icon.png" width="26" height="26" alt="Disbox">
+          <span class="topbar-brand-title">DISBOX</span>
+        </a>
+      </div>
+
+      <div class="topbar-right">
+        <a href="/dashboard" class="btn btn-secondary btn-sm" title="Return to Dashboard">
+          ${icon('arrowLeft', 14)}
+          <span>Dashboard</span>
+        </a>
+        <a href="/v1/docs" class="btn btn-secondary btn-sm" title="API Reference">
+          ${icon('fileText', 14)}
+          <span>Docs</span>
+        </a>
+      </div>
     </header>
 
     <main class="container">

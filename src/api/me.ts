@@ -24,10 +24,10 @@ export async function fetchUserCloud() {
   return apiFetch<UserCloudSettings>('/v1/user/cloud');
 }
 
-export async function saveUserCloud(provider: string, config: Record<string, unknown>) {
+export async function saveUserCloud(config: UserCloudSettings) {
   return apiFetch('/v1/user/cloud', {
     method: 'POST',
-    body: JSON.stringify({ provider, ...config }),
+    body: JSON.stringify(config),
   });
 }
 

@@ -1,5 +1,5 @@
 import { Modal } from '../../../components/modal';
-import { fetchMe, fetchUserProfile, saveUserFtp } from '../../../api/me';
+import { fetchMe, fetchUserProfile, saveUserFtp, fetchUserCloud, saveUserCloud } from '../../../api/me';
 import { formatBytes } from '../../../utils/format';
 import { toastSuccess, toastError, toastInfo } from '../../../components/toast';
 
@@ -31,12 +31,42 @@ export function initUserProfileModal() {
       toastError(res.error || 'Failed to save FTP settings');
     }
   });
+
+  const btnSaveCloud = document.getElementById('btn-save-cloud');
+  btnSaveCloud?.addEventListener('click', async () => {
+    const google = (document.getElementById('cloud-token-google') as HTMLInputElement)?.value.trim() || '';
+    const dropbox = (document.getElementById('cloud-token-dropbox') as HTMLInputElement)?.value.trim() || '';
+    const onedrive = (document.getElementById('cloud-token-onedrive') as HTMLInputElement)?.value.trim() || '';
+    const gofile = (document.getElementById('cloud-token-gofile') as HTMLInputElement)?.value.trim() || '';
+    const onefichier = (document.getElementById('cloud-token-onefichier') as HTMLInputElement)?.value.trim() || '';
+    const pixeldrain = (document.getElementById('cloud-token-pixeldrain') as HTMLInputElement)?.value.trim() || '';
+
+    toastInfo('Saving cloud storage tokens...');
+    const res = await saveUserCloud({
+      google,
+      dropbox,
+      onedrive,
+      gofile,
+      onefichier,
+      pixeldrain,
+    });
+
+    if (res.success) {
+      toastSuccess('Cloud tokens updated successfully');
+    } else {
+      toastError(res.error || 'Failed to save cloud tokens');
+    }
+  });
 }
 
 export async function openUserProfileModal() {
   profileModal?.open();
 
-  const [meRes, profRes] = await Promise.all([fetchMe(), fetchUserProfile()]);
+  const [meRes, profRes, cloudRes] = await Promise.all([
+    fetchMe(),
+    fetchUserProfile(),
+    fetchUserCloud(),
+  ]);
 
   if (meRes.success && meRes.data) {
     const user = meRes.data;
@@ -66,5 +96,22 @@ export async function openUserProfileModal() {
 
     if (hostEl && prof.ftp_host) hostEl.value = prof.ftp_host;
     if (userEl && prof.ftp_username) userEl.value = prof.ftp_username;
+  }
+
+  if (cloudRes.success && cloudRes.data) {
+    const cloud = cloudRes.data;
+    const googleEl = document.getElementById('cloud-token-google') as HTMLInputElement | null;
+    const dropboxEl = document.getElementById('cloud-token-dropbox') as HTMLInputElement | null;
+    const onedriveEl = document.getElementById('cloud-token-onedrive') as HTMLInputElement | null;
+    const gofileEl = document.getElementById('cloud-token-gofile') as HTMLInputElement | null;
+    const onefichierEl = document.getElementById('cloud-token-onefichier') as HTMLInputElement | null;
+    const pixeldrainEl = document.getElementById('cloud-token-pixeldrain') as HTMLInputElement | null;
+
+    if (googleEl && cloud.google) googleEl.value = cloud.google;
+    if (dropboxEl && cloud.dropbox) dropboxEl.value = cloud.dropbox;
+    if (onedriveEl && cloud.onedrive) onedriveEl.value = cloud.onedrive;
+    if (gofileEl && cloud.gofile) gofileEl.value = cloud.gofile;
+    if (onefichierEl && cloud.onefichier) onefichierEl.value = cloud.onefichier;
+    if (pixeldrainEl && cloud.pixeldrain) pixeldrainEl.value = cloud.pixeldrain;
   }
 }

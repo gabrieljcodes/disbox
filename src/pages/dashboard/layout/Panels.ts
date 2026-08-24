@@ -123,21 +123,35 @@ export function renderPanels(): string {
     <!-- ═══ TAB 3: ADD DOWNLOAD ═══ -->
     <div class="tab-panel" id="panel-add">
       <div class="form-max-w">
-        <!-- Card: Magnet / InfoHash -->
+        <!-- Unified Add Download Card -->
         <div class="card">
-          <div class="section-header">
-            <span class="section-icon-green">${icon('magnet', 20)}</span>
-            <div class="section-title-group">
-              <h2 class="section-title">Add Magnet Link / InfoHash</h2>
-              <p class="section-desc">Paste any magnet URI or 40-character torrent hash</p>
+          <div class="section-header" style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <span class="section-icon-green" id="add-card-icon">${icon('plus', 20)}</span>
+              <div class="section-title-group">
+                <h2 class="section-title">Add Download</h2>
+                <p class="section-desc">Paste a magnet link, infohash, or direct web/hoster download URL</p>
+              </div>
+            </div>
+            <div id="add-type-indicator" class="type-indicator-badge unknown">
+              <span>Paste link to detect</span>
             </div>
           </div>
+
           <div class="input-group mb-md">
-            <textarea id="input-magnet" class="input" rows="3" placeholder="magnet:?xt=urn:btih:... or 40-character hash" style="resize: vertical;" aria-label="Magnet URI or torrent hash"></textarea>
+            <textarea
+              id="input-link"
+              class="input"
+              rows="4"
+              placeholder="Paste magnet:?xt=urn:btih:..., 40-character torrent hash, or direct https:// link&#10;Multiple links supported (one per line)"
+              style="resize: vertical; font-family: var(--font-mono); font-size: 13px; line-height: 1.5;"
+              aria-label="Download Link, Magnet URI, Hash, or Hoster URL"
+            ></textarea>
           </div>
-          <button class="btn btn-solid btn-lg w-full" id="btn-submit-magnet">
+
+          <button class="btn btn-primary btn-lg w-full" id="btn-submit-link">
             ${icon('plus', 16)}
-            <span>Add Torrent to Disbox</span>
+            <span id="btn-submit-link-text">Add Download</span>
           </button>
         </div>
 
@@ -158,23 +172,6 @@ export function renderPanels(): string {
           </div>
           <button class="btn btn-primary btn-lg w-full mt-md" id="btn-submit-torrent-file" disabled>
             <span>Upload & Start Download</span>
-          </button>
-        </div>
-
-        <!-- Card: Web Download (DDL) -->
-        <div class="card">
-          <div class="section-header">
-            <span class="section-icon-purple">${icon('globe', 20)}</span>
-            <div class="section-title-group">
-              <h2 class="section-title">Direct Web Download / Hoster URL</h2>
-              <p class="section-desc">Supports Rapidgator, 1Fichier, Mega, MegaUp and more</p>
-            </div>
-          </div>
-          <div class="input-group mb-md">
-            <input type="url" id="input-webdl" class="input" placeholder="https://rapidgator.net/file/... or direct HTTP(S) link" aria-label="Direct download or hoster URL">
-          </div>
-          <button class="btn btn-primary btn-lg w-full" id="btn-submit-webdl">
-            <span>Download via TorBox</span>
           </button>
         </div>
       </div>
@@ -307,7 +304,7 @@ export function renderPanels(): string {
 
           <div class="form-row mb-md">
             <input type="text" id="admin-guild-id-input" class="input" style="flex: 1; min-width: 180px;" placeholder="Discord Server ID (Guild ID)" aria-label="Discord Server ID">
-            <input type="text" id="admin-role-id-input" class="input" style="flex: 1; min-width: 180px;" placeholder="Role ID(s), separated by commas" aria-label="Role IDs">
+            <input type="text" id="admin-role-id-input" class="input" style="flex: 1; min-width: 180px;" placeholder="Role IDs or ID:Name (e.g. 123456:VIP, 789012:Pro)" aria-label="Role IDs">
             <button class="btn btn-primary" id="btn-admin-add-guild-role">
               <span>Add Server Rule</span>
             </button>

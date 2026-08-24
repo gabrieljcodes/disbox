@@ -16,13 +16,38 @@ import { initUserProfileModal } from './modals/user-profile-modal';
 import { initTorrentStreamsModal } from './modals/torrent-streams-modal';
 import { initSpeedtestModal } from './modals/speedtest-modal';
 
+import { renderLoginPage } from './layout/LoginPage';
+
 const TABS_ORDER = ['history', 'queue', 'add', 'search', 'api', 'admin'];
 
-function initApp() {
+async function initApp() {
   const app = document.getElementById('app');
-  if (app) {
-    app.innerHTML = renderDashboardApp();
+  if (!app) return;
+
+  // Check URL error parameter
+  const urlParams = new URLSearchParams(window.location.search);
+  const errorCode = urlParams.get('error');
+  let errorMessage = '';
+  if (errorCode === 'access_denied') {
+    errorMessage = 'Access Denied: Your Discord account is not on the access whitelist.';
+  } else if (errorCode === 'internal_error') {
+    errorMessage = 'Authentication Error: Failed to complete Discord OAuth login.';
+  } else if (errorCode === 'session_expired') {
+    errorMessage = 'Your session has expired. Please sign in again.';
   }
+
+  // Check current session
+  const meRes = await fetchMe();
+  if (!meRes.success || !meRes.data) {
+    // Render clean standalone Login Page ONLY
+    app.innerHTML = renderLoginPage(errorMessage);
+    return;
+  }
+
+  const user = meRes.data;
+
+  // Render Full Dashboard App Shell
+  app.innerHTML = renderDashboardApp();
 
   initAnnouncements('announcements-container');
 
@@ -47,6 +72,19 @@ function initApp() {
   initAddTab(() => switchTab('history'));
   initSearchTab(() => switchTab('history'));
   initApiTokensTab();
+
+  // Setup user in Topbar
+  const nameEl = document.getElementById('user-name');
+  const avatarEl = document.getElementById('user-avatar') as HTMLImageElement | null;
+  const adminBtn = document.getElementById('admin-tab-btn');
+
+  if (nameEl) nameEl.textContent = user.username;
+  if (avatarEl && user.avatar_url) avatarEl.src = user.avatar_url;
+
+  if (user.is_admin && adminBtn) {
+    adminBtn.style.display = 'inline-flex';
+    initAdminTab();
+  }
 
   // Global Keyboard Shortcuts
   window.addEventListener('keydown', (e) => {
@@ -106,24 +144,6 @@ function initApp() {
         toastError(res.detail || res.error || `Failed to transfer to ${provider}`);
       }
     });
-  });
-
-  // Fetch Current User
-  fetchMe().then((meRes) => {
-    if (meRes.success && meRes.data) {
-      const user = meRes.data;
-      const nameEl = document.getElementById('user-name');
-      const avatarEl = document.getElementById('user-avatar') as HTMLImageElement | null;
-      const adminBtn = document.getElementById('admin-tab-btn');
-
-      if (nameEl) nameEl.textContent = user.username;
-      if (avatarEl && user.avatar_url) avatarEl.src = user.avatar_url;
-
-      if (user.is_admin && adminBtn) {
-        adminBtn.style.display = 'inline-flex';
-        initAdminTab();
-      }
-    }
   });
 }
 

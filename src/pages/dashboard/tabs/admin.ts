@@ -24,6 +24,7 @@ import { fetchAnnouncements } from '../../../api/announcements';
 import type { AnnouncementItem } from '../../../types/announcements';
 import { formatBytes, formatRelativeTime, escapeHtml } from '../../../utils/format';
 import { toastSuccess, toastError, toastInfo } from '../../../components/toast';
+import { icon } from '../../../components/icons';
 
 let globalHistoryItems: AdminGlobalHistoryItem[] = [];
 let currentGuildRolesMap: Record<string, string[]> = {};
@@ -184,8 +185,8 @@ async function loadUsersAccess() {
               <span>• Added by: ${escapeHtml(entry.added_by || 'Admin')}</span>
             </div>
           </div>
-          <button class="btn btn-secondary btn-icon btn-sm" data-remove-user="${escapeHtml(entry.user_id)}" title="Remove from list" aria-label="Remove user from list">
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+          <button class="btn btn-secondary btn-icon btn-sm" data-remove-user="${escapeHtml(entry.user_id)}" title="Remove from list" aria-label="Remove user from list" style="color: var(--status-danger);">
+            ${icon('x', 14)}
           </button>
         </div>
       </div>
@@ -256,9 +257,9 @@ function initGuildRolesSection() {
         toastError(res.error || 'Failed to remove server rule');
       }
     } else if (removeGuildRole) {
-      const [guildId, roleId] = removeGuildRole.split(':');
-      if (guildId && roleId && currentGuildRolesMap[guildId]) {
-        currentGuildRolesMap[guildId] = currentGuildRolesMap[guildId].filter((r) => r !== roleId);
+      const [guildId, roleRaw] = removeGuildRole.split('|');
+      if (guildId && roleRaw && currentGuildRolesMap[guildId]) {
+        currentGuildRolesMap[guildId] = currentGuildRolesMap[guildId].filter((r) => r !== roleRaw);
         if (currentGuildRolesMap[guildId].length === 0) {
           delete currentGuildRolesMap[guildId];
         }
@@ -298,6 +299,7 @@ async function loadGuildRoles() {
   }
 
   currentGuildRolesMap = rolesMap || {};
+  const guildsInfo = res.data.guilds_info || {};
   const guildIds = Object.keys(currentGuildRolesMap);
 
   if (guildIds.length === 0) {
@@ -313,32 +315,62 @@ async function loadGuildRoles() {
   container.innerHTML = guildIds
     .map((guildId) => {
       const roles = currentGuildRolesMap[guildId] || [];
+      const guild = guildsInfo[guildId];
+      const guildName = guild?.name || '';
+      const guildIcon = guild?.icon_url || '';
+
+      const iconHtml = guildIcon
+        ? `<img src="${escapeHtml(guildIcon)}" alt="${escapeHtml(guildName || 'Server')}" style="width: 40px; height: 40px; border-radius: var(--radius-md); object-fit: cover; border: 1px solid var(--border-subtle); flex-shrink: 0; background: var(--bg-card);">`
+        : `<div style="width: 40px; height: 40px; border-radius: var(--radius-md); background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(59, 130, 246, 0.3); display: flex; align-items: center; justify-content: center; font-weight: 700; color: var(--status-active); font-family: var(--font-mono); font-size: 13px; flex-shrink: 0;">${escapeHtml((guildName || guildId).substring(0, 2).toUpperCase())}</div>`;
+
+      const headerTitle = guildName
+        ? `<div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px; flex-wrap: wrap;">
+             <strong style="font-size: 13px; color: var(--text-primary); font-family: var(--font-mono);">${escapeHtml(guildName)}</strong>
+             <span class="mono" style="font-size: 12px; color: var(--text-muted);">(ID: ${escapeHtml(guildId)})</span>
+           </div>`
+        : `<div class="history-item-title mono" style="font-size: 13px; font-weight: 600; margin-bottom: 6px;">
+             Server ID: ${escapeHtml(guildId)}
+           </div>`;
+
       const roleBadges = roles
-        .map(
-          (roleId) => `
-          <span class="badge badge-blue" style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px;">
-            <span>Role: <strong class="mono">${escapeHtml(roleId)}</strong></span>
-            <button type="button" data-remove-guild-role="${escapeHtml(guildId)}:${escapeHtml(roleId)}" title="Remove role" aria-label="Remove role" style="background: none; border: none; cursor: pointer; color: inherit; display: flex; align-items: center; padding: 0; margin-left: 2px;">
-              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-            </button>
-          </span>
-        `
-        )
+        .map((roleRaw) => {
+          const [roleId, ...nameParts] = roleRaw.split(':');
+          const roleName = nameParts.join(':').trim();
+
+          if (roleName) {
+            return `
+              <span class="badge badge-purple" style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px;">
+                <span><strong style="color: var(--text-primary);">${escapeHtml(roleName)}</strong> <span class="mono" style="font-size: 12px; opacity: 0.8;">(${escapeHtml(roleId)})</span></span>
+                <button type="button" data-remove-guild-role="${escapeHtml(guildId)}|${escapeHtml(roleRaw)}" title="Remove role" aria-label="Remove role" style="background: none; border: none; cursor: pointer; color: inherit; display: flex; align-items: center; padding: 0; margin-left: 2px;">
+                  ${icon('x', 12)}
+                </button>
+              </span>
+            `;
+          }
+
+          return `
+            <span class="badge badge-blue" style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px;">
+              <span>Role: <strong class="mono">${escapeHtml(roleId)}</strong></span>
+              <button type="button" data-remove-guild-role="${escapeHtml(guildId)}|${escapeHtml(roleRaw)}" title="Remove role" aria-label="Remove role" style="background: none; border: none; cursor: pointer; color: inherit; display: flex; align-items: center; padding: 0; margin-left: 2px;">
+                ${icon('x', 12)}
+              </button>
+            </span>
+          `;
+        })
         .join('');
 
       return `
       <div class="history-item-card">
-        <div class="history-item-top" style="align-items: flex-start; gap: 14px;">
+        <div class="history-item-top" style="align-items: center; gap: 14px;">
+          ${iconHtml}
           <div style="min-width: 0; flex: 1;">
-            <div class="history-item-title mono" style="font-size: 13px; font-weight: 600; margin-bottom: 6px;">
-              Server ID: ${escapeHtml(guildId)}
-            </div>
+            ${headerTitle}
             <div style="display: flex; flex-wrap: wrap; gap: 6px; align-items: center;">
               ${roleBadges || '<span style="font-size: 12px; color: var(--text-muted);">No roles assigned</span>'}
             </div>
           </div>
           <button class="btn btn-secondary btn-icon btn-sm" data-remove-guild="${escapeHtml(guildId)}" title="Remove Server Rule" aria-label="Remove Server Rule" style="color: var(--status-danger);">
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+            ${icon('trash', 14)}
           </button>
         </div>
       </div>
@@ -548,19 +580,31 @@ function filterAdminHistory() {
     .map(
       (item) => `
     <div class="history-item-card">
-      <div class="history-item-top">
+      <div class="history-item-top" style="align-items: center; gap: 14px;">
+        <img src="${escapeHtml((item as any).avatar || 'https://cdn.discordapp.com/embed/avatars/0.png')}"
+             alt="${escapeHtml(item.username || 'User')}"
+             class="user-avatar"
+             style="width: 38px; height: 38px; border-radius: 50%; object-fit: cover; border: 1px solid var(--border-subtle); flex-shrink: 0; background: var(--bg-card);"
+             onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
         <div style="min-width: 0; flex: 1;">
-          <div class="history-item-title mono">${escapeHtml(item.name)}</div>
+          <a href="${item.browse_url || `/browser/${item.token}`}" class="history-item-title mono" title="${escapeHtml(item.name)}" style="color: var(--text-primary); text-decoration: none;">
+            ${escapeHtml(item.name)}
+          </a>
           <div class="history-item-meta">
             <span class="badge ${item.type === 'torrent' ? 'badge-green' : 'badge-blue'}">${item.type}</span>
-            <span>${formatBytes(item.size)}</span>
-            <span>User: ${escapeHtml(item.username || item.user_id)}</span>
+            <span class="mono">${item.size ? formatBytes(item.size) : '0 B'}</span>
+            <span>Added by <strong style="color: var(--text-primary);">${escapeHtml(item.username || item.user_id || 'User')}</strong></span>
             <span>• ${formatRelativeTime(item.created_at)}</span>
           </div>
         </div>
-        <a href="${item.browse_url}" class="btn btn-secondary btn-icon btn-sm" title="Browse Files" aria-label="Browse Files">
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
-        </a>
+        <div class="history-item-actions">
+          <a href="${item.browse_url || `/browser/${item.token}`}" class="btn btn-secondary btn-icon btn-sm" title="Browse Files" aria-label="Browse Files">
+            ${icon('folder', 14)}
+          </a>
+          <a href="${item.download_url || `/dl/${item.token}`}" class="btn btn-secondary btn-icon btn-sm" title="Download" aria-label="Download" download>
+            ${icon('download', 14)}
+          </a>
+        </div>
       </div>
     </div>
   `

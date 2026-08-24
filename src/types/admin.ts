@@ -13,6 +13,13 @@ export interface AccessUser {
   added_at?: string;
 }
 
+export interface DiscordGuildInfo {
+  id: string;
+  name: string;
+  icon?: string;
+  icon_url?: string;
+}
+
 export interface AdminSettingsMap {
   cache_only: boolean | string;
   public_api_enabled: boolean | string;
@@ -26,6 +33,7 @@ export interface AdminSettingsMap {
   aiostreams_uuid?: string;
   aiostreams_password?: string;
   whitelist_guild_roles?: Record<string, string[]> | string;
+  guilds_info?: Record<string, DiscordGuildInfo>;
   torbox_keys?: string[];
   [key: string]: unknown;
 }

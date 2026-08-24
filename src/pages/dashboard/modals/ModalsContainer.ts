@@ -1,17 +1,17 @@
-import { icon } from '../../../components/icons';
+import { icon, cloudIcon } from '../../../components/icons';
 
 export function renderModals(): string {
   return `
     <!-- User Profile Modal -->
     <div class="modal-backdrop" id="user-profile-modal">
-      <div class="modal-window">
+      <div class="modal-window" style="max-width: 540px;">
         <div class="modal-header">
           <h2 class="modal-title">User Profile & Settings</h2>
           <button class="btn btn-secondary btn-icon btn-sm" data-close-modal aria-label="Close user profile modal">
             ${icon('x', 16)}
           </button>
         </div>
-        <div class="modal-body" style="display: flex; flex-direction: column; gap: 20px;">
+        <div class="modal-body" style="display: flex; flex-direction: column; gap: 20px; max-height: calc(88vh - 110px); overflow-y: auto;">
           <!-- User Info Header -->
           <div style="display: flex; align-items: center; gap: 16px; padding-bottom: 16px; border-bottom: 1px solid var(--border-subtle);">
             <img src="/icon.png" id="profile-modal-avatar" width="48" height="48" style="border-radius: 50%;" alt="Avatar">
@@ -46,8 +46,79 @@ export function renderModals(): string {
                 <input type="password" id="ftp-password" class="input" placeholder="FTP Password" aria-label="FTP Password">
               </div>
               <input type="text" id="ftp-path" class="input" placeholder="Destination Path (e.g. /downloads)" aria-label="FTP Destination Path">
-              <div style="display: flex; gap: 10px; margin-top: 4px;">
-                <button class="btn btn-secondary btn-sm" id="btn-save-ftp" style="flex: 1;">Save FTP Settings</button>
+              <div style="margin-top: 4px;">
+                <button class="btn btn-primary" id="btn-save-ftp" style="width: 100%; height: 38px; font-weight: 600;">Save FTP Settings</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Cloud Storage Accounts & Tokens -->
+          <div style="border-top: 1px solid var(--border-subtle); padding-top: 16px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+              <h3 class="input-label" style="margin: 0;">Cloud Storage Tokens</h3>
+              <span style="font-size: 12px; color: var(--text-muted); font-family: var(--font-mono);">Encrypted at rest</span>
+            </div>
+            <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 12px; line-height: 1.4;">
+              Provide your personal cloud API tokens to enable one-click uploads directly to your cloud storage providers.
+            </p>
+
+            <div style="display: flex; flex-direction: column; gap: 10px;">
+              <!-- Google Drive -->
+              <div class="cloud-token-input-row">
+                <div class="cloud-token-label">
+                  ${cloudIcon('google', 18)}
+                  <span>Google Drive</span>
+                </div>
+                <input type="password" id="cloud-token-google" class="input" placeholder="Google OAuth Refresh / Access Token" aria-label="Google Drive Token">
+              </div>
+
+              <!-- Dropbox -->
+              <div class="cloud-token-input-row">
+                <div class="cloud-token-label">
+                  ${cloudIcon('dropbox', 18)}
+                  <span>Dropbox</span>
+                </div>
+                <input type="password" id="cloud-token-dropbox" class="input" placeholder="Dropbox API Access Token" aria-label="Dropbox Token">
+              </div>
+
+              <!-- OneDrive -->
+              <div class="cloud-token-input-row">
+                <div class="cloud-token-label">
+                  ${cloudIcon('onedrive', 18)}
+                  <span>OneDrive</span>
+                </div>
+                <input type="password" id="cloud-token-onedrive" class="input" placeholder="OneDrive Refresh / Access Token" aria-label="OneDrive Token">
+              </div>
+
+              <!-- GoFile -->
+              <div class="cloud-token-input-row">
+                <div class="cloud-token-label">
+                  ${cloudIcon('gofile', 18)}
+                  <span>GoFile</span>
+                </div>
+                <input type="password" id="cloud-token-gofile" class="input" placeholder="GoFile Account API Token" aria-label="GoFile Token">
+              </div>
+
+              <!-- 1Fichier -->
+              <div class="cloud-token-input-row">
+                <div class="cloud-token-label">
+                  ${cloudIcon('1fichier', 18)}
+                  <span>1Fichier</span>
+                </div>
+                <input type="password" id="cloud-token-onefichier" class="input" placeholder="1Fichier API Key" aria-label="1Fichier Token">
+              </div>
+
+              <!-- PixelDrain -->
+              <div class="cloud-token-input-row">
+                <div class="cloud-token-label">
+                  ${cloudIcon('pixeldrain', 18)}
+                  <span>PixelDrain</span>
+                </div>
+                <input type="password" id="cloud-token-pixeldrain" class="input" placeholder="PixelDrain API Key" aria-label="PixelDrain Token">
+              </div>
+
+              <div style="margin-top: 4px;">
+                <button class="btn btn-primary" id="btn-save-cloud" style="width: 100%; height: 38px; font-weight: 600;">Save Cloud Tokens</button>
               </div>
             </div>
           </div>
@@ -116,27 +187,27 @@ export function renderModals(): string {
           </p>
           <div class="cloud-options-grid">
             <button class="cloud-provider-btn" data-provider="googledrive" aria-label="Upload to Google Drive">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 2 19h20L12 2z"/></svg>
+              ${cloudIcon('googledrive', 22)}
               <span>Google Drive</span>
             </button>
             <button class="cloud-provider-btn" data-provider="dropbox" aria-label="Upload to Dropbox">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 3 6 4-6 4-6-4 6-4zm12 0 6 4-6 4-6-4 6-4zM6 15l6 4-6 4-6-4 6-4zm12 0 6 4-6 4-6-4 6-4z"/></svg>
+              ${cloudIcon('dropbox', 22)}
               <span>Dropbox</span>
             </button>
             <button class="cloud-provider-btn" data-provider="onedrive" aria-label="Upload to OneDrive">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#06b6d4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg>
+              ${cloudIcon('onedrive', 22)}
               <span>OneDrive</span>
             </button>
             <button class="cloud-provider-btn" data-provider="gofile" aria-label="Upload to GoFile">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+              ${cloudIcon('gofile', 22)}
               <span>GoFile</span>
             </button>
             <button class="cloud-provider-btn" data-provider="1fichier" aria-label="Upload to 1Fichier">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/></svg>
+              ${cloudIcon('1fichier', 22)}
               <span>1Fichier</span>
             </button>
             <button class="cloud-provider-btn" data-provider="pixeldrain" aria-label="Upload to PixelDrain">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 14 14"/></svg>
+              ${cloudIcon('pixeldrain', 22)}
               <span>PixelDrain</span>
             </button>
           </div>

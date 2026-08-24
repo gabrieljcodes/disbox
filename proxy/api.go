@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -1111,16 +1112,56 @@ func (s *Server) handleExportData(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if exportType == "magnet" {
-		if sourceURL == "" {
-			jsonError(w, http.StatusNotFound, "Magnet link not available for this record")
+		if sourceURL != "" && strings.HasPrefix(sourceURL, "magnet:") {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"success": true,
+				"data":    sourceURL,
+			})
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"success": true,
-			"data":    sourceURL,
-		})
+		client := s.clientPool.GetClient(clientIndex)
+		if client != nil {
+			resp, err := client.ExportData(downloadID, "magnet")
+			if err == nil && resp != nil && resp.StatusCode == http.StatusOK {
+				defer resp.Body.Close()
+				bodyBytes, _ := io.ReadAll(resp.Body)
+				magnetStr := strings.TrimSpace(string(bodyBytes))
+				if strings.HasPrefix(magnetStr, "magnet:") {
+					s.store.UpdateHistorySourceURL(token, magnetStr)
+					w.Header().Set("Content-Type", "application/json")
+					json.NewEncoder(w).Encode(map[string]interface{}{
+						"success": true,
+						"data":    magnetStr,
+					})
+					return
+				}
+			}
+
+			info, err := client.GetTorrentInfo(downloadID)
+			if err == nil && info != nil && info.Hash != "" {
+				magnetStr := fmt.Sprintf("magnet:?xt=urn:btih:%s&dn=%s", info.Hash, url.QueryEscape(info.Name))
+				s.store.UpdateHistorySourceURL(token, magnetStr)
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(map[string]interface{}{
+					"success": true,
+					"data":    magnetStr,
+				})
+				return
+			}
+		}
+
+		if sourceURL != "" {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"success": true,
+				"data":    sourceURL,
+			})
+			return
+		}
+
+		jsonError(w, http.StatusNotFound, "Magnet link not available for this record")
 		return
 	}
 
@@ -1166,14 +1207,17 @@ func (s *Server) handleAdminHistory(w http.ResponseWriter, r *http.Request) {
 	}
 
 	type AdminHistoryItem struct {
-		UserID          string `json:"user_id"`
-		Username        string `json:"username"`
-		Avatar          string `json:"avatar"`
-		Token           string `json:"token"`
-		LinkToken       string `json:"link_token"`
-		Name            string `json:"name"`
-		Type            string `json:"type"`
-		CreatedAt       time.Time `json:"created_at"`
+		UserID      string    `json:"user_id"`
+		Username    string    `json:"username"`
+		Avatar      string    `json:"avatar"`
+		Token       string    `json:"token"`
+		LinkToken   string    `json:"link_token"`
+		Name        string    `json:"name"`
+		Type        string    `json:"type"`
+		Size        int64     `json:"size"`
+		CreatedAt   time.Time `json:"created_at"`
+		BrowseURL   string    `json:"browse_url"`
+		DownloadURL string    `json:"download_url"`
 	}
 
 	var result []AdminHistoryItem
@@ -1182,15 +1226,20 @@ func (s *Server) handleAdminHistory(w http.ResponseWriter, r *http.Request) {
 		if item.LinkToken != "" {
 			activeToken = item.LinkToken
 		}
+		browseURL := fmt.Sprintf("/browser/%s", activeToken)
+		downloadURL := fmt.Sprintf("%s/dl/%s", s.baseURL, activeToken)
 		result = append(result, AdminHistoryItem{
-			UserID:         item.UserID,
-			Username:       item.Username,
-			Avatar:         item.Avatar,
-			Token:          activeToken,
-			LinkToken:      item.LinkToken,
-			Name:           item.Name,
-			Type:           item.Type,
-			CreatedAt:      item.CreatedAt,
+			UserID:      item.UserID,
+			Username:    item.Username,
+			Avatar:      item.Avatar,
+			Token:       activeToken,
+			LinkToken:   item.LinkToken,
+			Name:        item.Name,
+			Type:        item.Type,
+			Size:        item.Size,
+			CreatedAt:   item.CreatedAt,
+			BrowseURL:   browseURL,
+			DownloadURL: downloadURL,
 		})
 	}
 
@@ -1421,6 +1470,17 @@ func (s *Server) handleAdminSettingsGet(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
+	guildRolesMap := s.store.GetGuildRolesWhitelist()
+	guildsInfo := s.store.GetDiscordGuilds()
+	for guildID := range guildRolesMap {
+		if _, exists := guildsInfo[guildID]; !exists {
+			g := s.resolveGuild(guildID)
+			if g.Name != "" {
+				guildsInfo[guildID] = g
+			}
+		}
+	}
+
 	jsonOK(w, map[string]interface{}{
 		"cache_only":                   s.store.GetSetting("cache_only", "false") == "true",
 		"public_api_enabled":           s.store.GetSetting("public_api_enabled", "true") == "true",
@@ -1437,7 +1497,102 @@ func (s *Server) handleAdminSettingsGet(w http.ResponseWriter, r *http.Request) 
 		"remove_from_torbox_on_delete": s.store.GetSetting("remove_from_torbox_on_delete", "true") == "true",
 		"max_concurrent_per_user":      s.store.GetSetting("max_concurrent_per_user", "0"),
 		"whitelist_guild_roles":        s.store.GetSetting("whitelist_guild_roles", "{}"),
+		"guilds_info":                  guildsInfo,
 	})
+}
+
+func (s *Server) resolveGuild(guildID string) DiscordGuildInfo {
+	if guildID == "" {
+		return DiscordGuildInfo{}
+	}
+	if g, found := s.store.GetDiscordGuild(guildID); found && g.Name != "" {
+		return g
+	}
+
+	client := &http.Client{Timeout: 4 * time.Second}
+
+	// 1. Try bot token if available
+	if s.discordBotToken != "" {
+		req, _ := http.NewRequest("GET", "https://discord.com/api/v10/guilds/"+guildID, nil)
+		req.Header.Set("Authorization", "Bot "+s.discordBotToken)
+		resp, err := client.Do(req)
+		if err == nil {
+			defer resp.Body.Close()
+			if resp.StatusCode == http.StatusOK {
+				var res struct {
+					ID   string `json:"id"`
+					Name string `json:"name"`
+					Icon string `json:"icon"`
+				}
+				if err := json.NewDecoder(resp.Body).Decode(&res); err == nil && res.Name != "" {
+					s.store.SaveDiscordGuild(res.ID, res.Name, res.Icon)
+					iconURL := ""
+					if res.Icon != "" {
+						ext := "png"
+						if strings.HasPrefix(res.Icon, "a_") {
+							ext = "gif"
+						}
+						iconURL = fmt.Sprintf("https://cdn.discordapp.com/icons/%s/%s.%s", res.ID, res.Icon, ext)
+					}
+					return DiscordGuildInfo{
+						ID:      res.ID,
+						Name:    res.Name,
+						Icon:    res.Icon,
+						IconURL: iconURL,
+					}
+				}
+			}
+		}
+	}
+
+	// 2. Try public preview
+	reqPreview, _ := http.NewRequest("GET", "https://discord.com/api/v10/guilds/"+guildID+"/preview", nil)
+	respPreview, errPreview := client.Do(reqPreview)
+	if errPreview == nil {
+		defer respPreview.Body.Close()
+		if respPreview.StatusCode == http.StatusOK {
+			var res struct {
+				ID   string `json:"id"`
+				Name string `json:"name"`
+				Icon string `json:"icon"`
+			}
+			if err := json.NewDecoder(respPreview.Body).Decode(&res); err == nil && res.Name != "" {
+				s.store.SaveDiscordGuild(res.ID, res.Name, res.Icon)
+				iconURL := ""
+				if res.Icon != "" {
+					ext := "png"
+					if strings.HasPrefix(res.Icon, "a_") {
+						ext = "gif"
+					}
+					iconURL = fmt.Sprintf("https://cdn.discordapp.com/icons/%s/%s.%s", res.ID, res.Icon, ext)
+				}
+				return DiscordGuildInfo{
+					ID:      res.ID,
+					Name:    res.Name,
+					Icon:    res.Icon,
+					IconURL: iconURL,
+				}
+			}
+		}
+	}
+
+	return DiscordGuildInfo{ID: guildID}
+}
+
+func (s *Server) handleAdminDiscordGuild(w http.ResponseWriter, r *http.Request) {
+	_, ok := s.resolveAdmin(w, r)
+	if !ok {
+		return
+	}
+
+	guildID := r.URL.Query().Get("guild_id")
+	if guildID == "" {
+		jsonError(w, http.StatusBadRequest, "guild_id parameter is required")
+		return
+	}
+
+	info := s.resolveGuild(guildID)
+	jsonOK(w, info)
 }
 
 func (s *Server) handleAdminSettingsUpdate(w http.ResponseWriter, r *http.Request) {

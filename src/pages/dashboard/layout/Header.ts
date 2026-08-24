@@ -24,15 +24,21 @@ export function renderHeader(): string {
           <span>Docs</span>
         </a>
 
-        <!-- User Profile Pill -->
-        <div class="user-pill" id="user-pill" title="View User Settings & Profile">
-          <img src="/icon.png" id="user-avatar" class="user-avatar" alt="Avatar">
-          <span class="user-name" id="user-name">Loading...</span>
+        <!-- Authenticated State -->
+        <div id="header-user-section" style="display: flex; align-items: center; gap: 8px;">
+          <div class="user-pill" id="user-pill" title="View User Settings & Profile">
+            <img src="/icon.png" id="user-avatar" class="user-avatar" alt="Avatar">
+            <span class="user-name" id="user-name">Loading...</span>
+          </div>
+          <a href="/auth/logout" class="btn btn-secondary btn-icon btn-sm" title="Logout" aria-label="Logout">
+            ${icon('logOut', 14)}
+          </a>
         </div>
 
-        <!-- Logout Button -->
-        <a href="/auth/logout" class="btn btn-secondary btn-icon btn-sm" title="Logout">
-          ${icon('logOut', 14)}
+        <!-- Unauthenticated State -->
+        <a href="/auth/login" id="header-login-btn" class="btn btn-primary btn-sm" style="display: none; text-decoration: none;">
+          ${icon('user', 14)}
+          <span>Sign In with Discord</span>
         </a>
       </div>
     </header>
