@@ -78,11 +78,18 @@ export async function loadQueue() {
     if (container) {
       container.innerHTML = `
         <div class="empty-state">
-          <div style="color: var(--status-danger); margin-bottom: 8px;">${icon('alertTriangle', 36)}</div>
+          <div class="empty-state-icon" style="color: var(--status-danger);">${icon('alertTriangle', 36)}</div>
           <div class="empty-state-title">Failed to load queue items</div>
           <div class="empty-state-desc">${escapeHtml(itemsRes.error || 'Unknown error')}</div>
+          <div class="empty-state-actions">
+            <button class="btn btn-secondary btn-sm" id="btn-retry-queue">
+              ${icon('refresh', 13)}
+              <span>Retry</span>
+            </button>
+          </div>
         </div>
       `;
+      document.getElementById('btn-retry-queue')?.addEventListener('click', () => loadQueue());
     }
     return;
   }
@@ -93,7 +100,7 @@ export async function loadQueue() {
     if (container) {
       container.innerHTML = `
         <div class="empty-state">
-          ${icon('checkCircle', 40)}
+          <div class="empty-state-icon">${icon('checkCircle', 40)}</div>
           <div class="empty-state-title">Queue is Empty</div>
           <div class="empty-state-desc">No downloads are currently waiting in the processing queue.</div>
         </div>
@@ -125,13 +132,13 @@ export async function loadQueue() {
               </div>
             </div>
             <div class="history-item-actions">
-              <button class="btn btn-secondary btn-icon btn-sm" data-queue-action="move-up" data-id="${item.id}" data-index="${index}" title="Move Up" ${index === 0 ? 'disabled' : ''}>
+              <button class="btn btn-secondary btn-icon btn-sm" data-queue-action="move-up" data-id="${item.id}" data-index="${index}" title="Move Up" aria-label="Move Up" ${index === 0 ? 'disabled' : ''}>
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
               </button>
-              <button class="btn btn-secondary btn-icon btn-sm" data-queue-action="move-down" data-id="${item.id}" data-index="${index}" title="Move Down" ${index === queueItems.length - 1 ? 'disabled' : ''}>
+              <button class="btn btn-secondary btn-icon btn-sm" data-queue-action="move-down" data-id="${item.id}" data-index="${index}" title="Move Down" aria-label="Move Down" ${index === queueItems.length - 1 ? 'disabled' : ''}>
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>
               </button>
-              <button class="btn btn-secondary btn-icon btn-sm" data-queue-action="cancel" data-id="${item.id}" title="Cancel Download">
+              <button class="btn btn-secondary btn-icon btn-sm" data-queue-action="cancel" data-id="${item.id}" title="Cancel Download" aria-label="Cancel Download">
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
               </button>
             </div>

@@ -30,11 +30,17 @@ export interface TMDBMediaItem {
 
 export interface AniListMediaItem {
   id: number;
-  title: {
-    romaji?: string;
-    english?: string;
-    native?: string;
-  };
+  title:
+    | string
+    | {
+        romaji?: string;
+        english?: string;
+        native?: string;
+      };
+  year?: string | number;
+  poster_path?: string;
+  overview?: string;
+  type?: string;
   coverImage?: {
     large?: string;
     medium?: string;

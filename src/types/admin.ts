@@ -20,6 +20,12 @@ export interface AdminSettingsMap {
   search_enabled: boolean | string;
   user_gb_limit: string;
   max_concurrent_per_user: string;
+  tmdb_api_key?: string;
+  remove_from_torbox_on_delete?: boolean | string;
+  aiostreams_url?: string;
+  aiostreams_uuid?: string;
+  aiostreams_password?: string;
+  whitelist_guild_roles?: Record<string, string[]> | string;
   torbox_keys?: string[];
   [key: string]: unknown;
 }

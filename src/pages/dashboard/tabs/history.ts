@@ -3,7 +3,7 @@ import { sendToFtp } from '../../../api/integrations';
 import type { HistoryItem, ProgressMap } from '../../../types/downloads';
 import { formatBytes, formatSpeed, formatEta, formatRelativeTime, escapeHtml } from '../../../utils/format';
 import { copyToClipboard } from '../../../utils/clipboard';
-import { toastSuccess, toastError, toastInfo } from '../../../components/toast';
+import { toastSuccess, toastError, toastInfo, toastUndo } from '../../../components/toast';
 import { icon } from '../../../components/icons';
 import { Modal } from '../../../components/modal';
 
@@ -13,6 +13,7 @@ let pollTimer: ReturnType<typeof setInterval> | null = null;
 let massDeleteModal: Modal | null = null;
 let cloudModal: Modal | null = null;
 let activeCloudToken = '';
+const pendingDeletes = new Map<string, ReturnType<typeof setTimeout>>();
 
 export function initHistoryTab(cloudModalInstance: Modal) {
   cloudModal = cloudModalInstance;
@@ -55,6 +56,17 @@ export function initHistoryTab(cloudModalInstance: Modal) {
     }
   });
 
+  // Global click to close dropdown menus
+  document.addEventListener('click', (e) => {
+    const target = e.target as HTMLElement;
+    const isInside = target.closest('.dropdown-container');
+    document.querySelectorAll('.dropdown-container.active').forEach((el) => {
+      if (el !== isInside) {
+        el.classList.remove('active');
+      }
+    });
+  });
+
   // Global delegation for history item actions
   document.getElementById('history-items-container')?.addEventListener('click', async (e) => {
     const target = (e.target as HTMLElement).closest('[data-hist-action]') as HTMLElement | null;
@@ -62,6 +74,19 @@ export function initHistoryTab(cloudModalInstance: Modal) {
 
     const action = target.getAttribute('data-hist-action');
     const token = target.getAttribute('data-token') || '';
+
+    if (action === 'toggle-menu') {
+      e.stopPropagation();
+      const dropdown = target.closest('.dropdown-container');
+      dropdown?.classList.toggle('active');
+      return;
+    }
+
+    // Close any open dropdown after clicking an action inside it
+    const parentDropdown = target.closest('.dropdown-container');
+    if (parentDropdown) {
+      parentDropdown.classList.remove('active');
+    }
 
     if (action === 'select') {
       const isChecked = (target as HTMLInputElement).checked;
@@ -102,20 +127,52 @@ export function initHistoryTab(cloudModalInstance: Modal) {
       activeCloudToken = token;
       cloudModal?.open();
     } else if (action === 'delete') {
-      const res = await removeDownload(token);
-      if (res.success) {
-        toastSuccess('Download removed from history');
-        selectedTokens.delete(token);
-        updateMassDeleteButton();
-        loadHistory(false);
-      } else {
-        toastError(res.error || 'Failed to remove download');
-      }
+      handleSingleDelete(token);
     }
   });
 
   loadHistory(true);
   startProgressPolling();
+}
+
+function handleSingleDelete(token: string) {
+  const itemIndex = historyItems.findIndex((h) => h.token === token);
+  if (itemIndex === -1) return;
+
+  const deletedItem = historyItems[itemIndex];
+  // Optimistically remove from state & UI
+  historyItems.splice(itemIndex, 1);
+  selectedTokens.delete(token);
+  updateMetrics();
+  filterAndRender();
+
+  // Schedule API delete after 5 seconds
+  const timer = setTimeout(async () => {
+    pendingDeletes.delete(token);
+    const res = await removeDownload(token);
+    if (!res.success) {
+      toastError(res.error || 'Failed to remove download from server');
+      // Restore on failure
+      historyItems.splice(itemIndex, 0, deletedItem);
+      updateMetrics();
+      filterAndRender();
+    }
+  }, 5000);
+
+  pendingDeletes.set(token, timer);
+
+  // Show Undo toast
+  toastUndo('Download removed from history', () => {
+    const activeTimer = pendingDeletes.get(token);
+    if (activeTimer) {
+      clearTimeout(activeTimer);
+      pendingDeletes.delete(token);
+      historyItems.splice(itemIndex, 0, deletedItem);
+      updateMetrics();
+      filterAndRender();
+      toastSuccess('Download deletion undone');
+    }
+  });
 }
 
 export function getActiveCloudToken(): string {
@@ -136,11 +193,18 @@ export async function loadHistory(showLoading = false) {
   } else if (container && historyItems.length === 0) {
     container.innerHTML = `
       <div class="empty-state">
-        <div style="color: var(--status-danger); margin-bottom: 8px;">${icon('alertTriangle', 36)}</div>
+        <div class="empty-state-icon" style="color: var(--status-danger);">${icon('alertTriangle', 36)}</div>
         <div class="empty-state-title">Failed to load history</div>
         <div class="empty-state-desc">${escapeHtml(res.error || 'Unknown error')}</div>
+        <div class="empty-state-actions">
+          <button class="btn btn-secondary btn-sm" id="btn-retry-history">
+            ${icon('refresh', 13)}
+            <span>Retry</span>
+          </button>
+        </div>
       </div>
     `;
+    document.getElementById('btn-retry-history')?.addEventListener('click', () => loadHistory(true));
   }
 }
 
@@ -213,7 +277,7 @@ function filterAndRender() {
   if (filtered.length === 0) {
     container.innerHTML = `
       <div class="empty-state">
-        ${icon('search', 40)}
+        <div class="empty-state-icon">${icon('search', 40)}</div>
         <div class="empty-state-title">No Downloads Found</div>
         <div class="empty-state-desc">Try changing your search keywords or add a new download.</div>
       </div>
@@ -231,7 +295,7 @@ function filterAndRender() {
       <div class="history-item-card" id="hist-${item.token}" data-token="${item.token}">
         <div class="history-item-top">
           <div class="history-item-left">
-            <input type="checkbox" class="history-item-checkbox" data-hist-action="select" data-token="${item.token}" ${isSelected ? 'checked' : ''}>
+            <input type="checkbox" class="history-item-checkbox" data-hist-action="select" data-token="${item.token}" ${isSelected ? 'checked' : ''} aria-label="Select ${escapeHtml(item.name)}">
             <div style="min-width:0; flex:1;">
               <div class="history-item-title mono" title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</div>
               <div class="history-item-meta">
@@ -243,26 +307,37 @@ function filterAndRender() {
             </div>
           </div>
           <div class="history-item-actions">
-            <a href="${item.browse_url}" class="btn btn-secondary btn-icon btn-sm" title="Browse Files">
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
+            <a href="${item.browse_url}" class="btn btn-secondary btn-icon btn-sm" title="Browse Files" aria-label="Browse Files">
+              ${icon('folder', 14)}
             </a>
-            <button class="btn btn-secondary btn-icon btn-sm" data-hist-action="copy" data-url="${item.download_url}" title="Copy Download Link">
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+            <button class="btn btn-secondary btn-icon btn-sm" data-hist-action="copy" data-url="${item.download_url}" title="Copy Download Link" aria-label="Copy Download Link">
+              ${icon('copy', 14)}
             </button>
-            <button class="btn btn-secondary btn-icon btn-sm" data-hist-action="export-magnet" data-token="${item.token}" title="Copy Magnet URI">
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15.5 7.5 2.3 2.3a1 1 0 0 0 1.4 0l2.1-2.1a1 1 0 0 0 0-1.4L19 4"/><path d="m21 2-9.6 9.6"/><circle cx="7.5" cy="15.5" r="5.5"/></svg>
-            </button>
-            <button class="btn btn-secondary btn-icon btn-sm" data-hist-action="ftp" data-token="${item.token}" title="Send to FTP">
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="8" x="2" y="2" rx="2" ry="2"/><rect width="20" height="8" x="2" y="14" rx="2" ry="2"/></svg>
-            </button>
-            <button class="btn btn-secondary btn-icon btn-sm" data-hist-action="cloud" data-token="${item.token}" title="Send to Cloud">
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg>
-            </button>
-            <button class="btn btn-secondary btn-icon btn-sm" data-hist-action="regenerate" data-token="${item.token}" title="Re-add / Regenerate">
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21h5v-5"/></svg>
-            </button>
-            <button class="btn btn-secondary btn-icon btn-sm" data-hist-action="delete" data-token="${item.token}" title="Delete Download">
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/></svg>
+            <div class="dropdown-container">
+              <button class="btn btn-secondary btn-icon btn-sm" data-hist-action="toggle-menu" title="More Actions" aria-label="More Actions">
+                ${icon('moreVertical', 14)}
+              </button>
+              <div class="dropdown-menu">
+                <button class="dropdown-item" data-hist-action="export-magnet" data-token="${item.token}">
+                  ${icon('zap', 14)}
+                  <span>Export Magnet URI</span>
+                </button>
+                <button class="dropdown-item" data-hist-action="ftp" data-token="${item.token}">
+                  ${icon('server', 14)}
+                  <span>Send to FTP</span>
+                </button>
+                <button class="dropdown-item" data-hist-action="cloud" data-token="${item.token}">
+                  ${icon('cloud', 14)}
+                  <span>Send to Cloud</span>
+                </button>
+                <button class="dropdown-item" data-hist-action="regenerate" data-token="${item.token}">
+                  ${icon('refresh', 14)}
+                  <span>Re-add to Queue</span>
+                </button>
+              </div>
+            </div>
+            <button class="btn btn-secondary btn-icon btn-sm" data-hist-action="delete" data-token="${item.token}" title="Delete Download" aria-label="Delete Download" style="color: var(--status-danger);">
+              ${icon('trash', 14)}
             </button>
           </div>
         </div>

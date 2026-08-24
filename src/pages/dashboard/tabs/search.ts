@@ -95,18 +95,25 @@ async function performSearch() {
 function renderError(container: HTMLElement, error?: string) {
   container.innerHTML = `
     <div class="empty-state">
-      <div style="color: var(--status-danger); margin-bottom: 8px;">${icon('alertTriangle', 36)}</div>
+      <div class="empty-state-icon" style="color: var(--status-danger);">${icon('alertTriangle', 36)}</div>
       <div class="empty-state-title">Search Request Failed</div>
       <div class="empty-state-desc">${escapeHtml(error || 'Could not fetch search results.')}</div>
+      <div class="empty-state-actions">
+        <button class="btn btn-secondary btn-sm" id="btn-retry-search">
+          ${icon('refresh', 13)}
+          <span>Retry</span>
+        </button>
+      </div>
     </div>
   `;
+  document.getElementById('btn-retry-search')?.addEventListener('click', () => performSearch());
 }
 
 function renderTorrentResults(container: HTMLElement, items: TorrentSearchResult[]) {
   if (items.length === 0) {
     container.innerHTML = `
       <div class="empty-state">
-        ${icon('search', 40)}
+        <div class="empty-state-icon">${icon('search', 40)}</div>
         <div class="empty-state-title">No Torrents Found</div>
         <div class="empty-state-desc">Try different keywords or check your indexers.</div>
       </div>
@@ -135,7 +142,7 @@ function renderTorrentResults(container: HTMLElement, items: TorrentSearchResult
                   ${item.leechers != null ? `<span>Peers: ${item.leechers}</span>` : ''}
                 </div>
               </div>
-              <button class="btn btn-primary btn-sm" data-search-action="add-torrent" data-magnet="${escapeHtml(magnet)}" ${!magnet ? 'disabled' : ''}>
+              <button class="btn btn-primary btn-sm" data-search-action="add-torrent" data-magnet="${escapeHtml(magnet)}" aria-label="Add ${escapeHtml(item.name)}" ${!magnet ? 'disabled' : ''}>
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                 <span>Add</span>
               </button>
@@ -152,7 +159,7 @@ function renderTMDBResults(container: HTMLElement, items: TMDBMediaItem[]) {
   if (items.length === 0) {
     container.innerHTML = `
       <div class="empty-state">
-        ${icon('film', 40)}
+        <div class="empty-state-icon">${icon('film', 40)}</div>
         <div class="empty-state-title">No Movies or Shows Found</div>
         <div class="empty-state-desc">Try checking the spelling or search by original title.</div>
       </div>
@@ -170,7 +177,7 @@ function renderTMDBResults(container: HTMLElement, items: TMDBMediaItem[]) {
           const rating = item.vote_average ? item.vote_average.toFixed(1) : '';
 
           return `
-          <div class="media-card" data-search-action="open-streams" data-title="${escapeHtml(title)}" data-year="${escapeHtml(year)}">
+          <div class="media-card" data-search-action="open-streams" data-title="${escapeHtml(title)}" data-year="${escapeHtml(year)}" tabindex="0" role="button" aria-label="Streams for ${escapeHtml(title)}">
             <div class="media-poster-box">
               ${posterUrl ? `<img src="${posterUrl}" alt="${escapeHtml(title)}" class="media-poster" loading="lazy">` : `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted);">${icon('film', 48)}</div>`}
               ${rating ? `<div class="media-rating-tag">${icon('star', 12)} ${rating}</div>` : ''}
@@ -191,7 +198,7 @@ function renderAniListResults(container: HTMLElement, items: AniListMediaItem[])
   if (items.length === 0) {
     container.innerHTML = `
       <div class="empty-state">
-        ${icon('tv', 40)}
+        <div class="empty-state-icon">${icon('tv', 40)}</div>
         <div class="empty-state-title">No Anime Found</div>
         <div class="empty-state-desc">Try checking the Romaji or English title.</div>
       </div>
@@ -203,15 +210,35 @@ function renderAniListResults(container: HTMLElement, items: AniListMediaItem[])
     <div class="media-cards-grid">
       ${items
         .map((item) => {
-          const title = item.title.english || item.title.romaji || item.title.native || 'Untitled Anime';
-          const year = item.seasonYear ? item.seasonYear.toString() : '';
-          const posterUrl = item.coverImage?.large || item.coverImage?.medium || '';
+          let title = 'Untitled Anime';
+          if (typeof item.title === 'string' && item.title.trim()) {
+            title = item.title;
+          } else if (item.title && typeof item.title === 'object') {
+            title = item.title.english || item.title.romaji || item.title.native || 'Untitled Anime';
+          }
+
+          let year = '';
+          if (item.year != null && String(item.year).trim()) {
+            year = String(item.year);
+          } else if (item.seasonYear != null) {
+            year = item.seasonYear.toString();
+          }
+
+          let posterUrl = '';
+          if (item.poster_path) {
+            posterUrl = item.poster_path.startsWith('http')
+              ? item.poster_path
+              : `https://image.tmdb.org/t/p/w500${item.poster_path}`;
+          } else if (item.coverImage) {
+            posterUrl = item.coverImage.large || item.coverImage.medium || '';
+          }
+
           const score = item.averageScore ? `${item.averageScore}%` : '';
 
           return `
-          <div class="media-card" data-search-action="open-streams" data-title="${escapeHtml(title)}" data-year="${escapeHtml(year)}">
+          <div class="media-card" data-search-action="open-streams" data-title="${escapeHtml(title)}" data-year="${escapeHtml(year)}" tabindex="0" role="button" aria-label="Streams for ${escapeHtml(title)}">
             <div class="media-poster-box">
-              ${posterUrl ? `<img src="${posterUrl}" alt="${escapeHtml(title)}" class="media-poster" loading="lazy">` : `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted);">${icon('tv', 48)}</div>`}
+              ${posterUrl ? `<img src="${posterUrl}" alt="${escapeHtml(title)}" class="media-poster" loading="lazy" onerror="this.style.display='none'">` : `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted);">${icon('tv', 48)}</div>`}
               ${score ? `<div class="media-rating-tag">${icon('star', 12)} ${score}</div>` : ''}
             </div>
             <div class="media-card-info">

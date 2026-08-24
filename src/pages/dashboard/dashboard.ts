@@ -16,6 +16,8 @@ import { initUserProfileModal } from './modals/user-profile-modal';
 import { initTorrentStreamsModal } from './modals/torrent-streams-modal';
 import { initSpeedtestModal } from './modals/speedtest-modal';
 
+const TABS_ORDER = ['history', 'queue', 'add', 'search', 'api', 'admin'];
+
 function initApp() {
   const app = document.getElementById('app');
   if (app) {
@@ -45,6 +47,47 @@ function initApp() {
   initAddTab(() => switchTab('history'));
   initSearchTab(() => switchTab('history'));
   initApiTokensTab();
+
+  // Global Keyboard Shortcuts
+  window.addEventListener('keydown', (e) => {
+    const activeEl = document.activeElement;
+    const isEditing =
+      activeEl &&
+      (activeEl.tagName === 'INPUT' ||
+        activeEl.tagName === 'TEXTAREA' ||
+        activeEl.tagName === 'SELECT' ||
+        (activeEl as HTMLElement).isContentEditable);
+
+    if (isEditing) return;
+
+    if (e.key >= '1' && e.key <= '6') {
+      const idx = parseInt(e.key, 10) - 1;
+      const tabName = TABS_ORDER[idx];
+      if (tabName) {
+        const btn = document.querySelector<HTMLButtonElement>(`[data-tab="${tabName}"]`);
+        if (btn && btn.style.display !== 'none') {
+          e.preventDefault();
+          switchTab(tabName);
+        }
+      }
+    } else if (e.key === 'r' || e.key === 'R') {
+      const activeTabBtn = document.querySelector<HTMLButtonElement>('.tab-btn.active');
+      const currentTab = activeTabBtn?.getAttribute('data-tab') || 'history';
+      if (currentTab === 'history') {
+        e.preventDefault();
+        loadHistory(true);
+        toastInfo('Refreshing downloads...');
+      } else if (currentTab === 'queue') {
+        e.preventDefault();
+        loadQueue();
+        toastInfo('Refreshing queue...');
+      } else if (currentTab === 'api') {
+        e.preventDefault();
+        loadTokens();
+        toastInfo('Refreshing tokens...');
+      }
+    }
+  });
 
   // Cloud Modal Providers in Dashboard
   document.querySelectorAll('#cloud-modal [data-provider]').forEach((btn) => {

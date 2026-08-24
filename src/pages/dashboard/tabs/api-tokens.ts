@@ -85,11 +85,18 @@ export async function loadTokens() {
   if (!res.success) {
     container.innerHTML = `
       <div class="empty-state">
-        <div style="color: var(--status-danger); margin-bottom: 8px;">${icon('alertTriangle', 36)}</div>
+        <div class="empty-state-icon" style="color: var(--status-danger);">${icon('alertTriangle', 36)}</div>
         <div class="empty-state-title">Failed to load API tokens</div>
         <div class="empty-state-desc">${escapeHtml(res.error || 'Unknown error')}</div>
+        <div class="empty-state-actions">
+          <button class="btn btn-secondary btn-sm" id="btn-retry-tokens">
+            ${icon('refresh', 13)}
+            <span>Retry</span>
+          </button>
+        </div>
       </div>
     `;
+    document.getElementById('btn-retry-tokens')?.addEventListener('click', () => loadTokens());
     return;
   }
 
@@ -98,7 +105,7 @@ export async function loadTokens() {
   if (tokens.length === 0) {
     container.innerHTML = `
       <div class="empty-state">
-        ${icon('key', 40)}
+        <div class="empty-state-icon">${icon('key', 40)}</div>
         <div class="empty-state-title">No API Tokens</div>
         <div class="empty-state-desc">Generate a token to access the Disbox REST API securely.</div>
       </div>
@@ -120,7 +127,7 @@ export async function loadTokens() {
               ${t.last_used_at ? `<span>• Last used ${formatRelativeTime(t.last_used_at)}</span>` : ''}
             </div>
           </div>
-          <button class="btn btn-danger btn-sm" data-token-action="revoke" data-token="${escapeHtml(t.token)}">
+          <button class="btn btn-danger btn-sm" data-token-action="revoke" data-token="${escapeHtml(t.token)}" aria-label="Revoke token">
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
             <span>Revoke</span>
           </button>
