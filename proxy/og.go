@@ -12,6 +12,7 @@ import (
 
 	"github.com/fogleman/gg"
 	"github.com/golang/freetype/truetype"
+	"golang.org/x/image/font"
 	"golang.org/x/image/font/gofont/gobold"
 	"golang.org/x/image/font/gofont/goregular"
 )
@@ -39,15 +40,127 @@ func init() {
 	}
 }
 
+// splitTitleWords splits a filename into chunks by spaces, underscores, hyphens, and dots.
+func splitTitleWords(s string) []string {
+	var words []string
+	var cur strings.Builder
+	for _, r := range s {
+		cur.WriteRune(r)
+		if r == ' ' || r == '_' || r == '-' || r == '.' {
+			words = append(words, cur.String())
+			cur.Reset()
+		}
+	}
+	if cur.Len() > 0 {
+		words = append(words, cur.String())
+	}
+	return words
+}
+
+// wrapTitleToLines formats title text to fit within maxWidth across at most maxLines.
+func wrapTitleToLines(dc *gg.Context, name string, maxWidth float64, maxLines int) []string {
+	words := splitTitleWords(name)
+	if len(words) == 0 {
+		return []string{name}
+	}
+
+	var lines []string
+	var curLine string
+
+	for _, w := range words {
+		testLine := curLine + w
+		width, _ := dc.MeasureString(strings.TrimSpace(testLine))
+		if width <= maxWidth {
+			curLine = testLine
+		} else {
+			if curLine != "" {
+				lines = append(lines, strings.TrimSpace(curLine))
+				curLine = w
+			} else {
+				lines = append(lines, strings.TrimSpace(w))
+				curLine = ""
+			}
+		}
+	}
+	if curLine != "" {
+		lines = append(lines, strings.TrimSpace(curLine))
+	}
+
+	if len(lines) > maxLines {
+		lastLine := lines[maxLines-1]
+		for len(lastLine) > 0 {
+			w, _ := dc.MeasureString(lastLine + "...")
+			if w <= maxWidth {
+				lines[maxLines-1] = lastLine + "..."
+				break
+			}
+			r := []rune(lastLine)
+			lastLine = string(r[:len(r)-1])
+		}
+		lines = lines[:maxLines]
+	}
+
+	return lines
+}
+
+// fitTitle finds the best font size and line split that fits within maxWidth and maxHeight.
+func fitTitle(dc *gg.Context, name string, maxWidth, maxHeight float64) (font.Face, []string, float64) {
+	for size := 48.0; size >= 24.0; size -= 2.0 {
+		face := truetype.NewFace(fontBold, &truetype.Options{Size: size})
+		dc.SetFontFace(face)
+
+		// 1. Try single line without splitting
+		w, h := dc.MeasureString(name)
+		if w <= maxWidth && h <= maxHeight {
+			return face, []string{name}, size
+		}
+
+		// 2. Try wrapping into up to 2 lines
+		lines := wrapTitleToLines(dc, name, maxWidth, 2)
+		allFit := true
+		for _, l := range lines {
+			lw, _ := dc.MeasureString(l)
+			if lw > maxWidth {
+				allFit = false
+				break
+			}
+		}
+		totalH := float64(len(lines)) * (size * 1.22)
+		if allFit && totalH <= maxHeight && len(lines) <= 2 {
+			return face, lines, size
+		}
+	}
+
+	// Fallback at size 24: wrap and truncate to fit 2 lines
+	size := 24.0
+	face := truetype.NewFace(fontBold, &truetype.Options{Size: size})
+	dc.SetFontFace(face)
+	lines := wrapTitleToLines(dc, name, maxWidth, 2)
+	for i, l := range lines {
+		w, _ := dc.MeasureString(l)
+		if w > maxWidth {
+			for len(l) > 0 {
+				tw, _ := dc.MeasureString(l + "...")
+				if tw <= maxWidth {
+					lines[i] = l + "..."
+					break
+				}
+				r := []rune(l)
+				l = string(r[:len(r)-1])
+			}
+		}
+	}
+	return face, lines, size
+}
+
 // GenerateOGImage generates an OG image matching the old HTML template design.
 func GenerateOGImage(name, size, hash, itemType string) ([]byte, error) {
 	const width = 1200
 	const height = 630
 
 	name = path.Base(strings.ReplaceAll(name, "\\", "/"))
-	runes := []rune(name)
-	if len(runes) > 65 {
-		name = string(runes[:62]) + "..."
+	if strings.TrimSpace(name) == "" {
+		name = "Unknown File"
 	}
 
 	dc := gg.NewContext(width, height)
@@ -88,8 +201,6 @@ func GenerateOGImage(name, size, hash, itemType string) ([]byte, error) {
 
 	// Left Panel
 	if logoImage != nil {
-		// Draw logo image scaled to 80x80 roughly
-		// A simple way is to use DrawImage
 		dc.DrawImage(logoImage, 50, 190)
 	}
 
@@ -103,29 +214,44 @@ func GenerateOGImage(name, size, hash, itemType string) ([]byte, error) {
 	dc.SetColor(parseHexColor("#2D6B44"))
 	dc.DrawString("FILE SHARING", 50, 365)
 
-	// Right Panel
-	faceBold56 := truetype.NewFace(fontBold, &truetype.Options{Size: 56})
-	dc.SetFontFace(faceBold56)
-	dc.SetColor(parseHexColor("#0F3320"))
-	dc.DrawStringWrapped(name, 420, 200, 0, 0, 700, 1.2, gg.AlignLeft)
+	// Right Panel Title (Dynamic size & Wrapping)
+	maxWidth := 700.0
+	maxTitleH := 160.0
+	titleFace, titleLines, fontSize := fitTitle(dc, name, maxWidth, maxTitleH)
 
+	dc.SetFontFace(titleFace)
+	dc.SetColor(parseHexColor("#0F3320"))
+
+	lineSpacing := fontSize * 1.25
+	titleStartY := 210.0
+	if len(titleLines) > 1 {
+		titleStartY = 180.0
+	}
+
+	for i, line := range titleLines {
+		dc.DrawString(line, 420, titleStartY+float64(i)*lineSpacing)
+	}
+
+	// Accent Bar below title
+	accentY := titleStartY + float64(len(titleLines)-1)*lineSpacing + 35
 	dc.SetColor(color.NRGBA{15, 80, 40, 76})
-	dc.DrawRoundedRectangle(420, 350, 45, 3, 1.5)
+	dc.DrawRoundedRectangle(420, accentY, 45, 3, 1.5)
 	dc.Fill()
 
+	// Metadata Labels & Values
 	faceBold18 := truetype.NewFace(fontBold, &truetype.Options{Size: 18})
 	faceReg18 := truetype.NewFace(fontRegular, &truetype.Options{Size: 18})
 
-	startY := 400
-	drawMeta := func(label, value string, y int) {
+	startY := accentY + 40
+	drawMeta := func(label, value string, y float64) {
 		dc.SetFontFace(faceBold18)
 		dc.SetColor(parseHexColor("#0D3320"))
-		dc.DrawString(label, 420, float64(y))
+		dc.DrawString(label, 420, y)
 
 		w, _ := dc.MeasureString(label)
 		dc.SetFontFace(faceReg18)
 		dc.SetColor(parseHexColor("#1F5535"))
-		dc.DrawString(value, 420+w+8, float64(y))
+		dc.DrawString(value, 420+w+8, y)
 	}
 
 	drawMeta("TYPE:", itemType, startY)
