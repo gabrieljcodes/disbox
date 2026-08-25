@@ -425,6 +425,9 @@ function renderHistoryItems(container: HTMLElement, items: HistoryItem[]) {
           </div>
 
           <div class="torbox-card-actions">
+            <a href="${item.download_url}" class="btn btn-secondary btn-icon btn-sm" title="Direct Download" aria-label="Direct Download" download>
+              ${icon('download', 14)}
+            </a>
             <a href="${item.browse_url}" class="btn btn-secondary btn-icon btn-sm" title="Browse Files" aria-label="Browse Files">
               ${icon('folder', 14)}
             </a>

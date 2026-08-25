@@ -598,11 +598,11 @@ function filterAdminHistory() {
           </div>
         </div>
         <div class="history-item-actions">
-          <a href="${item.browse_url || `/browser/${item.token}`}" class="btn btn-secondary btn-icon btn-sm" title="Browse Files" aria-label="Browse Files">
-            ${icon('folder', 14)}
-          </a>
           <a href="${item.download_url || `/dl/${item.token}`}" class="btn btn-secondary btn-icon btn-sm" title="Download" aria-label="Download" download>
             ${icon('download', 14)}
+          </a>
+          <a href="${item.browse_url || `/browser/${item.token}`}" class="btn btn-secondary btn-icon btn-sm" title="Browse Files" aria-label="Browse Files">
+            ${icon('folder', 14)}
           </a>
         </div>
       </div>

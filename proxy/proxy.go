@@ -487,6 +487,14 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// If no specific file_id was requested and the download contains only a single file,
+	// download that single file directly instead of requesting TorBox to create an unnecessary outer .zip archive.
+	if fileID == -1 {
+		if info, err := adapter.GetInfo(entry.ID); err == nil && info != nil && len(info.Files) == 1 {
+			fileID = info.Files[0].ID
+		}
+	}
+
 	if !s.proxyMode {
 		userIP := r.Header.Get("X-Forwarded-For")
 		if userIP == "" {
@@ -538,6 +546,7 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Length", cl)
 	}
 	if cd := resp.Header.Get("Content-Disposition"); cd != "" {
+		cd = strings.ReplaceAll(cd, ".zip.zip", ".zip")
 		w.Header().Set("Content-Disposition", cd)
 	}
 	if ar := resp.Header.Get("Accept-Ranges"); ar != "" {
