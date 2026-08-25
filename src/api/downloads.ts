@@ -60,3 +60,7 @@ export async function regenerateDownload(token: string) {
 export async function exportTorrentMagnet(token: string) {
   return apiFetch<string>(`/v1/torrents/exportdata?token=${encodeURIComponent(token)}&type=magnet`);
 }
+
+export function getExportTorrentFileURL(token: string): string {
+  return `/v1/torrents/exportdata?token=${encodeURIComponent(token)}&type=file`;
+}

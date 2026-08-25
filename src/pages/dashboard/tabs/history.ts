@@ -116,15 +116,22 @@ export function initHistoryTab(cloudModal?: Modal) {
       const ok = await copyToClipboard(url);
       if (ok) toastSuccess('Download link copied to clipboard');
       else toastError('Failed to copy link');
-    } else if (action === 'regenerate') {
-      toastInfo('Re-adding download...');
-      const res = await regenerateDownload(token);
-      if (res.success) {
-        toastSuccess('Download re-added to queue');
-        loadHistory(false);
-      } else {
-        toastError(res.error || 'Failed to re-add download');
+    } else if (action === 'copy-token') {
+      const ok = await copyToClipboard(token);
+      if (ok) toastSuccess('Download token copied to clipboard');
+      else toastError('Failed to copy token');
+    } else if (action === 'copy-original') {
+      const item = historyItems.find((h) => h.token === token);
+      if (!item) return;
+
+      if (item.source_url) {
+        const ok = await copyToClipboard(item.source_url);
+        if (ok) {
+          toastSuccess('Original link copied to clipboard');
+          return;
+        }
       }
+      toastError('No original source link recorded for this download');
     } else if (action === 'export-magnet') {
       const item = historyItems.find((h) => h.token === token);
       if (!item) return;
@@ -132,8 +139,8 @@ export function initHistoryTab(cloudModal?: Modal) {
       // If item already has a cached magnet URL in source_url, copy directly
       if (item.source_url && item.source_url.startsWith('magnet:')) {
         const ok = await copyToClipboard(item.source_url);
-        if (ok) toastSuccess('Magnet link copied to clipboard');
-        else toastError('Failed to copy magnet link');
+        if (ok) toastSuccess('Magnet URL copied to clipboard');
+        else toastError('Failed to copy magnet URL');
         return;
       }
 
@@ -141,15 +148,25 @@ export function initHistoryTab(cloudModal?: Modal) {
       const res = await exportTorrentMagnet(token);
       if (res.success && res.data) {
         const magnet = typeof res.data === 'string' ? res.data : (res.data as any).data || (res.data as any).magnet;
-        if (magnet && typeof magnet === 'string' && magnet.startsWith('magnet:')) {
+        if (magnet && typeof magnet === 'string') {
           item.source_url = magnet;
           const ok = await copyToClipboard(magnet);
-          if (ok) toastSuccess('Magnet link copied to clipboard');
-          else toastError('Failed to copy magnet link');
-          return;
+          if (ok) {
+            toastSuccess('Magnet URL copied to clipboard');
+            return;
+          }
         }
       }
       toastError(res.error || 'No magnet link available for this torrent');
+    } else if (action === 'regenerate') {
+      toastInfo('Regenerating download link...');
+      const res = await regenerateDownload(token);
+      if (res.success) {
+        toastSuccess('Link regenerated successfully');
+        loadHistory(false);
+      } else {
+        toastError(res.error || 'Failed to regenerate link');
+      }
     } else if (action === 'ftp') {
       toastInfo('Sending to FTP...');
       const res = await sendToFtp(token);
@@ -439,12 +456,29 @@ function renderHistoryItems(container: HTMLElement, items: HistoryItem[]) {
                 ${icon('moreVertical', 14)}
               </button>
               <div class="dropdown-menu">
-                ${item.type.toLowerCase() === 'torrent' ? `
+                ${isTorrent ? `
                 <button class="dropdown-item" data-hist-action="export-magnet" data-token="${item.token}">
                   ${icon('magnet', 14)}
-                  <span>Export Magnet URL</span>
+                  <span>Copy Magnet URL</span>
                 </button>
-                ` : ''}
+                <a href="/v1/torrents/exportdata?token=${encodeURIComponent(item.token)}&type=file" class="dropdown-item" download title="Export .torrent File">
+                  ${icon('file', 14)}
+                  <span>Export .torrent File</span>
+                </a>
+                ` : `
+                <button class="dropdown-item" data-hist-action="copy-original" data-token="${item.token}">
+                  ${icon('link', 14)}
+                  <span>Copy Original Link</span>
+                </button>
+                `}
+                <button class="dropdown-item" data-hist-action="copy-token" data-token="${item.token}">
+                  ${icon('key', 14)}
+                  <span>Copy Download Token</span>
+                </button>
+                <button class="dropdown-item" data-hist-action="regenerate" data-token="${item.token}">
+                  ${icon('refresh', 14)}
+                  <span>Regenerate Link</span>
+                </button>
                 <button class="dropdown-item" data-hist-action="ftp" data-token="${item.token}">
                   ${icon('server', 14)}
                   <span>Send to FTP</span>
@@ -452,10 +486,6 @@ function renderHistoryItems(container: HTMLElement, items: HistoryItem[]) {
                 <button class="dropdown-item" data-hist-action="cloud" data-token="${item.token}">
                   ${icon('cloud', 14)}
                   <span>Send to Cloud</span>
-                </button>
-                <button class="dropdown-item" data-hist-action="regenerate" data-token="${item.token}">
-                  ${icon('refresh', 14)}
-                  <span>Re-add to Queue</span>
                 </button>
               </div>
             </div>

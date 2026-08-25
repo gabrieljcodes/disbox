@@ -1187,7 +1187,19 @@ func (s *Server) handleExportData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Disposition", "attachment; filename=\"export.torrent\"")
+	torrentFileName := "download.torrent"
+	if client != nil {
+		if info, err := client.GetTorrentInfo(downloadID); err == nil && info != nil && info.Name != "" {
+			cleanName := strings.ReplaceAll(info.Name, "/", "_")
+			cleanName = strings.ReplaceAll(cleanName, "\\", "_")
+			if !strings.HasSuffix(strings.ToLower(cleanName), ".torrent") {
+				cleanName += ".torrent"
+			}
+			torrentFileName = cleanName
+		}
+	}
+
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", torrentFileName))
 	w.Header().Set("Content-Type", "application/x-bittorrent")
 	io.Copy(w, resp.Body)
 }

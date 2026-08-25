@@ -25,6 +25,8 @@ import type { AnnouncementItem } from '../../../types/announcements';
 import { formatBytes, formatRelativeTime, escapeHtml } from '../../../utils/format';
 import { toastSuccess, toastError, toastInfo } from '../../../components/toast';
 import { icon } from '../../../components/icons';
+import { copyToClipboard } from '../../../utils/clipboard';
+import { removeDownload, regenerateDownload, exportTorrentMagnet } from '../../../api/downloads';
 
 let globalHistoryItems: AdminGlobalHistoryItem[] = [];
 let currentGuildRolesMap: Record<string, string[]> = {};
@@ -539,6 +541,89 @@ async function loadTorboxKeys() {
 function initHistorySection() {
   const searchInput = document.getElementById('admin-history-search') as HTMLInputElement | null;
   searchInput?.addEventListener('input', () => filterAdminHistory());
+
+  document.getElementById('admin-history-container')?.addEventListener('click', async (e) => {
+    const target = (e.target as HTMLElement).closest('[data-admin-hist-action]') as HTMLElement | null;
+    if (!target) return;
+
+    const action = target.getAttribute('data-admin-hist-action');
+    const token = target.getAttribute('data-token') || '';
+
+    if (action === 'toggle-menu') {
+      e.stopPropagation();
+      const container = target.closest('.dropdown-container');
+      const isAlreadyActive = container?.classList.contains('active');
+      document.querySelectorAll('.dropdown-container.active').forEach((el) => el.classList.remove('active'));
+      if (!isAlreadyActive && container) {
+        container.classList.add('active');
+      }
+    } else if (action === 'copy') {
+      const url = target.getAttribute('data-url') || '';
+      const ok = await copyToClipboard(url);
+      if (ok) toastSuccess('Download link copied to clipboard');
+      else toastError('Failed to copy link');
+    } else if (action === 'copy-token') {
+      const ok = await copyToClipboard(token);
+      if (ok) toastSuccess('Download token copied to clipboard');
+      else toastError('Failed to copy token');
+    } else if (action === 'copy-original') {
+      const item = globalHistoryItems.find((h) => h.token === token);
+      if (!item) return;
+
+      if ((item as any).source_url) {
+        const ok = await copyToClipboard((item as any).source_url);
+        if (ok) {
+          toastSuccess('Original link copied to clipboard');
+          return;
+        }
+      }
+      toastError('No original source link recorded for this download');
+    } else if (action === 'export-magnet') {
+      const item = globalHistoryItems.find((h) => h.token === token);
+      if (!item) return;
+
+      if ((item as any).source_url && (item as any).source_url.startsWith('magnet:')) {
+        const ok = await copyToClipboard((item as any).source_url);
+        if (ok) toastSuccess('Magnet URL copied to clipboard');
+        else toastError('Failed to copy magnet URL');
+        return;
+      }
+
+      toastInfo('Fetching magnet URL...');
+      const res = await exportTorrentMagnet(token);
+      if (res.success && res.data) {
+        const magnet = typeof res.data === 'string' ? res.data : (res.data as any).data || (res.data as any).magnet;
+        if (magnet && typeof magnet === 'string') {
+          (item as any).source_url = magnet;
+          const ok = await copyToClipboard(magnet);
+          if (ok) {
+            toastSuccess('Magnet URL copied to clipboard');
+            return;
+          }
+        }
+      }
+      toastError(res.error || 'No magnet link available for this torrent');
+    } else if (action === 'regenerate') {
+      toastInfo('Regenerating download link...');
+      const res = await regenerateDownload(token);
+      if (res.success) {
+        toastSuccess('Link regenerated successfully');
+        loadAdminHistory();
+      } else {
+        toastError(res.error || 'Failed to regenerate link');
+      }
+    } else if (action === 'delete') {
+      if (!confirm(`Are you sure you want to delete this download as admin?`)) return;
+      toastInfo('Deleting download...');
+      const res = await removeDownload(token);
+      if (res.success) {
+        toastSuccess('Download deleted');
+        loadAdminHistory();
+      } else {
+        toastError(res.error || 'Failed to delete download');
+      }
+    }
+  });
 }
 
 async function loadAdminHistory() {
@@ -578,7 +663,9 @@ function filterAdminHistory() {
 
   container.innerHTML = filtered
     .map(
-      (item) => `
+      (item) => {
+        const isTorrent = item.type.toLowerCase() === 'torrent';
+        return `
     <div class="history-item-card">
       <div class="history-item-top" style="align-items: center; gap: 14px;">
         <img src="${escapeHtml((item as any).avatar || 'https://cdn.discordapp.com/embed/avatars/0.png')}"
@@ -604,10 +691,47 @@ function filterAdminHistory() {
           <a href="${item.browse_url || `/browser/${item.token}`}" class="btn btn-secondary btn-icon btn-sm" title="Browse Files" aria-label="Browse Files">
             ${icon('folder', 14)}
           </a>
+          <button class="btn btn-secondary btn-icon btn-sm" data-admin-hist-action="copy" data-url="${item.download_url || `/dl/${item.token}`}" title="Copy Download Link" aria-label="Copy Download Link">
+            ${icon('copy', 14)}
+          </button>
+          <div class="dropdown-container">
+            <button class="btn btn-secondary btn-icon btn-sm" data-admin-hist-action="toggle-menu" title="More Actions" aria-label="More Actions">
+              ${icon('moreVertical', 14)}
+            </button>
+            <div class="dropdown-menu">
+              ${isTorrent ? `
+              <button class="dropdown-item" data-admin-hist-action="export-magnet" data-token="${item.token}">
+                ${icon('magnet', 14)}
+                <span>Copy Magnet URL</span>
+              </button>
+              <a href="/v1/torrents/exportdata?token=${encodeURIComponent(item.token)}&type=file" class="dropdown-item" download title="Export .torrent File">
+                ${icon('file', 14)}
+                <span>Export .torrent File</span>
+              </a>
+              ` : `
+              <button class="dropdown-item" data-admin-hist-action="copy-original" data-token="${item.token}">
+                ${icon('link', 14)}
+                <span>Copy Original Link</span>
+              </button>
+              `}
+              <button class="dropdown-item" data-admin-hist-action="copy-token" data-token="${item.token}">
+                ${icon('key', 14)}
+                <span>Copy Download Token</span>
+              </button>
+              <button class="dropdown-item" data-admin-hist-action="regenerate" data-token="${item.token}">
+                ${icon('refresh', 14)}
+                <span>Regenerate Link</span>
+              </button>
+            </div>
+          </div>
+          <button class="btn btn-secondary btn-icon btn-sm" data-admin-hist-action="delete" data-token="${item.token}" title="Delete Download" aria-label="Delete Download" style="color: var(--status-danger);">
+            ${icon('trash', 14)}
+          </button>
         </div>
       </div>
     </div>
-  `
+  `;
+      }
     )
     .join('');
 }
