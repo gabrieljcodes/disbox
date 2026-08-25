@@ -166,6 +166,26 @@
   border-color: var(--border-subtle);
 }
 
+/* ─── User Profile Interactive Elements ─── */
+.user-avatar {
+  transition: transform var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+.user-avatar[data-view-user]:hover {
+  transform: scale(1.08);
+  border-color: var(--brand-green-light) !important;
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.35);
+}
+.user-link-btn {
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: color var(--transition-fast);
+}
+.user-link-btn:hover {
+  color: var(--brand-green-light);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 /* ─── Form Inputs ─── */
 .input-group {
   display: flex;

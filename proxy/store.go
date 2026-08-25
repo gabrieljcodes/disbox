@@ -1015,7 +1015,8 @@ func (st *Store) GetUserProfile(userID string) (username, avatar string) {
 }
 
 type AdminProfileHistory struct {
-	Token     string `json:"token"`
+	Token     string    `json:"token"`
+	LinkToken string    `json:"link_token"`
 	Name      string    `json:"name"`
 	Type      string    `json:"type"`
 	Size      int64     `json:"size"`
@@ -1024,7 +1025,7 @@ type AdminProfileHistory struct {
 
 func (st *Store) GetAdminUserHistory(userID string) ([]AdminProfileHistory, int64, int, error) {
 	rows, err := st.db.Query(
-		"SELECT token, name, type, size, created_at FROM download_history WHERE user_id = $1 AND deleted = false ORDER BY created_at DESC",
+		"SELECT token, COALESCE(link_token, ''), name, type, size, created_at FROM download_history WHERE user_id = $1 AND deleted = false ORDER BY created_at DESC",
 		userID,
 	)
 	if err != nil {
@@ -1037,7 +1038,10 @@ func (st *Store) GetAdminUserHistory(userID string) ([]AdminProfileHistory, int6
 	var totalDownloads int
 	for rows.Next() {
 		var item AdminProfileHistory
-		if err := rows.Scan(&item.Token, &item.Name, &item.Type, &item.Size, &item.CreatedAt); err == nil {
+		if err := rows.Scan(&item.Token, &item.LinkToken, &item.Name, &item.Type, &item.Size, &item.CreatedAt); err == nil {
+			if item.LinkToken != "" {
+				item.Token = item.LinkToken
+			}
 			history = append(history, item)
 			totalSize += item.Size
 			totalDownloads++

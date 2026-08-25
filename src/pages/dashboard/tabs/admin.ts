@@ -27,6 +27,7 @@ import { toastSuccess, toastError, toastInfo } from '../../../components/toast';
 import { icon } from '../../../components/icons';
 import { copyToClipboard } from '../../../utils/clipboard';
 import { removeDownload, regenerateDownload, exportTorrentMagnet } from '../../../api/downloads';
+import { openAdminUserModal } from '../modals/admin-user-modal';
 
 let globalHistoryItems: AdminGlobalHistoryItem[] = [];
 let currentGuildRolesMap: Record<string, string[]> = {};
@@ -129,6 +130,15 @@ function initUsersSection() {
   });
 
   document.getElementById('admin-access-list-container')?.addEventListener('click', async (e) => {
+    const viewUserEl = (e.target as HTMLElement).closest('[data-view-user]') as HTMLElement | null;
+    if (viewUserEl) {
+      const userId = viewUserEl.getAttribute('data-view-user');
+      if (userId) {
+        openAdminUserModal(userId);
+        return;
+      }
+    }
+
     const target = (e.target as HTMLElement).closest('[data-remove-user]') as HTMLElement | null;
     if (!target) return;
 
@@ -175,10 +185,12 @@ async function loadUsersAccess() {
           <img src="${escapeHtml(entry.avatar || 'https://cdn.discordapp.com/embed/avatars/0.png')}"
                alt="${escapeHtml(entry.username || 'User Avatar')}"
                class="user-avatar"
-               style="width: 42px; height: 42px; border-radius: 50%; object-fit: cover; border: 1px solid var(--border-subtle); flex-shrink: 0; background: var(--bg-card);"
+               data-view-user="${escapeHtml(entry.user_id || '')}"
+               title="View ${escapeHtml(entry.username || entry.user_id || 'User')}'s profile & statistics"
+               style="width: 42px; height: 42px; border-radius: 50%; object-fit: cover; border: 1px solid var(--border-subtle); flex-shrink: 0; background: var(--bg-card); cursor: pointer;"
                onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
           <div style="min-width: 0; flex: 1;">
-            <div class="history-item-title mono">
+            <div class="history-item-title mono user-link-btn" data-view-user="${escapeHtml(entry.user_id || '')}" title="View profile & statistics">
               ${escapeHtml(entry.username || entry.user_id)}
             </div>
             <div class="history-item-meta">
@@ -543,6 +555,15 @@ function initHistorySection() {
   searchInput?.addEventListener('input', () => filterAdminHistory());
 
   document.getElementById('admin-history-container')?.addEventListener('click', async (e) => {
+    const viewUserEl = (e.target as HTMLElement).closest('[data-view-user]') as HTMLElement | null;
+    if (viewUserEl) {
+      const userId = viewUserEl.getAttribute('data-view-user');
+      if (userId) {
+        openAdminUserModal(userId);
+        return;
+      }
+    }
+
     const target = (e.target as HTMLElement).closest('[data-admin-hist-action]') as HTMLElement | null;
     if (!target) return;
 
@@ -671,7 +692,9 @@ function filterAdminHistory() {
         <img src="${escapeHtml((item as any).avatar || 'https://cdn.discordapp.com/embed/avatars/0.png')}"
              alt="${escapeHtml(item.username || 'User')}"
              class="user-avatar"
-             style="width: 38px; height: 38px; border-radius: 50%; object-fit: cover; border: 1px solid var(--border-subtle); flex-shrink: 0; background: var(--bg-card);"
+             data-view-user="${escapeHtml(item.user_id || '')}"
+             title="View ${escapeHtml(item.username || item.user_id || 'User')}'s profile & statistics"
+             style="width: 38px; height: 38px; border-radius: 50%; object-fit: cover; border: 1px solid var(--border-subtle); flex-shrink: 0; background: var(--bg-card); cursor: pointer;"
              onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
         <div style="min-width: 0; flex: 1;">
           <a href="${item.browse_url || `/browser/${item.token}`}" class="history-item-title mono" title="${escapeHtml(item.name)}" style="color: var(--text-primary); text-decoration: none;">
@@ -680,7 +703,7 @@ function filterAdminHistory() {
           <div class="history-item-meta">
             <span class="badge ${item.type === 'torrent' ? 'badge-green' : 'badge-blue'}">${item.type}</span>
             <span class="mono">${item.size ? formatBytes(item.size) : '0 B'}</span>
-            <span>Added by <strong style="color: var(--text-primary);">${escapeHtml(item.username || item.user_id || 'User')}</strong></span>
+            <span>Added by <strong class="user-link-btn" data-view-user="${escapeHtml(item.user_id || '')}" title="View ${escapeHtml(item.username || item.user_id || 'User')}'s profile & statistics">${escapeHtml(item.username || item.user_id || 'User')}</strong></span>
             <span>• ${formatRelativeTime(item.created_at)}</span>
           </div>
         </div>

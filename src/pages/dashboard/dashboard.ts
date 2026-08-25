@@ -15,6 +15,7 @@ import { initAdminTab } from './tabs/admin';
 import { initUserProfileModal } from './modals/user-profile-modal';
 import { initTorrentStreamsModal } from './modals/torrent-streams-modal';
 import { initSpeedtestModal } from './modals/speedtest-modal';
+import { initAdminUserModal } from './modals/admin-user-modal';
 
 import { renderLoginPage } from './layout/LoginPage';
 
@@ -54,6 +55,7 @@ async function initApp() {
   // Modals
   const cloudModal = new Modal('cloud-modal');
   initUserProfileModal();
+  initAdminUserModal();
   initTorrentStreamsModal(() => switchTab('history'));
   initSpeedtestModal();
 

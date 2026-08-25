@@ -1,5 +1,11 @@
 import { apiFetch } from './client';
-import type { AccessSettings, AdminSettingsMap, TorboxKeyEntry, AdminGlobalHistoryItem } from '../types/admin';
+import type {
+  AccessSettings,
+  AdminSettingsMap,
+  TorboxKeyEntry,
+  AdminGlobalHistoryItem,
+  AdminUserProfileData,
+} from '../types/admin';
 
 export async function fetchAdminAccess() {
   return apiFetch<AccessSettings>('/v1/admin/access');
@@ -60,7 +66,7 @@ export async function fetchAdminHistory() {
 }
 
 export async function fetchAdminUserProfile(userId: string) {
-  return apiFetch<unknown>(`/v1/admin/user?user_id=${encodeURIComponent(userId)}`);
+  return apiFetch<AdminUserProfileData>(`/v1/admin/user?user_id=${encodeURIComponent(userId)}`);
 }
 
 export async function createAdminAnnouncement(message: string) {

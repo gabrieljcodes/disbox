@@ -60,3 +60,25 @@ export interface AdminGlobalHistoryItem {
   browse_url: string;
   download_url: string;
 }
+
+export interface AdminUserHistoryEntry {
+  token: string;
+  link_token?: string;
+  name: string;
+  type: string;
+  size: number;
+  created_at: string;
+  browse_url?: string;
+  download_url?: string;
+}
+
+export interface AdminUserProfileData {
+  user_id: string;
+  username: string;
+  avatar: string;
+  access_type: 'whitelist' | 'blacklist' | 'none' | string;
+  total_downloads: number;
+  total_size: number;
+  monthly_size: number;
+  history?: AdminUserHistoryEntry[];
+}

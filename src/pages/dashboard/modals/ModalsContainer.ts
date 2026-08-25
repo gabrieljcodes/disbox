@@ -273,5 +273,79 @@ export function renderModals(): string {
         </div>
       </div>
     </div>
+
+    <!-- Admin User Profile / Inspection Modal -->
+    <div class="modal-backdrop" id="admin-user-profile-modal">
+      <div class="modal-window" style="max-width: 680px;">
+        <div class="modal-header">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            ${icon('user', 18)}
+            <h2 class="modal-title">User Profile & Statistics</h2>
+          </div>
+          <button class="btn btn-secondary btn-icon btn-sm" data-close-modal aria-label="Close user profile modal">
+            ${icon('x', 16)}
+          </button>
+        </div>
+        <div class="modal-body" style="max-height: calc(88vh - 120px); overflow-y: auto;">
+          <!-- Loading State -->
+          <div id="admin-user-modal-loading" style="padding: 50px 20px; text-align: center;">
+            <div class="spinner mb-md" style="margin: 0 auto;"></div>
+            <p style="color: var(--text-muted); font-size: 13px;">Loading user profile & download statistics...</p>
+          </div>
+
+          <!-- Content State -->
+          <div id="admin-user-modal-content" style="display: none; flex-direction: column; gap: 20px;">
+            <!-- User Header Card -->
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; background: rgba(255,255,255,0.03); border: 1px solid var(--border-subtle); border-radius: var(--radius); padding: 16px; flex-wrap: wrap;">
+              <div style="display: flex; align-items: center; gap: 16px;">
+                <img id="admin-user-avatar" src="" alt="Avatar" style="width: 56px; height: 56px; border-radius: 50%; object-fit: cover; border: 2px solid var(--border-subtle); background: var(--bg-card);">
+                <div>
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <div id="admin-user-name" style="font-size: 17px; font-weight: 700; color: var(--text-primary);">—</div>
+                    <span id="admin-user-access-badge" class="badge badge-neutral">Standard</span>
+                  </div>
+                  <div style="display: flex; align-items: center; gap: 6px; margin-top: 4px;">
+                    <span class="mono" style="font-size: 12px; color: var(--text-muted);" id="admin-user-id">ID: —</span>
+                    <button class="btn btn-ghost btn-icon btn-sm" id="btn-admin-copy-userid" title="Copy User ID" style="padding: 2px 4px; height: 20px;">
+                      ${icon('copy', 12)}
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <div style="display: flex; gap: 8px;" id="admin-user-quick-actions">
+                <!-- Whitelist/Blacklist quick actions -->
+              </div>
+            </div>
+
+            <!-- Metrics Row -->
+            <div class="metrics-grid" style="grid-template-columns: repeat(3, 1fr); margin: 0;">
+              <div class="metric-card">
+                <div class="metric-label">Total Downloads</div>
+                <div class="metric-value mono" id="admin-user-total-downloads">0</div>
+              </div>
+              <div class="metric-card">
+                <div class="metric-label">All-Time Bandwidth</div>
+                <div class="metric-value mono" id="admin-user-total-size">0 B</div>
+              </div>
+              <div class="metric-card">
+                <div class="metric-label">This Month</div>
+                <div class="metric-value mono" id="admin-user-monthly-size">0 B</div>
+              </div>
+            </div>
+
+            <!-- User Download History Section -->
+            <div>
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+                <h3 class="input-label" style="margin: 0;">User Download History</h3>
+                <span class="badge badge-neutral" id="admin-user-history-count">0 items</span>
+              </div>
+              <div id="admin-user-history-list" class="history-items-list" style="max-height: 280px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;">
+                <!-- Filled dynamically -->
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   `;
 }
