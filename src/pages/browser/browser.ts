@@ -22,11 +22,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const items = Array.from(fileList.querySelectorAll<HTMLElement>('.file-item'));
 
+  let activeCategory = 'all';
+  const categoryChips = document.querySelectorAll<HTMLButtonElement>('.category-chip');
+
   function filterAndSort() {
     const query = searchInput?.value.toLowerCase().trim() || '';
     const sortBy = sortSelect?.value || 'name-asc';
 
     const filtered = items.filter((item) => {
+      const cat = (item.getAttribute('data-category') || '').toLowerCase();
+      if (activeCategory !== 'all' && cat !== activeCategory) {
+        return false;
+      }
       if (!query) return true;
       const name = (item.getAttribute('data-name') || '').toLowerCase();
       return name.includes(query);
@@ -69,6 +76,16 @@ document.addEventListener('DOMContentLoaded', () => {
       emptyState.style.display = filtered.length === 0 ? '' : 'none';
     }
   }
+
+  // Category chip click listeners
+  categoryChips.forEach((chip) => {
+    chip.addEventListener('click', () => {
+      categoryChips.forEach((c) => c.classList.remove('active'));
+      chip.classList.add('active');
+      activeCategory = chip.getAttribute('data-cat') || 'all';
+      filterAndSort();
+    });
+  });
 
   const debouncedFilter = debounce(filterAndSort, 120);
   searchInput?.addEventListener('input', debouncedFilter);

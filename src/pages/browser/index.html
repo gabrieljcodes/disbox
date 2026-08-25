@@ -15,9 +15,34 @@
   <!-- Global Announcements -->
   <div id="announcements-container" class="announcements-wrapper"></div>
 
+  <!-- Navigation Topbar -->
+  <header class="dash-topbar">
+    <div class="topbar-left">
+      <a href="/dashboard" class="topbar-brand">
+        <img src="/icon.png" width="26" height="26" alt="Disbox">
+        <span class="topbar-brand-title">DISBOX</span>
+      </a>
+      <a href="/dashboard" class="btn btn-secondary btn-sm" title="Back to Dashboard">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>
+        <span>Dashboard</span>
+      </a>
+    </div>
+
+    <div class="topbar-right">
+      <a href="/hosters" class="btn btn-secondary btn-sm" title="View supported hosters">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>
+        <span>Hosters</span>
+      </a>
+      <a href="/v1/docs" class="btn btn-secondary btn-sm" title="API Reference">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+        <span>Docs</span>
+      </a>
+    </div>
+  </header>
+
   <main class="container">
-    <!-- Header -->
-    <header class="browser-header">
+    <!-- Hero Card -->
+    <div class="browser-hero-card">
       <div class="header-top">
         <div class="header-info">
           <div class="header-badge">
@@ -26,9 +51,14 @@
           </div>
           <h1 class="browser-title" id="page-title">{{.Title}}</h1>
           <div class="header-meta">
-            <span>{{.FileCount}} files</span>
-            <span class="meta-dot"></span>
-            <span>{{.TotalSize}}</span>
+            <span class="header-meta-chip">
+              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+              <span>{{.FileCount}} files</span>
+            </span>
+            <span class="header-meta-chip">
+              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="12" x2="2" y2="12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><line x1="6" y1="16" x2="6.01" y2="16"/><line x1="10" y1="16" x2="10.01" y2="16"/></svg>
+              <span>{{.TotalSize}} Total</span>
+            </span>
           </div>
         </div>
         <a href="{{.DownloadURL}}" class="btn btn-primary btn-lg" id="btn-download-zip">
@@ -36,24 +66,34 @@
           <span>Download Archive (.ZIP)</span>
         </a>
       </div>
-    </header>
+    </div>
 
     {{if .ErrorMessage}}
-    <div class="card" style="text-align: center; padding: 48px 24px; margin: 32px 0;">
+    <div class="card empty-state" style="margin: 32px 0;">
       <div style="color: var(--status-warning); margin-bottom: 12px;">
         <svg xmlns="http://www.w3.org/2000/svg" width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
       </div>
-      <h2 style="font-size: 18px; margin-bottom: 8px;">{{.Title}}</h2>
-      <p style="font-size: 14px; max-width: 480px; margin: 0 auto;">{{.ErrorMessage}}</p>
+      <h2 class="empty-state-title">{{.Title}}</h2>
+      <p class="empty-state-desc">{{.ErrorMessage}}</p>
     </div>
     {{else}}
     <!-- Toolbar -->
     <div class="browser-toolbar">
       <div class="search-box">
         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        <input type="text" id="search-input" class="input" placeholder="Search files by name..." autocomplete="off">
+        <input type="text" id="search-input" class="input" placeholder="Search files in this archive..." autocomplete="off">
       </div>
-      <select class="select" id="sort-select" aria-label="Sort files">
+
+      <div class="category-filter-chips" id="category-chips">
+        <button class="category-chip active" data-cat="all">All</button>
+        <button class="category-chip" data-cat="video">Videos</button>
+        <button class="category-chip" data-cat="image">Images</button>
+        <button class="category-chip" data-cat="text">Documents</button>
+        <button class="category-chip" data-cat="audio">Audio</button>
+        <button class="category-chip" data-cat="archive">Archives</button>
+      </div>
+
+      <select class="select" id="sort-select" aria-label="Sort files" style="min-width: 160px;">
         <option value="name-asc">Name (A → Z)</option>
         <option value="name-desc">Name (Z → A)</option>
         <option value="size-desc">Size (Largest first)</option>
@@ -124,7 +164,7 @@
     <div class="empty-state" id="empty-search-state" style="display: none;">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
       <div class="empty-state-title">No Files Match Your Search</div>
-      <div class="empty-state-desc">Try clearing or changing your search terms.</div>
+      <div class="empty-state-desc">Try clearing or changing your search or category filters.</div>
     </div>
     {{end}}
   </main>
