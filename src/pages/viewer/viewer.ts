@@ -6,6 +6,25 @@ document.addEventListener('DOMContentLoaded', () => {
   const playlistLinks = Array.from(document.querySelectorAll<HTMLAnchorElement>('.playlist-item'));
   const activeIndex = playlistLinks.findIndex((el) => el.classList.contains('active'));
 
+  // Auto-scroll active item into view
+  const activeItem = document.querySelector<HTMLElement>('.playlist-item.active');
+  if (activeItem) {
+    setTimeout(() => {
+      activeItem.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }, 100);
+  }
+
+  // Playlist Search Filter
+  const playlistSearchInput = document.getElementById('playlist-search-input') as HTMLInputElement | null;
+  playlistSearchInput?.addEventListener('input', () => {
+    const query = playlistSearchInput.value.toLowerCase().trim();
+    const rows = document.querySelectorAll<HTMLElement>('.playlist-row');
+    rows.forEach((row) => {
+      const name = (row.getAttribute('data-name') || '').toLowerCase();
+      row.style.display = (!query || name.includes(query)) ? '' : 'none';
+    });
+  });
+
   function goPrev() {
     if (activeIndex > 0) {
       window.location.href = playlistLinks[activeIndex - 1].href;
@@ -37,6 +56,7 @@ function initImageViewer(
   const btnNext = document.getElementById('btn-img-next');
   const btnZoomIn = document.getElementById('btn-zoom-in');
   const btnZoomOut = document.getElementById('btn-zoom-out');
+  const btnFullscreen = document.getElementById('btn-fullscreen');
 
   if (!container || !img || !controls) return;
 
@@ -139,6 +159,16 @@ function initImageViewer(
     applyTransform();
   });
 
+  function toggleFullscreen() {
+    if (!document.fullscreenElement) {
+      container?.requestFullscreen().catch(() => {});
+    } else {
+      document.exitFullscreen().catch(() => {});
+    }
+  }
+
+  btnFullscreen?.addEventListener('click', toggleFullscreen);
+
   if (btnPrev) {
     btnPrev.addEventListener('click', goPrev);
     if (activeIndex <= 0) {
@@ -157,6 +187,11 @@ function initImageViewer(
 
   // Keyboard Navigation & Shortcuts
   window.addEventListener('keydown', (e: KeyboardEvent) => {
+    // Ignore hotkeys if user is searching playlist
+    if (document.activeElement === document.getElementById('playlist-search-input')) {
+      return;
+    }
+
     const panStep = 60;
     if (e.key === 'ArrowLeft') {
       if (scale > 1) {
@@ -193,6 +228,8 @@ function initImageViewer(
       pointX = 0;
       pointY = 0;
       applyTransform();
+    } else if (e.key === 'f' || e.key === 'F') {
+      toggleFullscreen();
     }
   });
 }
