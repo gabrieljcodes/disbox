@@ -150,6 +150,16 @@
   color: #a78bfa;
   border-color: rgba(139, 92, 246, 0.25);
 }
+.badge-cyan {
+  background: rgba(6, 182, 212, 0.12);
+  color: #22d3ee;
+  border-color: rgba(6, 182, 212, 0.25);
+}
+.badge-teal {
+  background: rgba(20, 184, 166, 0.12);
+  color: #2dd4bf;
+  border-color: rgba(20, 184, 166, 0.25);
+}
 .badge-neutral {
   background: rgba(255, 255, 255, 0.05);
   color: var(--text-secondary);

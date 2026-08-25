@@ -498,9 +498,9 @@ function renderHistoryItems(container: HTMLElement, items: HistoryItem[]) {
         <!-- Badges Row -->
         <div class="torbox-card-badges">
           <span class="badge ${typeBadgeClass}">${item.type}</span>
-          <span class="badge ${showActive ? 'badge-amber' : 'badge-blue'}" id="torbox-badge-state-${item.token}">${escapeHtml(stateLabel)}</span>
+          <span class="badge ${showActive ? 'badge-amber' : 'badge-neutral'}" id="torbox-badge-state-${item.token}">${escapeHtml(stateLabel)}</span>
           <div class="history-status-badge" id="prog-status-${item.token}" style="${showActive ? 'display: none;' : ''}">
-            <span class="badge badge-green">
+            <span class="badge badge-cyan">
               ${icon('checkCircle', 12)}
               <span>Download Ready</span>
             </span>
@@ -612,7 +612,7 @@ function startProgressPolling() {
         if (details) details.style.display = 'none';
         if (statusBadge) statusBadge.style.display = 'flex';
         if (stateBadge) {
-          stateBadge.className = 'badge badge-blue';
+          stateBadge.className = 'badge badge-neutral';
           stateBadge.textContent = 'Cached';
         }
 
