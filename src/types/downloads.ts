@@ -2,6 +2,8 @@ export interface HistoryItem {
   token: string;
   link_token: string;
   name: string;
+  original_name?: string;
+  custom_name?: string;
   type: 'torrent' | 'webdl' | string;
   size: number;
   created_at: string;

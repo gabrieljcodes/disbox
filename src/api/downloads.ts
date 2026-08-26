@@ -64,3 +64,17 @@ export async function exportTorrentMagnet(token: string) {
 export function getExportTorrentFileURL(token: string): string {
   return `/v1/torrents/exportdata?token=${encodeURIComponent(token)}&type=file`;
 }
+
+export interface RenameDownloadResult {
+  token: string;
+  name: string;
+  custom_name?: string;
+}
+
+export async function renameDownload(token: string, name: string) {
+  return apiFetch<RenameDownloadResult>('/v1/download/rename', {
+    method: 'POST',
+    body: JSON.stringify({ token, name }),
+  });
+}
+

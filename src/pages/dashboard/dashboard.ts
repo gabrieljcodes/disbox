@@ -16,6 +16,7 @@ import { initUserProfileModal } from './modals/user-profile-modal';
 import { initTorrentStreamsModal } from './modals/torrent-streams-modal';
 import { initSpeedtestModal } from './modals/speedtest-modal';
 import { initAdminUserModal } from './modals/admin-user-modal';
+import { initRenameModal } from './modals/rename-modal';
 
 import { renderLoginPage } from './layout/LoginPage';
 
@@ -58,6 +59,7 @@ async function initApp() {
   initAdminUserModal();
   initTorrentStreamsModal(() => switchTab('history'));
   initSpeedtestModal();
+  initRenameModal();
 
   // Tab switching logic
   const tabButtons = document.querySelectorAll<HTMLButtonElement>('.tab-btn');

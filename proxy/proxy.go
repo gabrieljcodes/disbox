@@ -11,6 +11,7 @@ import (
 	"io"
 	"io/fs"
 	"log"
+	"mime"
 	"net/http"
 	"net/url"
 	"path/filepath"
@@ -201,6 +202,7 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/v1/tokens/revoke", s.handleTokenRevoke)
 	mux.HandleFunc("/v1/remove-download", s.handleRemoveDownload)
 	mux.HandleFunc("/v1/remove-downloads", s.handleRemoveDownloads)
+	mux.HandleFunc("/v1/download/rename", s.handleRenameDownload)
 	mux.HandleFunc("/v1/regenerate", s.handleRegenerate)
 	mux.HandleFunc("/v1/queue-status", s.handleQueueStatus)
 	mux.HandleFunc("/v1/speedtest", s.handleSpeedtest)
@@ -545,10 +547,27 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 	if cl := resp.Header.Get("Content-Length"); cl != "" {
 		w.Header().Set("Content-Length", cl)
 	}
+	
+	// Query custom name for this download token (if set by the user)
+	customName, origName, _ := s.store.GetDownloadNameForToken(token)
+
 	if cd := resp.Header.Get("Content-Disposition"); cd != "" {
 		cd = strings.ReplaceAll(cd, ".zip.zip", ".zip")
-		w.Header().Set("Content-Disposition", cd)
+		if customName != "" {
+			var upstreamFilename string
+			if _, params, err := mime.ParseMediaType(cd); err == nil {
+				upstreamFilename = params["filename"]
+			}
+			finalFilename := formatCustomDownloadFilename(customName, upstreamFilename, origName)
+			w.Header().Set("Content-Disposition", formatContentDisposition(finalFilename))
+		} else {
+			w.Header().Set("Content-Disposition", cd)
+		}
+	} else if customName != "" {
+		finalFilename := formatCustomDownloadFilename(customName, "", origName)
+		w.Header().Set("Content-Disposition", formatContentDisposition(finalFilename))
 	}
+
 	if ar := resp.Header.Get("Accept-Ranges"); ar != "" {
 		w.Header().Set("Accept-Ranges", ar)
 	}
@@ -1213,3 +1232,52 @@ func generateToken() string {
 	}
 	return hex.EncodeToString(b)
 }
+
+func formatCustomDownloadFilename(customName, upstreamFilename, origName string) string {
+	customName = strings.TrimSpace(customName)
+	if customName == "" {
+		if upstreamFilename != "" {
+			return upstreamFilename
+		}
+		return origName
+	}
+
+	// If customName already has an extension, preserve it
+	if filepath.Ext(customName) != "" {
+		return customName
+	}
+
+	// Otherwise inherit extension from upstreamFilename or origName
+	ext := filepath.Ext(upstreamFilename)
+	if ext == "" {
+		ext = filepath.Ext(origName)
+	}
+	if ext != "" {
+		return customName + ext
+	}
+	return customName
+}
+
+func formatContentDisposition(filename string) string {
+	cleanName := strings.ReplaceAll(filename, "\"", "\\\"")
+	asciiName := sanitizeHeaderASCII(cleanName)
+	utf8Name := url.PathEscape(filename)
+	return fmt.Sprintf("attachment; filename=\"%s\"; filename*=UTF-8''%s", asciiName, utf8Name)
+}
+
+func sanitizeHeaderASCII(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		if r > 31 && r < 127 && r != '"' && r != '\\' {
+			b.WriteRune(r)
+		} else if r > 127 {
+			b.WriteRune('_')
+		}
+	}
+	res := strings.TrimSpace(b.String())
+	if res == "" {
+		return "download"
+	}
+	return res
+}
+

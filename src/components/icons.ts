@@ -56,9 +56,13 @@ export type IconName =
   | 'grid'
   | 'list'
   | 'waves'
-  | 'magnet';
+  | 'magnet'
+  | 'pencil'
+  | 'edit';
 
 const ICONS: Record<IconName, string> = {
+  pencil: '<path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/>',
+  edit: '<path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/>',
   download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
   activity: '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>',
   play: '<polygon points="5 3 19 12 5 21 5 3"/>',

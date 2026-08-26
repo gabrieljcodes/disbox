@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"crypto/rand"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -85,15 +86,17 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 	}
 
 	type HistoryItem struct {
-		Token       string    `json:"token"`
-		LinkToken   string    `json:"link_token"`
-		Name        string    `json:"name"`
-		Type        string    `json:"type"`
-		Size        int64     `json:"size"`
-		CreatedAt   time.Time `json:"created_at"`
-		BrowseURL   string    `json:"browse_url"`
-		DownloadURL string    `json:"download_url"`
-		SourceURL   string    `json:"source_url"`
+		Token        string    `json:"token"`
+		LinkToken    string    `json:"link_token"`
+		Name         string    `json:"name"`
+		OriginalName string    `json:"original_name,omitempty"`
+		CustomName   string    `json:"custom_name,omitempty"`
+		Type         string    `json:"type"`
+		Size         int64     `json:"size"`
+		CreatedAt    time.Time `json:"created_at"`
+		BrowseURL    string    `json:"browse_url"`
+		DownloadURL  string    `json:"download_url"`
+		SourceURL    string    `json:"source_url"`
 	}
 
 	var result []HistoryItem
@@ -103,15 +106,17 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 			activeToken = item.LinkToken
 		}
 		result = append(result, HistoryItem{
-			Token:       activeToken,
-			LinkToken:   item.LinkToken,
-			Name:        item.Name,
-			Type:        item.Type,
-			Size:        item.Size,
-			CreatedAt:   item.CreatedAt,
-			BrowseURL:   fmt.Sprintf("%s/browse/%s", s.baseURL, activeToken),
-			DownloadURL: fmt.Sprintf("%s/dl/%s", s.baseURL, activeToken),
-			SourceURL:   item.SourceURL,
+			Token:        activeToken,
+			LinkToken:    item.LinkToken,
+			Name:         item.Name,
+			OriginalName: item.OriginalName,
+			CustomName:   item.CustomName,
+			Type:         item.Type,
+			Size:         item.Size,
+			CreatedAt:    item.CreatedAt,
+			BrowseURL:    fmt.Sprintf("%s/browse/%s", s.baseURL, activeToken),
+			DownloadURL:  fmt.Sprintf("%s/dl/%s", s.baseURL, activeToken),
+			SourceURL:    item.SourceURL,
 		})
 	}
 	if result == nil {
@@ -123,6 +128,64 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(result)
+}
+
+func (s *Server) handleRenameDownload(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost && r.Method != http.MethodPatch {
+		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	userID, ok := s.resolveUser(w, r)
+	if !ok {
+		return
+	}
+
+	var req struct {
+		Token string `json:"token"`
+		Name  string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, http.StatusBadRequest, "Invalid JSON payload")
+		return
+	}
+
+	token := strings.TrimSpace(req.Token)
+	if token == "" {
+		jsonError(w, http.StatusBadRequest, "Token is required")
+		return
+	}
+
+	newName := sanitizeCustomFilename(req.Name)
+	if len(newName) > 255 {
+		newName = newName[:255]
+	}
+
+	displayName, err := s.store.SetCustomDownloadName(userID, token, newName)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			jsonError(w, http.StatusNotFound, "Download not found or unauthorized")
+			return
+		}
+		log.Printf("Failed to rename download for user %s, token %s: %v", userID, token, err)
+		jsonError(w, http.StatusInternalServerError, "Failed to rename download")
+		return
+	}
+
+	jsonOK(w, map[string]interface{}{
+		"token":       token,
+		"name":        displayName,
+		"custom_name": newName,
+	})
+}
+
+func sanitizeCustomFilename(name string) string {
+	name = strings.ReplaceAll(name, "\x00", "")
+	name = strings.ReplaceAll(name, "\r", "")
+	name = strings.ReplaceAll(name, "\n", "")
+	name = strings.ReplaceAll(name, "/", "_")
+	name = strings.ReplaceAll(name, "\\", "_")
+	return strings.TrimSpace(name)
 }
 
 // repairGenericNames checks for history entries with placeholder names or missing sizes and updates them from TorBox.

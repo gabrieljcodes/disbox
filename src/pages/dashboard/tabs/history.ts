@@ -14,6 +14,7 @@ import { toastSuccess, toastError, toastInfo, toastUndo } from '../../../compone
 import { icon } from '../../../components/icons';
 import { Modal } from '../../../components/modal';
 import { SpeedGraph } from '../components/SpeedGraph';
+import { openRenameModal, initRenameModal } from '../modals/rename-modal';
 
 let historyItems: HistoryItem[] = [];
 let selectedTokens = new Set<string>();
@@ -41,6 +42,19 @@ export function initHistoryTab(cloudModal?: Modal) {
 
   // Initialize Canvas Speed Graph
   speedGraph = new SpeedGraph('download-speed-canvas');
+
+  initRenameModal((token, newName) => {
+    const item = historyItems.find((h) => h.token === token || h.link_token === token);
+    if (item) {
+      item.name = newName;
+      item.custom_name = newName;
+    }
+    const titleEl = document.getElementById(`torbox-title-${token}`);
+    if (titleEl) {
+      titleEl.textContent = newName;
+      titleEl.setAttribute('title', newName);
+    }
+  });
 
   searchInput?.addEventListener('input', () => filterAndRender());
   filterStatus?.addEventListener('change', () => filterAndRender());
@@ -166,6 +180,11 @@ export function initHistoryTab(cloudModal?: Modal) {
         loadHistory(false);
       } else {
         toastError(res.error || 'Failed to regenerate link');
+      }
+    } else if (action === 'rename') {
+      const item = historyItems.find((h) => h.token === token || h.link_token === token);
+      if (item) {
+        openRenameModal(item.token, item.name, item.original_name);
       }
     } else if (action === 'ftp') {
       toastInfo('Sending to FTP...');
@@ -456,6 +475,10 @@ function renderHistoryItems(container: HTMLElement, items: HistoryItem[]) {
                 ${icon('moreVertical', 14)}
               </button>
               <div class="dropdown-menu">
+                <button class="dropdown-item" data-hist-action="rename" data-token="${item.token}">
+                  ${icon('pencil', 14)}
+                  <span>Rename Download</span>
+                </button>
                 ${isTorrent ? `
                 <button class="dropdown-item" data-hist-action="export-magnet" data-token="${item.token}">
                   ${icon('magnet', 14)}

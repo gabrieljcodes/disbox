@@ -347,5 +347,54 @@ export function renderModals(): string {
         </div>
       </div>
     </div>
+
+    <!-- Rename Download Modal -->
+    <div class="modal-backdrop" id="rename-download-modal">
+      <div class="modal-window" style="max-width: 480px;">
+        <div class="modal-header">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            ${icon('pencil', 18)}
+            <h2 class="modal-title">Rename Download</h2>
+          </div>
+          <button class="btn btn-secondary btn-icon btn-sm" data-close-modal aria-label="Close rename modal">
+            ${icon('x', 16)}
+          </button>
+        </div>
+        <div class="modal-body" style="display: flex; flex-direction: column; gap: 16px;">
+          <!-- Rename Info Banner -->
+          <div style="background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 12px 14px;">
+            <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: 4px;">Original TorBox Name</div>
+            <div id="rename-original-name-display" class="mono" style="font-size: 12.5px; color: var(--text-primary); word-break: break-all;">—</div>
+            <div style="font-size: 11px; color: var(--text-muted); margin-top: 6px;">
+              Only you will see this custom name. Your personal download link will save the file with this new name.
+            </div>
+          </div>
+
+          <!-- Name Input -->
+          <div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <label class="input-label" for="rename-input-name" style="margin: 0;">Custom Name</label>
+              <span id="rename-char-counter" class="mono" style="font-size: 11px; color: var(--text-muted);">0/255</span>
+            </div>
+            <input type="text" id="rename-input-name" class="input" placeholder="e.g. My Favorite Movie" maxlength="255" autocomplete="off" spellcheck="false" style="width: 100%;">
+          </div>
+
+          <!-- Token Reference -->
+          <div style="font-size: 11px; color: var(--text-dim); display: flex; align-items: center; justify-content: space-between;">
+            <span>Token: <code id="rename-token-display" style="color: var(--text-muted);">—</code></span>
+          </div>
+        </div>
+        <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center;">
+          <button class="btn btn-secondary btn-sm" id="btn-reset-rename" title="Revert to original TorBox filename">
+            ${icon('refresh', 13)}
+            <span>Reset to Original</span>
+          </button>
+          <div style="display: flex; gap: 8px;">
+            <button class="btn btn-secondary btn-sm" data-close-modal>Cancel</button>
+            <button class="btn btn-primary btn-sm" id="btn-save-rename">Save Name</button>
+          </div>
+        </div>
+      </div>
+    </div>
   `;
 }
