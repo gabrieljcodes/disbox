@@ -493,11 +493,25 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// If no specific file_id was requested and the download contains only a single file,
-	// download that single file directly instead of requesting TorBox to create an unnecessary outer .zip archive.
+	forceZip := r.URL.Query().Get("zip") == "true" || r.URL.Query().Get("zip") == "1" || r.URL.Query().Get("zip_link") == "true"
+
+	// If no specific file_id was requested, check if the download contains only a single file:
 	if fileID == -1 {
 		if info, err := adapter.GetInfo(entry.ID); err == nil && info != nil && len(info.Files) == 1 {
-			fileID = info.Files[0].ID
+			singleFileName := strings.ToLower(info.Files[0].Name)
+			isSingleArchive := strings.HasSuffix(singleFileName, ".zip") ||
+				strings.HasSuffix(singleFileName, ".rar") ||
+				strings.HasSuffix(singleFileName, ".7z") ||
+				strings.HasSuffix(singleFileName, ".tar") ||
+				strings.HasSuffix(singleFileName, ".gz") ||
+				strings.HasSuffix(singleFileName, ".bz2") ||
+				strings.HasSuffix(singleFileName, ".xz")
+
+			// If it's already an archive or not forcing zip, download that single file directly
+			// to avoid creating an outer .zip.zip duplicate archive.
+			if isSingleArchive || !forceZip {
+				fileID = info.Files[0].ID
+			}
 		}
 	}
 
@@ -857,6 +871,8 @@ type BrowseData struct {
 	TotalSize    string
 	FileCount    int
 	DownloadURL  string
+	ZipURL       string
+	ShowZip      bool
 	Token        string
 	Files        []BrowseFile
 	ErrorMessage string
@@ -919,11 +935,23 @@ func (s *Server) handleBrowse(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	isSingleArchive := false
+	if len(info.Files) == 1 {
+		singleExt := strings.ToLower(filepath.Ext(info.Files[0].Name))
+		if singleExt == ".zip" || singleExt == ".rar" || singleExt == ".7z" || singleExt == ".tar" || singleExt == ".gz" || singleExt == ".bz2" || singleExt == ".xz" {
+			isSingleArchive = true
+		}
+	}
+
+	showZip := len(info.Files) > 1 || (len(info.Files) == 1 && !isSingleArchive)
+
 	data := BrowseData{
 		Title:       info.Name,
 		TotalSize:   formatBytes(info.Size),
 		FileCount:   len(info.Files),
 		DownloadURL: fmt.Sprintf("%s/dl/%s", s.baseURL, token),
+		ZipURL:      fmt.Sprintf("%s/dl/%s?zip=true", s.baseURL, token),
+		ShowZip:     showZip,
 		Token:       token,
 	}
 

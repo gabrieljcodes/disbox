@@ -130,6 +130,11 @@ export function initHistoryTab(cloudModal?: Modal) {
       const ok = await copyToClipboard(url);
       if (ok) toastSuccess('Download link copied to clipboard');
       else toastError('Failed to copy link');
+    } else if (action === 'copy-zip') {
+      const url = target.getAttribute('data-url') || '';
+      const ok = await copyToClipboard(url);
+      if (ok) toastSuccess('ZIP download link copied to clipboard');
+      else toastError('Failed to copy link');
     } else if (action === 'copy-token') {
       const ok = await copyToClipboard(token);
       if (ok) toastSuccess('Download token copied to clipboard');
@@ -448,6 +453,10 @@ function renderHistoryItems(container: HTMLElement, items: HistoryItem[]) {
       const etaStr = prog?.eta ? formatEta(prog.eta) : '—';
       const stateLabel = prog?.download_state ? prog.download_state : (showActive ? 'Downloading' : 'Cached');
 
+      const isAlreadyArchive = /\.(zip|rar|7z|tar|gz|bz2|xz)$/i.test(item.name || item.original_name || '');
+      const isProgArchive = prog?.is_archive === true;
+      const shouldShowZip = !isAlreadyArchive && !isProgArchive && item.show_zip === true;
+
       return `
       <div class="torbox-card" id="hist-${item.token}" data-token="${item.token}">
         <!-- Top: Checkbox, Icon, Title, Actions -->
@@ -464,6 +473,11 @@ function renderHistoryItems(container: HTMLElement, items: HistoryItem[]) {
             <a href="${item.download_url}" class="btn btn-secondary btn-icon btn-sm" title="Direct Download" aria-label="Direct Download" download>
               ${icon('download', 14)}
             </a>
+            ${shouldShowZip ? `
+            <a href="${item.zip_url || `${item.download_url}?zip=true`}" class="btn btn-secondary btn-icon btn-sm" title="Download as ZIP Archive" aria-label="Download as ZIP Archive" download>
+              ${icon('archive', 14)}
+            </a>
+            ` : ''}
             <a href="${item.browse_url}" class="btn btn-secondary btn-icon btn-sm" title="Browse Files" aria-label="Browse Files">
               ${icon('folder', 14)}
             </a>
@@ -475,6 +489,20 @@ function renderHistoryItems(container: HTMLElement, items: HistoryItem[]) {
                 ${icon('moreVertical', 14)}
               </button>
               <div class="dropdown-menu">
+                <a href="${item.download_url}" class="dropdown-item" download title="Download Direct File">
+                  ${icon('download', 14)}
+                  <span>Download Direct File</span>
+                </a>
+                ${shouldShowZip ? `
+                <a href="${item.zip_url || `${item.download_url}?zip=true`}" class="dropdown-item" download title="Download as ZIP">
+                  ${icon('archive', 14)}
+                  <span>Download as ZIP (.zip)</span>
+                </a>
+                <button class="dropdown-item" data-hist-action="copy-zip" data-url="${item.zip_url || `${item.download_url}?zip=true`}">
+                  ${icon('copy', 14)}
+                  <span>Copy ZIP Link</span>
+                </button>
+                ` : ''}
                 <button class="dropdown-item" data-hist-action="rename" data-token="${item.token}">
                   ${icon('pencil', 14)}
                   <span>Rename Download</span>

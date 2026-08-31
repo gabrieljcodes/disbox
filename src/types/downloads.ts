@@ -9,6 +9,8 @@ export interface HistoryItem {
   created_at: string;
   browse_url: string;
   download_url: string;
+  zip_url?: string;
+  show_zip?: boolean;
   source_url?: string;
 }
 
@@ -17,6 +19,8 @@ export interface CachedProgress {
   download_speed?: number;
   download_state?: string;
   eta?: number;
+  files_count?: number;
+  is_archive?: boolean;
   seeds?: number;
   peers?: number;
   total_bytes?: number;

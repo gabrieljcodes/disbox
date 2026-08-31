@@ -5,7 +5,9 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -47,6 +49,8 @@ type CachedProgress struct {
 	DownloadSpeed int64   `json:"download_speed"`
 	DownloadState string  `json:"download_state"`
 	ETA           int64   `json:"eta"` // seconds
+	FilesCount    int     `json:"files_count,omitempty"`
+	IsArchive     bool    `json:"is_archive,omitempty"`
 }
 
 type DownloadManager struct {
@@ -183,11 +187,20 @@ func (dm *DownloadManager) RefreshActiveCount() {
 					eta = 0
 				}
 				key := fmt.Sprintf("%d_torrent_%d", i, t.ID)
+				isArchive := false
+				if len(t.Files) == 1 {
+					ext := strings.ToLower(filepath.Ext(t.Files[0].Name))
+					if ext == ".zip" || ext == ".rar" || ext == ".7z" || ext == ".tar" || ext == ".gz" || ext == ".bz2" || ext == ".xz" {
+						isArchive = true
+					}
+				}
 				newProgressCache[key] = CachedProgress{
 					Progress:      t.Progress,
 					DownloadSpeed: t.DownloadSpeed,
 					DownloadState: t.DownloadState,
 					ETA:           eta,
+					FilesCount:    len(t.Files),
+					IsArchive:     isArchive,
 				}
 			}
 		}
@@ -207,11 +220,25 @@ func (dm *DownloadManager) RefreshActiveCount() {
 					eta = 0
 				}
 				key := fmt.Sprintf("%d_webdl_%d", i, w.ID)
+				isArchive := false
+				if len(w.Files) == 1 {
+					ext := strings.ToLower(filepath.Ext(w.Files[0].Name))
+					if ext == ".zip" || ext == ".rar" || ext == ".7z" || ext == ".tar" || ext == ".gz" || ext == ".bz2" || ext == ".xz" {
+						isArchive = true
+					}
+				} else if len(w.Files) == 0 {
+					ext := strings.ToLower(filepath.Ext(w.Name))
+					if ext == ".zip" || ext == ".rar" || ext == ".7z" || ext == ".tar" || ext == ".gz" || ext == ".bz2" || ext == ".xz" {
+						isArchive = true
+					}
+				}
 				newProgressCache[key] = CachedProgress{
 					Progress:      w.Progress,
 					DownloadSpeed: w.DownloadSpeed,
 					DownloadState: w.DownloadState,
 					ETA:           eta,
+					FilesCount:    len(w.Files),
+					IsArchive:     isArchive,
 				}
 			}
 		}

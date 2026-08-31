@@ -64,6 +64,7 @@ export interface AdminGlobalHistoryItem {
   created_at: string;
   browse_url: string;
   download_url: string;
+  zip_url?: string;
 }
 
 export interface AdminUserHistoryEntry {
@@ -75,6 +76,7 @@ export interface AdminUserHistoryEntry {
   created_at: string;
   browse_url?: string;
   download_url?: string;
+  zip_url?: string;
 }
 
 export interface AdminUserProfileData {

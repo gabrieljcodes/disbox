@@ -37,6 +37,8 @@ components:
           type: string
         download_url:
           type: string
+        zip_url:
+          type: string
     QueueItem:
       type: object
       properties:

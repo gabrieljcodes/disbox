@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -97,6 +98,8 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 		CreatedAt    time.Time `json:"created_at"`
 		BrowseURL    string    `json:"browse_url"`
 		DownloadURL  string    `json:"download_url"`
+		ZipURL       string    `json:"zip_url"`
+		ShowZip      bool      `json:"show_zip"`
 		SourceURL    string    `json:"source_url"`
 	}
 
@@ -106,6 +109,52 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 		if item.LinkToken != "" {
 			activeToken = item.LinkToken
 		}
+
+		showZip := false
+		nameToCheck := strings.ToLower(item.Name)
+		if item.OriginalName != "" {
+			nameToCheck = strings.ToLower(item.OriginalName)
+		}
+		isArchiveByName := strings.HasSuffix(nameToCheck, ".zip") ||
+			strings.HasSuffix(nameToCheck, ".rar") ||
+			strings.HasSuffix(nameToCheck, ".7z") ||
+			strings.HasSuffix(nameToCheck, ".tar") ||
+			strings.HasSuffix(nameToCheck, ".gz") ||
+			strings.HasSuffix(nameToCheck, ".bz2") ||
+			strings.HasSuffix(nameToCheck, ".xz")
+
+		if !isArchiveByName {
+			s.mu.RLock()
+			entry, exists := s.downloads[activeToken]
+			if !exists {
+				entry, exists = s.downloads[item.Token]
+			}
+			s.mu.RUnlock()
+
+			if exists && entry != nil {
+				cacheKey := fmt.Sprintf("%d_%s_%d", entry.ClientIndex, entry.Type, entry.ID)
+				if prog, found := s.downloadManager.GetProgress(cacheKey); found {
+					// Only true when it is exactly 1 single file and not an archive
+					if prog.FilesCount == 1 && !prog.IsArchive {
+						showZip = true
+					}
+				} else {
+					adapter := s.getAdapterForType(entry.Type, entry.ClientIndex)
+					if adapter != nil {
+						if info, err := adapter.GetInfo(entry.ID); err == nil && info != nil {
+							if len(info.Files) == 1 {
+								singleExt := strings.ToLower(filepath.Ext(info.Files[0].Name))
+								isArchive := singleExt == ".zip" || singleExt == ".rar" || singleExt == ".7z" || singleExt == ".tar" || singleExt == ".gz" || singleExt == ".bz2" || singleExt == ".xz"
+								if !isArchive {
+									showZip = true
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+
 		result = append(result, HistoryItem{
 			Token:        activeToken,
 			LinkToken:    item.LinkToken,
@@ -117,6 +166,8 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 			CreatedAt:    item.CreatedAt,
 			BrowseURL:    fmt.Sprintf("%s/browse/%s", s.baseURL, activeToken),
 			DownloadURL:  fmt.Sprintf("%s/dl/%s", s.baseURL, activeToken),
+			ZipURL:       fmt.Sprintf("%s/dl/%s?zip=true", s.baseURL, activeToken),
+			ShowZip:      showZip,
 			SourceURL:    item.SourceURL,
 		})
 	}
@@ -1295,6 +1346,7 @@ func (s *Server) handleAdminHistory(w http.ResponseWriter, r *http.Request) {
 		CreatedAt   time.Time `json:"created_at"`
 		BrowseURL   string    `json:"browse_url"`
 		DownloadURL string    `json:"download_url"`
+		ZipURL      string    `json:"zip_url"`
 	}
 
 	var result []AdminHistoryItem
@@ -1305,6 +1357,7 @@ func (s *Server) handleAdminHistory(w http.ResponseWriter, r *http.Request) {
 		}
 		browseURL := fmt.Sprintf("/browser/%s", activeToken)
 		downloadURL := fmt.Sprintf("%s/dl/%s", s.baseURL, activeToken)
+		zipURL := fmt.Sprintf("%s/dl/%s?zip=true", s.baseURL, activeToken)
 		result = append(result, AdminHistoryItem{
 			UserID:      item.UserID,
 			Username:    item.Username,
@@ -1317,6 +1370,7 @@ func (s *Server) handleAdminHistory(w http.ResponseWriter, r *http.Request) {
 			CreatedAt:   item.CreatedAt,
 			BrowseURL:   browseURL,
 			DownloadURL: downloadURL,
+			ZipURL:      zipURL,
 		})
 	}
 
