@@ -6,9 +6,63 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
+	"sync"
 	"time"
 )
+
+type TorrentSearchResult struct {
+	ID           string   `json:"id,omitempty"`
+	Name         string   `json:"name"`
+	Filename     string   `json:"filename,omitempty"`
+	Hash         string   `json:"hash,omitempty"`
+	Magnet       string   `json:"magnet,omitempty"`
+	Size         int64    `json:"size"`
+	SizeBytes    int64    `json:"size_bytes"`
+	Seeders      int      `json:"seeders"`
+	Leechers     int      `json:"leechers,omitempty"`
+	Indexer      string   `json:"indexer"`
+	Addon        string   `json:"addon,omitempty"`
+	Cached       bool     `json:"cached"`
+	Resolution   string   `json:"resolution,omitempty"`
+	Quality      string   `json:"quality,omitempty"`
+	Languages    []string `json:"languages,omitempty"`
+	Subtitles    []string `json:"subtitles,omitempty"`
+	AudioTags    []string `json:"audio_tags,omitempty"`
+	VisualTags   []string `json:"visual_tags,omitempty"`
+	ReleaseGroup string   `json:"release_group,omitempty"`
+}
+
+type aioStreamItem struct {
+	InfoHash   string      `json:"infoHash"`
+	URL        string      `json:"url"`
+	Filename   string      `json:"filename"`
+	Size       int64       `json:"size"`
+	Seeders    interface{} `json:"seeders"`
+	Addon      string      `json:"addon"`
+	Indexer    string      `json:"indexer"`
+	Type       string      `json:"type"`
+	Cached     interface{} `json:"cached"`
+	ParsedFile struct {
+		Title         string   `json:"title"`
+		Year          string   `json:"year"`
+		Resolution    string   `json:"resolution"`
+		Quality       string   `json:"quality"`
+		Encode        string   `json:"encode"`
+		ReleaseGroup  string   `json:"releaseGroup"`
+		Container     string   `json:"container"`
+		Extension     string   `json:"extension"`
+		VisualTags    []string `json:"visualTags"`
+		AudioTags     []string `json:"audioTags"`
+		AudioChannels []string `json:"audioChannels"`
+		Languages     []string `json:"languages"`
+		Subtitles     []string `json:"subtitles"`
+		Subbed        bool     `json:"subbed"`
+		Dubbed        bool     `json:"dubbed"`
+		Network       string   `json:"network"`
+	} `json:"parsedFile"`
+}
 
 func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -26,10 +80,8 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	query := r.URL.Query().Get("query")
-	query = strings.TrimSpace(query)
-	searchType := r.URL.Query().Get("type")
-	searchType = strings.TrimSpace(searchType)
+	query := strings.TrimSpace(r.URL.Query().Get("query"))
+	searchType := strings.TrimSpace(r.URL.Query().Get("type"))
 
 	if query == "" {
 		jsonError(w, http.StatusBadRequest, "Missing 'query' parameter")
@@ -40,12 +92,12 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Fetch AIOStreams settings
-	url := s.store.GetSetting("aiostreams_url", "")
+	serverURL := strings.TrimRight(s.store.GetSetting("aiostreams_url", "https://aiostreamsfortheweebs.midnightignite.me"), "/")
 	uuid := s.store.GetSetting("aiostreams_uuid", "")
 	password := s.store.GetSetting("aiostreams_password", "")
 
-	if url == "" {
-		jsonError(w, http.StatusInternalServerError, "AIOStreams URL is not configured. Please contact the administrator.")
+	if serverURL == "" {
+		jsonError(w, http.StatusInternalServerError, "AIOStreams URL is not configured. Please configure it in Global Settings.")
 		return
 	}
 
@@ -93,10 +145,8 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Remove trailing slashes from URL
-	url = strings.TrimRight(url, "/")
-
-	if searchType == "anime" {
+	// Auto-resolve Anime AniList ID
+	if searchType == "anime" || strings.HasPrefix(query, "anilist:") {
 		idValue := query
 		var season, episode string
 		if strings.HasPrefix(query, "anilist:") {
@@ -112,12 +162,12 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		resolveURL := fmt.Sprintf("%s/api/v1/anime?idType=anilistId&idValue=%s", url, idValue)
+		resolveURL := fmt.Sprintf("%s/api/v1/anime?idType=anilistId&idValue=%s", serverURL, url.QueryEscape(idValue))
 		if season != "" {
-			resolveURL += "&season=" + season
+			resolveURL += "&season=" + url.QueryEscape(season)
 		}
 		if episode != "" {
-			resolveURL += "&episode=" + episode
+			resolveURL += "&episode=" + url.QueryEscape(episode)
 		}
 
 		reqResolve, err := http.NewRequest("GET", resolveURL, nil)
@@ -149,14 +199,19 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 						}
 
 						if kitsuId != "" {
-							query = fmt.Sprintf("kitsu:%s:%s", kitsuId, episode)
+							if episode != "" {
+								query = fmt.Sprintf("kitsu:%s:%s", kitsuId, episode)
+							} else {
+								query = fmt.Sprintf("kitsu:%s", kitsuId)
+							}
 							searchType = "series"
 						} else if resolveResp.Data.Mappings.ImdbId != "" {
-							query = fmt.Sprintf("%s:%s:%s", resolveResp.Data.Mappings.ImdbId, season, episode)
+							if season != "" && episode != "" {
+								query = fmt.Sprintf("%s:%s:%s", resolveResp.Data.Mappings.ImdbId, season, episode)
+							} else {
+								query = resolveResp.Data.Mappings.ImdbId
+							}
 							searchType = "series"
-						} else {
-							jsonError(w, http.StatusNotFound, "Could not map AniList ID to a supported streaming ID.")
-							return
 						}
 					}
 				}
@@ -164,7 +219,28 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	reqURL := fmt.Sprintf("%s/api/v1/search?type=%s&id=%s", url, searchType, query)
+	// If query is still a plain text title (e.g. "The Shawshank Redemption" or "Breaking Bad")
+	// and not a recognized ID (tt..., kitsu:..., tmdb:..., anilist:...):
+	// Resolve it via Cinemeta to an IMDB ID so AIOStreams can find torrents!
+	if !strings.HasPrefix(query, "tt") && !strings.HasPrefix(query, "kitsu:") && !strings.HasPrefix(query, "tmdb:") && !strings.HasPrefix(query, "anilist:") {
+		targetType := "movie"
+		if searchType == "series" || searchType == "tv" {
+			targetType = "series"
+		}
+		if imdbID := resolveTitleToImdbID(query, targetType); imdbID != "" {
+			query = imdbID
+			searchType = targetType
+		}
+	}
+
+	// Check in-memory search cache first
+	cacheKey := fmt.Sprintf("%s:%s", searchType, query)
+	if cachedResults, found := getCachedSearch(cacheKey); found {
+		jsonOK(w, cachedResults)
+		return
+	}
+
+	reqURL := fmt.Sprintf("%s/api/v1/search?type=%s&id=%s", serverURL, url.QueryEscape(searchType), url.QueryEscape(query))
 
 	req, err := http.NewRequest("GET", reqURL, nil)
 	if err != nil {
@@ -179,7 +255,7 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 		req.Header.Add("Authorization", "Basic "+basicAuth)
 	}
 
-	client := &http.Client{Timeout: 30 * time.Second}
+	client := &http.Client{Timeout: 90 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		jsonError(w, http.StatusInternalServerError, "Failed to contact AIOStreams: "+err.Error())
@@ -193,26 +269,210 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var aiostreamsResp struct {
-		Success bool                   `json:"success"`
-		Detail  *string                `json:"detail"`
-		Error   map[string]interface{} `json:"error"`
-		Data    interface{}            `json:"data"`
+	normalized := parseAIOStreamsBytes(bodyBytes)
+	if len(normalized) > 0 {
+		setCachedSearch(cacheKey, normalized, 10*time.Minute)
 	}
-
-	if err := json.Unmarshal(bodyBytes, &aiostreamsResp); err != nil {
-		jsonError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to parse AIOStreams response: %v. Raw body: %s", err, string(bodyBytes)))
-		return
-	}
-
-	if !aiostreamsResp.Success {
-		errMsg := "AIOStreams search failed"
-		if aiostreamsResp.Error != nil && aiostreamsResp.Error["message"] != nil {
-			errMsg = fmt.Sprintf("%v", aiostreamsResp.Error["message"])
-		}
-		jsonError(w, http.StatusInternalServerError, errMsg)
-		return
-	}
-
-	jsonOK(w, aiostreamsResp.Data)
+	jsonOK(w, normalized)
 }
+
+func parseAIOStreamsBytes(bodyBytes []byte) []TorrentSearchResult {
+	var rawResp struct {
+		Success bool                   `json:"success"`
+		Detail  interface{}            `json:"detail"`
+		Error   map[string]interface{} `json:"error"`
+		Data    json.RawMessage        `json:"data"`
+	}
+
+	if err := json.Unmarshal(bodyBytes, &rawResp); err != nil {
+		// Fallback: check if direct array
+		var directStreams []aioStreamItem
+		if err2 := json.Unmarshal(bodyBytes, &directStreams); err2 == nil {
+			return normalizeAIOStreams(directStreams)
+		}
+		return []TorrentSearchResult{}
+	}
+
+	if !rawResp.Success {
+		return []TorrentSearchResult{}
+	}
+
+	var streamItems []aioStreamItem
+
+	// 1. Try object with "results" or "streams" key
+	var container struct {
+		Results []aioStreamItem `json:"results"`
+		Streams []aioStreamItem `json:"streams"`
+	}
+	if err := json.Unmarshal(rawResp.Data, &container); err == nil && (len(container.Results) > 0 || len(container.Streams) > 0) {
+		if len(container.Results) > 0 {
+			streamItems = container.Results
+		} else {
+			streamItems = container.Streams
+		}
+	} else {
+		// 2. Try direct array in data
+		var directArray []aioStreamItem
+		if err := json.Unmarshal(rawResp.Data, &directArray); err == nil {
+			streamItems = directArray
+		}
+	}
+
+	return normalizeAIOStreams(streamItems)
+}
+
+func normalizeAIOStreams(items []aioStreamItem) []TorrentSearchResult {
+	if items == nil {
+		return []TorrentSearchResult{}
+	}
+
+	results := make([]TorrentSearchResult, 0, len(items))
+	for _, item := range items {
+		name := strings.TrimSpace(item.Filename)
+		if name == "" {
+			name = strings.TrimSpace(item.ParsedFile.Title)
+		}
+		if name == "" {
+			name = "Stream"
+		}
+
+		hash := strings.ToLower(strings.TrimSpace(item.InfoHash))
+		magnet := ""
+		if hash != "" {
+			magnet = fmt.Sprintf("magnet:?xt=urn:btih:%s&dn=%s", hash, url.QueryEscape(name))
+		} else if strings.HasPrefix(item.URL, "magnet:") {
+			magnet = item.URL
+		}
+
+		seeders := 0
+		if item.Seeders != nil {
+			if s, ok := item.Seeders.(float64); ok {
+				seeders = int(s)
+			} else if s, ok := item.Seeders.(int); ok {
+				seeders = s
+			}
+		}
+
+		cached := false
+		if item.Cached != nil {
+			if c, ok := item.Cached.(bool); ok {
+				cached = c
+			} else if s, ok := item.Cached.(string); ok {
+				cached = strings.ToLower(s) == "true"
+			}
+		}
+
+		indexer := strings.TrimSpace(item.Indexer)
+		if indexer == "" {
+			indexer = strings.TrimSpace(item.Addon)
+		}
+		if indexer == "" {
+			indexer = "AIOStreams"
+		}
+
+		results = append(results, TorrentSearchResult{
+			ID:           hash,
+			Name:         name,
+			Filename:     item.Filename,
+			Hash:         hash,
+			Magnet:       magnet,
+			Size:         item.Size,
+			SizeBytes:    item.Size,
+			Seeders:      seeders,
+			Indexer:      indexer,
+			Addon:        item.Addon,
+			Cached:       cached,
+			Resolution:   item.ParsedFile.Resolution,
+			Quality:      item.ParsedFile.Quality,
+			Languages:    item.ParsedFile.Languages,
+			Subtitles:    item.ParsedFile.Subtitles,
+			AudioTags:    item.ParsedFile.AudioTags,
+			VisualTags:   item.ParsedFile.VisualTags,
+			ReleaseGroup: item.ParsedFile.ReleaseGroup,
+		})
+	}
+	return results
+}
+
+func resolveTitleToImdbID(title string, mediaType string) string {
+	title = strings.TrimSpace(title)
+	if title == "" {
+		return ""
+	}
+
+	searchEndpoint := "movie"
+	if mediaType == "series" || mediaType == "tv" {
+		searchEndpoint = "series"
+	}
+
+	cinemetaURL := fmt.Sprintf("https://v3-cinemeta.strem.io/catalog/%s/top/search=%s.json", searchEndpoint, url.PathEscape(title))
+	req, err := http.NewRequest("GET", cinemetaURL, nil)
+	if err != nil {
+		return ""
+	}
+
+	client := &http.Client{Timeout: 4 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return ""
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return ""
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return ""
+	}
+
+	var cinemetaResp struct {
+		Metas []struct {
+			ID     string `json:"id"`
+			ImdbID string `json:"imdb_id"`
+		} `json:"metas"`
+	}
+
+	if err := json.Unmarshal(body, &cinemetaResp); err == nil && len(cinemetaResp.Metas) > 0 {
+		first := cinemetaResp.Metas[0]
+		if first.ImdbID != "" {
+			return first.ImdbID
+		}
+		if strings.HasPrefix(first.ID, "tt") {
+			return first.ID
+		}
+	}
+
+	return ""
+}
+
+type searchCacheEntry struct {
+	results   []TorrentSearchResult
+	expiresAt time.Time
+}
+
+var (
+	searchCacheMu sync.RWMutex
+	searchCache   = make(map[string]searchCacheEntry)
+)
+
+func getCachedSearch(key string) ([]TorrentSearchResult, bool) {
+	searchCacheMu.RLock()
+	defer searchCacheMu.RUnlock()
+	entry, exists := searchCache[key]
+	if !exists || time.Now().After(entry.expiresAt) {
+		return nil, false
+	}
+	return entry.results, true
+}
+
+func setCachedSearch(key string, results []TorrentSearchResult, ttl time.Duration) {
+	searchCacheMu.Lock()
+	defer searchCacheMu.Unlock()
+	searchCache[key] = searchCacheEntry{
+		results:   results,
+		expiresAt: time.Now().Add(ttl),
+	}
+}
+

@@ -13,6 +13,12 @@ import {
   clearAdminAnnouncements,
   removeAdminAnnouncement,
 } from '../../../api/admin';
+import {
+  fetchAdminGameSources,
+  addAdminGameSource,
+  removeAdminGameSource,
+  syncAdminGameSources,
+} from '../../../api/games';
 import type {
   AccessSettings,
   AccessUser,
@@ -408,6 +414,10 @@ function initSettingsSection() {
     const aiostreamsUrl = (document.getElementById('admin-setting-aiostreams-url') as HTMLInputElement)?.value.trim() || '';
     const aiostreamsUuid = (document.getElementById('admin-setting-aiostreams-uuid') as HTMLInputElement)?.value.trim() || '';
     const aiostreamsPassword = (document.getElementById('admin-setting-aiostreams-password') as HTMLInputElement)?.value.trim() || '';
+    const defaultLang = (document.getElementById('admin-setting-search-default-language') as HTMLSelectElement)?.value || 'all';
+    const igdbClientId = (document.getElementById('admin-setting-igdb-client-id') as HTMLInputElement)?.value.trim() || '';
+    const igdbClientSecret = (document.getElementById('admin-setting-igdb-client-secret') as HTMLInputElement)?.value.trim() || '';
+    const flaresolverrUrl = (document.getElementById('admin-setting-flaresolverr-url') as HTMLInputElement)?.value.trim() || '';
 
     toastInfo('Saving global settings...');
     const results = await Promise.all([
@@ -422,12 +432,18 @@ function initSettingsSection() {
       updateAdminSetting('aiostreams_url', aiostreamsUrl),
       updateAdminSetting('aiostreams_uuid', aiostreamsUuid),
       updateAdminSetting('aiostreams_password', aiostreamsPassword),
+      updateAdminSetting('search_default_language', defaultLang),
+      updateAdminSetting('igdb_client_id', igdbClientId),
+      updateAdminSetting('igdb_client_secret', igdbClientSecret),
+      updateAdminSetting('flaresolverr_url', flaresolverrUrl),
     ]);
 
     const failed = results.find((r) => !r.success);
     if (!failed) toastSuccess('Settings saved successfully');
     else toastError(failed.error || 'Failed to save settings');
   });
+
+  initGameSourcesSection();
 }
 
 async function loadAdminSettings() {
@@ -446,6 +462,10 @@ async function loadAdminSettings() {
   const aiostreamsUrlEl = document.getElementById('admin-setting-aiostreams-url') as HTMLInputElement | null;
   const aiostreamsUuidEl = document.getElementById('admin-setting-aiostreams-uuid') as HTMLInputElement | null;
   const aiostreamsPasswordEl = document.getElementById('admin-setting-aiostreams-password') as HTMLInputElement | null;
+  const defaultLangEl = document.getElementById('admin-setting-search-default-language') as HTMLSelectElement | null;
+  const igdbClientIdEl = document.getElementById('admin-setting-igdb-client-id') as HTMLInputElement | null;
+  const igdbClientSecretEl = document.getElementById('admin-setting-igdb-client-secret') as HTMLInputElement | null;
+  const flaresolverrUrlEl = document.getElementById('admin-setting-flaresolverr-url') as HTMLInputElement | null;
 
   if (cacheOnlyEl) cacheOnlyEl.checked = map.cache_only === true || String(map.cache_only) === 'true';
   if (removeTorboxEl) removeTorboxEl.checked = map.remove_from_torbox_on_delete === true || String(map.remove_from_torbox_on_delete) === 'true';
@@ -458,6 +478,105 @@ async function loadAdminSettings() {
   if (aiostreamsUrlEl) aiostreamsUrlEl.value = String(map.aiostreams_url ?? '');
   if (aiostreamsUuidEl) aiostreamsUuidEl.value = String(map.aiostreams_uuid ?? '');
   if (aiostreamsPasswordEl) aiostreamsPasswordEl.value = String(map.aiostreams_password ?? '');
+  if (defaultLangEl) defaultLangEl.value = String(map.search_default_language ?? 'all');
+  if (igdbClientIdEl) igdbClientIdEl.value = String(map.igdb_client_id ?? '');
+  if (igdbClientSecretEl) igdbClientSecretEl.value = String(map.igdb_client_secret ?? '');
+  if (flaresolverrUrlEl) flaresolverrUrlEl.value = String(map.flaresolverr_url ?? 'http://flaresolverr:8191/v1');
+
+  loadGameSources();
+}
+
+function initGameSourcesSection() {
+  const btnAdd = document.getElementById('btn-admin-add-game-source');
+  const inputUrl = document.getElementById('admin-new-game-source-url') as HTMLInputElement | null;
+  const btnSync = document.getElementById('btn-sync-game-sources');
+
+  btnAdd?.addEventListener('click', async () => {
+    const url = inputUrl?.value.trim() || '';
+    if (!url) {
+      toastError('Please enter a valid source URL');
+      return;
+    }
+
+    toastInfo('Adding game source...');
+    const res = await addAdminGameSource(url);
+    if (res.success) {
+      toastSuccess('Game source added');
+      if (inputUrl) inputUrl.value = '';
+      loadGameSources();
+    } else {
+      toastError(res.error || 'Failed to add source');
+    }
+  });
+
+  btnSync?.addEventListener('click', async () => {
+    toastInfo('Triggering background game sources sync...');
+    const res = await syncAdminGameSources();
+    if (res.success) {
+      toastSuccess('Sync started in background');
+    } else {
+      toastError(res.error || 'Failed to trigger sync');
+    }
+  });
+}
+
+async function loadGameSources() {
+  const container = document.getElementById('admin-game-sources-list');
+  if (!container) return;
+
+  const res = await fetchAdminGameSources();
+  if (!res.success || !res.data || res.data.length === 0) {
+    container.innerHTML = '<div class="empty-state"><p>No custom game sources configured. Default sources will be used.</p></div>';
+    return;
+  }
+
+  const sources = res.data;
+  container.innerHTML = sources
+    .map((src) => {
+      let statusBadge = '';
+      if (src.status === 'ok') {
+        statusBadge = `<span class="badge badge-primary">🟢 ${src.item_count} games loaded</span>`;
+      } else if (src.status === 'syncing') {
+        statusBadge = `<span class="badge badge-secondary">🟡 Syncing...</span>`;
+      } else if (src.status === 'pending') {
+        statusBadge = `<span class="badge badge-subtle">⚪ Pending sync</span>`;
+      } else {
+        statusBadge = `<span class="badge badge-danger" title="${escapeHtml(src.error || '')}">🔴 Error: ${escapeHtml(src.error || 'Failed to load')}</span>`;
+      }
+
+      return `
+        <div class="history-item" style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; margin-bottom: 8px; border: 1px solid var(--border-subtle); border-radius: var(--radius-sm);">
+          <div style="flex: 1; min-width: 0;">
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px; flex-wrap: wrap;">
+              <span style="font-weight: 600; font-size: 14px; color: var(--text-primary);">${escapeHtml(src.name || src.url)}</span>
+              ${statusBadge}
+            </div>
+            <div class="mono" style="font-size: 11px; color: var(--text-muted); word-break: break-all;">${escapeHtml(src.url)}</div>
+          </div>
+          <button class="btn btn-danger btn-icon btn-sm" data-remove-game-source="${escapeHtml(src.url)}" title="Remove Source">
+            ${icon('trash', 14)}
+          </button>
+        </div>
+      `;
+    })
+    .join('');
+
+  container.querySelectorAll('[data-remove-game-source]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const url = btn.getAttribute('data-remove-game-source');
+      if (!url) return;
+      if (!confirm(`Are you sure you want to remove source:\n${url}?`)) return;
+
+      toastInfo('Removing source...');
+      const removeRes = await removeAdminGameSource(url);
+      if (removeRes.success) {
+        toastSuccess('Game source removed');
+        loadGameSources();
+      } else {
+        toastError(removeRes.error || 'Failed to remove source');
+      }
+    });
+  });
 }
 
 /* ─── Subpanel 3: TorBox Keys ─── */
@@ -521,11 +640,17 @@ async function loadTorboxKeys() {
   container.innerHTML = keys
     .map((k, index) => {
       const isValid = k.status === 'valid';
-      const statusBadge = isValid
-        ? `<span class="badge badge-green">Valid</span>`
-        : `<span class="badge badge-red">Invalid / Expired</span>`;
+      const isUnreachable = k.status === 'unreachable';
+      let statusBadge = '';
+      if (isValid) {
+        statusBadge = `<span class="badge badge-green">Valid</span>`;
+      } else if (isUnreachable) {
+        statusBadge = `<span class="badge badge-secondary">Connection Timeout (Retrying)</span>`;
+      } else {
+        statusBadge = `<span class="badge badge-red">Invalid / Expired</span>`;
+      }
       const planInfo = isValid && k.plan ? `<span class="badge badge-blue">Plan: ${escapeHtml(k.plan)}</span>` : '';
-      const errorInfo = !isValid && k.error ? `<span class="badge badge-red">${escapeHtml(k.error)}</span>` : '';
+      const errorInfo = !isValid && k.error ? `<span class="badge badge-red" style="word-break: break-word;">${escapeHtml(k.error)}</span>` : '';
 
       return `
       <div class="history-item-card">

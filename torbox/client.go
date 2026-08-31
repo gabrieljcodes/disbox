@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"mime/multipart"
+	"net"
 	"net/http"
 	"time"
 )
@@ -14,6 +15,25 @@ const (
 	apiBaseURL = "https://api.torbox.app/v1/api"
 )
 
+var defaultTorboxTransport = &http.Transport{
+	Proxy: http.ProxyFromEnvironment,
+	DialContext: (&net.Dialer{
+		Timeout:   15 * time.Second,
+		KeepAlive: 30 * time.Second,
+	}).DialContext,
+	ForceAttemptHTTP2:     true,
+	MaxIdleConns:          100,
+	MaxIdleConnsPerHost:   20,
+	IdleConnTimeout:       90 * time.Second,
+	TLSHandshakeTimeout:   10 * time.Second,
+	ExpectContinueTimeout: 1 * time.Second,
+}
+
+var sharedTorboxHTTPClient = &http.Client{
+	Timeout:   45 * time.Second,
+	Transport: defaultTorboxTransport,
+}
+
 type Client struct {
 	apiKey     string
 	httpClient *http.Client
@@ -21,10 +41,8 @@ type Client struct {
 
 func NewClient(apiKey string) *Client {
 	return &Client{
-		apiKey: apiKey,
-		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
-		},
+		apiKey:     apiKey,
+		httpClient: sharedTorboxHTTPClient,
 	}
 }
 
@@ -510,7 +528,19 @@ func (c *Client) GetPermalink(downloadType string, id int, fileID int, userIP st
 }
 
 func (c *Client) doRequest(req *http.Request) (*APIResponse, error) {
+	if req.Header.Get("User-Agent") == "" {
+		req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 Disbox/1.0")
+	}
+	if req.Header.Get("Accept") == "" {
+		req.Header.Set("Accept", "application/json")
+	}
+
 	resp, err := c.httpClient.Do(req)
+	// Retry once on transient network/timeout error
+	if err != nil {
+		time.Sleep(500 * time.Millisecond)
+		resp, err = c.httpClient.Do(req)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute request: %w", err)
 	}

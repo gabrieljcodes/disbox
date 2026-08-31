@@ -1,4 +1,5 @@
 import { icon, cloudIcon } from '../../../components/icons';
+import { buildLanguageSelectOptions } from '../../../utils/languages';
 
 export function renderModals(): string {
   return `
@@ -128,25 +129,78 @@ export function renderModals(): string {
 
     <!-- Torrent Streams Modal (TMDB / AniList) -->
     <div class="modal-backdrop" id="torrent-modal">
-      <div class="modal-window" style="max-width: 780px;">
+      <div class="modal-window" style="max-width: 840px;">
         <div class="modal-header">
-          <h2 class="modal-title" id="streams-modal-title">Available Streams</h2>
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <h2 class="modal-title" id="streams-modal-title">Available Streams</h2>
+            <span class="badge badge-neutral" id="streams-count-badge" style="display: none;">0 streams</span>
+          </div>
           <button class="btn btn-secondary btn-icon btn-sm" data-close-modal aria-label="Close streams modal">
             ${icon('x', 16)}
           </button>
         </div>
         <div class="modal-body">
-          <div class="form-row mb-md">
-            <input type="text" id="streams-filter-query" class="input" style="flex: 1; min-width: 200px;" placeholder="Filter stream titles..." aria-label="Filter stream titles">
-            <select class="select" id="streams-filter-quality" style="width: 140px;" aria-label="Filter by quality">
+          <div class="form-row mb-md" style="display: flex; flex-wrap: wrap; gap: 8px;">
+            <input type="text" id="streams-filter-query" class="input" style="flex: 1; min-width: 180px;" placeholder="Filter title, release group, codec..." aria-label="Filter stream titles">
+            <select class="select" id="streams-filter-quality" style="width: 130px;" aria-label="Filter by quality">
               <option value="all">All Qualities</option>
               <option value="2160p">4K / 2160p</option>
               <option value="1080p">1080p</option>
               <option value="720p">720p</option>
+              <option value="480p">480p / SD</option>
+            </select>
+            <select class="select" id="streams-filter-lang" style="width: 190px;" aria-label="Filter by language">
+              ${buildLanguageSelectOptions('all')}
+            </select>
+            <button class="btn btn-secondary btn-sm" id="btn-streams-cached-toggle" style="height: 38px;" title="Show only TorBox/Debrid cached streams">
+              ${icon('zap', 14)}
+              <span id="streams-cached-toggle-label">All Streams</span>
+            </button>
+          </div>
+          <div id="streams-list-container" class="history-items-list" style="max-height: 520px; overflow-y: auto;">
+            <div class="empty-state"><div class="spinner"></div><p>Searching stream sources...</p></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Game Downloads Modal (IGDB & Hydra Sources) -->
+    <div class="modal-backdrop" id="game-modal">
+      <div class="modal-window" style="max-width: 680px;">
+        <div class="modal-header">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <h2 class="modal-title" id="game-modal-title">Game Downloads</h2>
+            <span class="badge badge-primary" id="game-count-badge" style="display: none;">0 releases</span>
+          </div>
+          <button class="btn btn-secondary btn-icon btn-sm" data-close-modal aria-label="Close game downloads modal">
+            ${icon('x', 16)}
+          </button>
+        </div>
+        <div class="modal-body" style="padding: 16px 20px;">
+          <!-- Game Info Header -->
+          <div style="display: flex; gap: 16px; margin-bottom: 16px; align-items: flex-start;">
+            <img id="game-modal-cover" src="" alt="Cover" style="width: 80px; height: 110px; object-fit: cover; border-radius: var(--radius-sm); background: var(--bg-tertiary); display: none; flex-shrink: 0; box-shadow: 0 4px 12px rgba(0,0,0,0.3);">
+            <div id="game-modal-info" style="flex: 1; min-width: 0;"></div>
+          </div>
+
+          <!-- Filters Row -->
+          <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px;">
+            <div class="search-input-wrapper" style="flex: 1; min-width: 160px;">
+              <input type="text" class="input input-sm w-full" id="game-filter-query" placeholder="Filter releases by title...">
+            </div>
+            <select class="select" id="game-filter-source" style="width: 160px;" aria-label="Filter by source">
+              <option value="all">All Sources</option>
+            </select>
+            <select class="select" id="game-filter-type" style="width: 140px;" aria-label="Filter by download type">
+              <option value="all">All Types</option>
+              <option value="magnet">⚡ Magnet</option>
+              <option value="direct">🔗 Direct / Web</option>
             </select>
           </div>
-          <div id="streams-list-container" class="history-items-list" style="max-height: 480px; overflow-y: auto;">
-            <div class="empty-state"><div class="spinner"></div><p>Searching stream sources...</p></div>
+
+          <!-- Downloads List -->
+          <div id="game-downloads-container" class="history-items-list" style="max-height: 480px; overflow-y: auto;">
+            <div class="empty-state"><div class="spinner"></div><p>Searching game download sources...</p></div>
           </div>
         </div>
       </div>

@@ -1,6 +1,7 @@
 export interface TorrentSearchResult {
   id?: string;
   name: string;
+  filename?: string;
   hash?: string;
   magnet?: string;
   size: number;
@@ -10,6 +11,15 @@ export interface TorrentSearchResult {
   indexer?: string;
   tracker?: string;
   category?: string;
+  addon?: string;
+  cached?: boolean;
+  resolution?: string;
+  quality?: string;
+  languages?: string[];
+  subtitles?: string[];
+  audio_tags?: string[];
+  visual_tags?: string[];
+  release_group?: string;
 }
 
 export interface TMDBMediaItem {

@@ -27,6 +27,7 @@ export interface UserProfileResponse {
   ftp_host?: string;
   ftp_username?: string;
   has_ftp_password?: boolean;
+  search_default_language?: string;
 }
 
 export interface UserFtpSettings {

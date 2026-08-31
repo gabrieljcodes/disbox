@@ -33,5 +33,16 @@ services:
       timeout: 5s
       retries: 5
 
+  flaresolverr:
+    image: ghcr.io/flaresolverr/flaresolverr:latest
+    container_name: disbox_flaresolverr
+    restart: unless-stopped
+    environment:
+      - LOG_LEVEL=${FLARESOLVERR_LOG_LEVEL:-info}
+      - PORT=8191
+      - CAPTCHA_SOLVER=none
+    ports:
+      - "8191:8191"
+
 volumes:
   disbox_pgdata:

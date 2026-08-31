@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"torbox-discord-bot/torbox"
 )
@@ -788,11 +789,12 @@ func (s *Server) handleUserProfile(w http.ResponseWriter, r *http.Request) {
 	host, username, password, _ := s.store.GetFTPConfig(userID)
 
 	jsonOK(w, map[string]interface{}{
-		"total_downloaded":   total,
-		"monthly_downloaded": monthly,
-		"ftp_host":           host,
-		"ftp_username":       username,
-		"has_ftp_password":   password != "",
+		"total_downloaded":        total,
+		"monthly_downloaded":      monthly,
+		"ftp_host":                host,
+		"ftp_username":            username,
+		"has_ftp_password":        password != "",
+		"search_default_language": s.store.GetSetting("search_default_language", "all"),
 	})
 }
 
@@ -1569,6 +1571,11 @@ func (s *Server) handleAdminSettingsGet(w http.ResponseWriter, r *http.Request) 
 		"aiostreams_uuid":              s.store.GetSetting("aiostreams_uuid", ""),
 		"aiostreams_password":          s.store.GetSetting("aiostreams_password", ""),
 		"tmdb_api_key":                 s.store.GetSetting("tmdb_api_key", ""),
+		"igdb_client_id":               s.store.GetSetting("igdb_client_id", ""),
+		"igdb_client_secret":           s.store.GetSetting("igdb_client_secret", ""),
+		"flaresolverr_url":             s.store.GetSetting("flaresolverr_url", "http://flaresolverr:8191/v1"),
+		"game_sources":                 s.store.GetSetting("game_sources", `["https://hydralinks.cloud/sources/onlinefix.json","https://hydralinks.cloud/sources/fitgirl.json","https://raw.githubusercontent.com/ertila007/ErtilaRepo.json/main/ErtilaRepo.json"]`),
+		"search_default_language":      s.store.GetSetting("search_default_language", "all"),
 		"remove_from_torbox_on_delete": s.store.GetSetting("remove_from_torbox_on_delete", "true") == "true",
 		"max_concurrent_per_user":      s.store.GetSetting("max_concurrent_per_user", "0"),
 		"whitelist_guild_roles":        s.store.GetSetting("whitelist_guild_roles", "{}"),
@@ -1694,7 +1701,10 @@ func (s *Server) handleAdminSettingsUpdate(w http.ResponseWriter, r *http.Reques
 		"cache_only": true, "public_api_enabled": true, "user_gb_limit": true,
 		"search_enabled": true, "public_api_delay_ms": true,
 		"aiostreams_url": true, "aiostreams_uuid": true, "aiostreams_password": true,
-		"tmdb_api_key": true, "remove_from_torbox_on_delete": true, "max_concurrent_per_user": true,
+		"tmdb_api_key": true, "search_default_language": true,
+		"igdb_client_id": true, "igdb_client_secret": true, "game_sources": true,
+		"flaresolverr_url": true,
+		"remove_from_torbox_on_delete": true, "max_concurrent_per_user": true,
 		"whitelist_guild_roles": true,
 	}
 
@@ -1727,39 +1737,48 @@ func (s *Server) handleAdminTorboxKeys(w http.ResponseWriter, r *http.Request) {
 			Error      string `json:"error,omitempty"`
 		}
 		result := make([]keyEntry, len(keys))
+		var wg sync.WaitGroup
 		for i, k := range keys {
-			preview := "••••••••"
-			if len(k) > 8 {
-				preview = k[:4] + "..." + k[len(k)-4:]
-			}
-			client := torbox.NewClient(k)
-			info, err := client.GetUserInfo()
-			status := "valid"
-			planStr := ""
-			errMsg := ""
-			if err != nil {
-				status = "invalid"
-				errMsg = err.Error()
-			} else if info != nil {
-				switch info.Plan {
-				case 1:
-					planStr = "Essential"
-				case 2:
-					planStr = "Pro"
-				case 3:
-					planStr = "Standard"
-				default:
-					planStr = "Free"
+			wg.Add(1)
+			go func(idx int, key string) {
+				defer wg.Done()
+				preview := "••••••••"
+				if len(key) > 8 {
+					preview = key[:4] + "..." + key[len(key)-4:]
 				}
-			}
-			result[i] = keyEntry{
-				Index:      i,
-				KeyPreview: preview,
-				Status:     status,
-				Plan:       planStr,
-				Error:      errMsg,
-			}
+				client := torbox.NewClient(key)
+				info, err := client.GetUserInfo()
+				status := "valid"
+				planStr := ""
+				errMsg := ""
+				if err != nil {
+					status = "invalid"
+					errMsg = err.Error()
+					if strings.Contains(strings.ToLower(errMsg), "deadline") || strings.Contains(strings.ToLower(errMsg), "timeout") {
+						status = "unreachable"
+					}
+				} else if info != nil {
+					switch info.Plan {
+					case 1:
+						planStr = "Essential"
+					case 2:
+						planStr = "Pro"
+					case 3:
+						planStr = "Standard"
+					default:
+						planStr = "Free"
+					}
+				}
+				result[idx] = keyEntry{
+					Index:      idx,
+					KeyPreview: preview,
+					Status:     status,
+					Plan:       planStr,
+					Error:      errMsg,
+				}
+			}(i, k)
 		}
+		wg.Wait()
 		jsonOK(w, result)
 		return
 	}

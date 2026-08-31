@@ -1,13 +1,17 @@
 import { searchTorrents, searchTMDB, searchAniList } from '../../../api/search';
+import { searchGames } from '../../../api/games';
 import { addTorrent } from '../../../api/downloads';
 import type { TorrentSearchResult, TMDBMediaItem, AniListMediaItem } from '../../../types/search';
+import type { IGDBGameItem } from '../../../types/games';
 import { formatBytes, escapeHtml } from '../../../utils/format';
 import { toastSuccess, toastError, toastInfo } from '../../../components/toast';
 import { icon } from '../../../components/icons';
-import { openStreamsModalForMedia } from '../modals/torrent-streams-modal';
+import { openStreamsModalForMedia, formatLanguageBadge } from '../modals/torrent-streams-modal';
+import { openGameDownloadsModal } from '../modals/game-downloads-modal';
 import { loadHistory } from './history';
 
 let onTorrentAddedCallback: (() => void) | null = null;
+let lastGameResults: IGDBGameItem[] = [];
 
 export function initSearchTab(onSuccessSwitch: () => void) {
   onTorrentAddedCallback = onSuccessSwitch;
@@ -50,7 +54,21 @@ export function initSearchTab(onSuccessSwitch: () => void) {
     } else if (action === 'open-streams') {
       const title = target.getAttribute('data-title') || '';
       const year = target.getAttribute('data-year') || '';
-      openStreamsModalForMedia(title, year);
+      const tmdbId = target.getAttribute('data-id') || '';
+      const mediaType = target.getAttribute('data-media-type') || 'movie';
+      const anilistId = target.getAttribute('data-anilist-id') || '';
+      openStreamsModalForMedia(title, year, tmdbId, mediaType, anilistId);
+    } else if (action === 'open-game') {
+      const gameId = parseInt(target.getAttribute('data-game-id') || '0', 10);
+      const game = lastGameResults.find((g) => g.id === gameId);
+      if (game) {
+        openGameDownloadsModal(game);
+      } else {
+        const title = target.getAttribute('data-title') || '';
+        const cover = target.getAttribute('data-cover') || '';
+        const year = target.getAttribute('data-year') || '';
+        openGameDownloadsModal({ id: 0, name: title, cover_url: cover, release_year: year });
+      }
     }
   });
 }
@@ -89,6 +107,14 @@ async function performSearch() {
       return;
     }
     renderAniListResults(container, res.data || []);
+  } else if (category === 'games') {
+    const res = await searchGames(query);
+    if (!res.success) {
+      renderError(container, res.error);
+      return;
+    }
+    lastGameResults = res.data || [];
+    renderGameResults(container, lastGameResults);
   }
 }
 
@@ -110,7 +136,7 @@ function renderError(container: HTMLElement, error?: string) {
 }
 
 function renderTorrentResults(container: HTMLElement, items: TorrentSearchResult[]) {
-  if (items.length === 0) {
+  if (!items || items.length === 0) {
     container.innerHTML = `
       <div class="empty-state">
         <div class="empty-state-icon">${icon('search', 40)}</div>
@@ -127,22 +153,71 @@ function renderTorrentResults(container: HTMLElement, items: TorrentSearchResult
         .map((item) => {
           const magnet = item.magnet || (item.hash ? `magnet:?xt=urn:btih:${item.hash}` : '');
           const sizeStr = item.size ? formatBytes(item.size) : item.size_bytes ? formatBytes(item.size_bytes) : '—';
-          const indexer = item.indexer || item.tracker || 'Torrent';
+          const indexer = item.indexer || item.addon || 'Torrent';
+          const resolution = item.resolution || '';
+          const quality = item.quality || '';
+          const isCached = item.cached === true;
+
+          // Language Badges
+          const languages = item.languages || [];
+          const langBadges = languages
+            .slice(0, 4)
+            .map((lang) => {
+              const { label, flag } = formatLanguageBadge(lang);
+              return `<span class="badge badge-blue" style="display: inline-flex; align-items: center; gap: 3px; font-size: 11px; padding: 2px 6px;"><span>${flag}</span> <span>${escapeHtml(label)}</span></span>`;
+            })
+            .join(' ');
+
+          // Subtitles Badges
+          const subtitles = item.subtitles || [];
+          const hasSubs = subtitles.length > 0;
+          const subsSummary = subtitles.slice(0, 3).map((s) => formatLanguageBadge(s).label).join(', ') + (subtitles.length > 3 ? ` +${subtitles.length - 3}` : '');
+
+          // Visual / Audio Tags
+          const visualTags = (item.visual_tags || []).map((t) => `<span class="badge badge-amber" style="font-size: 10.5px; padding: 1px 5px;">${escapeHtml(t)}</span>`).join(' ');
+          const audioTags = (item.audio_tags || []).map((t) => `<span class="badge badge-cyan" style="font-size: 10.5px; padding: 1px 5px;">${escapeHtml(t)}</span>`).join(' ');
 
           return `
-          <div class="history-item-card">
-            <div class="history-item-top">
+          <div class="history-item-card" style="border-left: 3px solid ${isCached ? 'var(--brand-green)' : 'var(--border-subtle)'};">
+            <div class="history-item-top" style="align-items: flex-start;">
               <div style="min-width: 0; flex: 1;">
-                <div class="history-item-title mono" title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</div>
-                <div class="history-item-meta">
-                  <span class="badge badge-green">${escapeHtml(indexer)}</span>
-                  <span>${sizeStr}</span>
-                  <span class="meta-dot"></span>
-                  <span style="color: var(--brand-green-light); font-weight: 600;">Seeds: ${item.seeders || 0}</span>
-                  ${item.leechers != null ? `<span>Peers: ${item.leechers}</span>` : ''}
+                <div class="history-item-title mono" style="word-break: break-all; margin-bottom: 6px; font-size: 13px;" title="${escapeHtml(item.name)}">
+                  ${escapeHtml(item.name)}
                 </div>
+
+                <!-- Tags & Metadata Row -->
+                <div class="history-item-meta" style="flex-wrap: wrap; gap: 6px; align-items: center;">
+                  <!-- Cached Indicator -->
+                  ${isCached ? `<span class="badge badge-green" style="font-weight: 700; font-size: 11px;">⚡ Cached</span>` : ''}
+
+                  <!-- Resolution & Quality -->
+                  ${resolution ? `<span class="badge badge-cyan" style="font-weight: 700;">${escapeHtml(resolution)}</span>` : ''}
+                  ${quality ? `<span class="badge badge-neutral">${escapeHtml(quality)}</span>` : ''}
+                  ${visualTags}
+                  ${audioTags}
+
+                  <!-- Indexer / Source -->
+                  <span class="badge badge-neutral" style="color: var(--text-muted);">${escapeHtml(indexer)}</span>
+
+                  <!-- Size & Seeds -->
+                  <span class="mono" style="font-size: 12px; font-weight: 600; color: var(--text-primary);">${sizeStr}</span>
+                  <span class="meta-dot"></span>
+                  <span style="color: var(--brand-green-light); font-weight: 600; font-size: 12px;">Seeds: ${item.seeders || 0}</span>
+
+                  <!-- Audio Languages -->
+                  ${langBadges ? `<span style="margin-left: 4px; display: inline-flex; gap: 4px;">${langBadges}</span>` : ''}
+                </div>
+
+                <!-- Subtitles Indicator (if available) -->
+                ${hasSubs ? `
+                <div style="font-size: 11.5px; color: var(--text-muted); margin-top: 5px; display: flex; align-items: center; gap: 5px;">
+                  <span style="opacity: 0.8;">💬 Legendas:</span>
+                  <span style="color: var(--text-dim);">${escapeHtml(subsSummary)}</span>
+                </div>
+                ` : ''}
               </div>
-              <button class="btn btn-primary btn-sm" data-search-action="add-torrent" data-magnet="${escapeHtml(magnet)}" aria-label="Add ${escapeHtml(item.name)}" ${!magnet ? 'disabled' : ''}>
+
+              <button class="btn btn-primary btn-sm" data-search-action="add-torrent" data-magnet="${escapeHtml(magnet)}" aria-label="Add ${escapeHtml(item.name)}" style="margin-left: 10px; height: 34px; padding: 0 12px; font-weight: 600;" ${!magnet ? 'disabled' : ''}>
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                 <span>Add</span>
               </button>
@@ -156,7 +231,7 @@ function renderTorrentResults(container: HTMLElement, items: TorrentSearchResult
 }
 
 function renderTMDBResults(container: HTMLElement, items: TMDBMediaItem[]) {
-  if (items.length === 0) {
+  if (!items || items.length === 0) {
     container.innerHTML = `
       <div class="empty-state">
         <div class="empty-state-icon">${icon('film', 40)}</div>
@@ -177,7 +252,7 @@ function renderTMDBResults(container: HTMLElement, items: TMDBMediaItem[]) {
           const rating = item.vote_average ? item.vote_average.toFixed(1) : '';
 
           return `
-          <div class="media-card" data-search-action="open-streams" data-title="${escapeHtml(title)}" data-year="${escapeHtml(year)}" tabindex="0" role="button" aria-label="Streams for ${escapeHtml(title)}">
+          <div class="media-card" data-search-action="open-streams" data-title="${escapeHtml(title)}" data-year="${escapeHtml(year)}" data-id="${item.id}" data-media-type="${item.media_type}" tabindex="0" role="button" aria-label="Streams for ${escapeHtml(title)}">
             <div class="media-poster-box">
               ${posterUrl ? `<img src="${posterUrl}" alt="${escapeHtml(title)}" class="media-poster" loading="lazy">` : `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted);">${icon('film', 48)}</div>`}
               ${rating ? `<div class="media-rating-tag">${icon('star', 12)} ${rating}</div>` : ''}
@@ -195,7 +270,7 @@ function renderTMDBResults(container: HTMLElement, items: TMDBMediaItem[]) {
 }
 
 function renderAniListResults(container: HTMLElement, items: AniListMediaItem[]) {
-  if (items.length === 0) {
+  if (!items || items.length === 0) {
     container.innerHTML = `
       <div class="empty-state">
         <div class="empty-state-icon">${icon('tv', 40)}</div>
@@ -236,7 +311,7 @@ function renderAniListResults(container: HTMLElement, items: AniListMediaItem[])
           const score = item.averageScore ? `${item.averageScore}%` : '';
 
           return `
-          <div class="media-card" data-search-action="open-streams" data-title="${escapeHtml(title)}" data-year="${escapeHtml(year)}" tabindex="0" role="button" aria-label="Streams for ${escapeHtml(title)}">
+          <div class="media-card" data-search-action="open-streams" data-title="${escapeHtml(title)}" data-year="${escapeHtml(year)}" data-anilist-id="${item.id}" tabindex="0" role="button" aria-label="Streams for ${escapeHtml(title)}">
             <div class="media-poster-box">
               ${posterUrl ? `<img src="${posterUrl}" alt="${escapeHtml(title)}" class="media-poster" loading="lazy" onerror="this.style.display='none'">` : `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted);">${icon('tv', 48)}</div>`}
               ${score ? `<div class="media-rating-tag">${icon('star', 12)} ${score}</div>` : ''}
@@ -244,6 +319,45 @@ function renderAniListResults(container: HTMLElement, items: AniListMediaItem[])
             <div class="media-card-info">
               <div class="media-card-title">${escapeHtml(title)}</div>
               <div class="media-card-year">${year ? year : ''} ${item.episodes ? `• ${item.episodes} eps` : ''}</div>
+            </div>
+          </div>
+        `;
+        })
+        .join('')}
+    </div>
+  `;
+}
+
+function renderGameResults(container: HTMLElement, items: IGDBGameItem[]) {
+  if (!items || items.length === 0) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-state-icon">${icon('gamepad', 40)}</div>
+        <div class="empty-state-title">No Games Found</div>
+        <div class="empty-state-desc">Try checking the spelling or search for common repack names.</div>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = `
+    <div class="media-cards-grid">
+      ${items
+        .map((game) => {
+          const title = game.name || 'Untitled Game';
+          const year = game.release_year || '';
+          const rating = game.total_rating ? `${Math.round(game.total_rating)}%` : '';
+          const platforms = (game.platform_list || []).slice(0, 3).join(', ');
+
+          return `
+          <div class="media-card" data-search-action="open-game" data-game-id="${game.id}" data-title="${escapeHtml(title)}" data-cover="${escapeHtml(game.cover_url || '')}" data-year="${escapeHtml(year)}" tabindex="0" role="button" aria-label="Downloads for ${escapeHtml(title)}">
+            <div class="media-poster-box">
+              ${game.cover_url ? `<img src="${game.cover_url}" alt="${escapeHtml(title)}" class="media-poster" loading="lazy" onerror="this.style.display='none'">` : `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted);">${icon('gamepad', 48)}</div>`}
+              ${rating ? `<div class="media-rating-tag">${icon('star', 12)} ${rating}</div>` : ''}
+            </div>
+            <div class="media-card-info">
+              <div class="media-card-title">${escapeHtml(title)}</div>
+              <div class="media-card-year">${year ? year : ''} ${platforms ? `• ${escapeHtml(platforms)}` : ''}</div>
             </div>
           </div>
         `;

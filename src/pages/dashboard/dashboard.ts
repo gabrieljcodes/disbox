@@ -1,4 +1,4 @@
-import { fetchMe } from '../../api/me';
+import { fetchMe, fetchUserProfile } from '../../api/me';
 import { initAnnouncements } from '../../components/announcements';
 import { Modal } from '../../components/modal';
 import { toastSuccess, toastError, toastInfo } from '../../components/toast';
@@ -13,10 +13,11 @@ import { initSearchTab } from './tabs/search';
 import { initApiTokensTab, loadTokens } from './tabs/api-tokens';
 import { initAdminTab } from './tabs/admin';
 import { initUserProfileModal } from './modals/user-profile-modal';
-import { initTorrentStreamsModal } from './modals/torrent-streams-modal';
+import { initTorrentStreamsModal, setDefaultStreamLanguage } from './modals/torrent-streams-modal';
 import { initSpeedtestModal } from './modals/speedtest-modal';
 import { initAdminUserModal } from './modals/admin-user-modal';
 import { initRenameModal } from './modals/rename-modal';
+import { initGameDownloadsModal } from './modals/game-downloads-modal';
 
 import { renderLoginPage } from './layout/LoginPage';
 
@@ -53,11 +54,19 @@ async function initApp() {
 
   initAnnouncements('announcements-container');
 
+  // Load user profile & default stream language
+  fetchUserProfile().then((res) => {
+    if (res.success && res.data?.search_default_language) {
+      setDefaultStreamLanguage(res.data.search_default_language);
+    }
+  });
+
   // Modals
   const cloudModal = new Modal('cloud-modal');
   initUserProfileModal();
   initAdminUserModal();
   initTorrentStreamsModal(() => switchTab('history'));
+  initGameDownloadsModal(() => switchTab('history'));
   initSpeedtestModal();
   initRenameModal();
 

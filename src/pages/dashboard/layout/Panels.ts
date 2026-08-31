@@ -1,4 +1,5 @@
 import { icon } from '../../../components/icons';
+import { buildLanguageSelectOptions } from '../../../utils/languages';
 
 export function renderPanels(): string {
   return `
@@ -185,6 +186,7 @@ export function renderPanels(): string {
           <option value="movie">Movies (TMDB)</option>
           <option value="tv">TV Shows (TMDB)</option>
           <option value="anime">Anime (AniList)</option>
+          <option value="games">Games (IGDB)</option>
         </select>
         <div class="toolbar-search">
           <span class="search-icon">
@@ -428,6 +430,54 @@ export function renderPanels(): string {
               <label class="input-label" for="admin-setting-aiostreams-password">AIOStreams Password (Optional)</label>
               <input type="password" id="admin-setting-aiostreams-password" class="input" placeholder="AIOStreams password if protected" autocomplete="off">
             </div>
+
+            <div class="input-group">
+              <label class="input-label" for="admin-setting-search-default-language">Preferred Stream Language</label>
+              <select id="admin-setting-search-default-language" class="select">
+                ${buildLanguageSelectOptions('all')}
+              </select>
+              <p class="section-desc">Default language filter pre-selected when users open the stream picker.</p>
+            </div>
+
+            <div class="input-group">
+              <label class="input-label" for="admin-setting-igdb-client-id">IGDB Client ID (Twitch OAuth)</label>
+              <input type="text" id="admin-setting-igdb-client-id" class="input" placeholder="Twitch / IGDB Client ID" autocomplete="off">
+              <p class="section-desc">Used to search official game covers, release dates, ratings, and genre metadata from IGDB.</p>
+            </div>
+
+            <div class="input-group">
+              <label class="input-label" for="admin-setting-igdb-client-secret">IGDB Client Secret (Twitch OAuth)</label>
+              <input type="password" id="admin-setting-igdb-client-secret" class="input" placeholder="Twitch / IGDB Client Secret" autocomplete="off">
+            </div>
+
+            <div class="input-group">
+              <label class="input-label" for="admin-setting-flaresolverr-url">FlareSolverr Proxy URL</label>
+              <input type="url" id="admin-setting-flaresolverr-url" class="input" placeholder="http://flaresolverr:8191/v1">
+              <p class="section-desc">Proxy container used to solve Cloudflare Turnstile / Bot challenges when downloading source JSONs (e.g. hydralinks.cloud).</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 3: Game Download Sources (Hydra / Repack Sources JSON) -->
+        <div class="card mb-lg">
+          <div class="section-header between" style="margin-bottom: 12px;">
+            <div>
+              <h3 class="section-title">Game Download Sources (Hydra Sources)</h3>
+              <p class="section-desc">Community JSON indexes (e.g. FitGirl, Online-Fix, DODI, SteamRIP) used to find game releases and repacks.</p>
+            </div>
+            <button class="btn btn-secondary btn-sm" id="btn-sync-game-sources" title="Re-sync all game source JSONs in background">
+              ${icon('activity', 14)}
+              <span>Sync Sources Now</span>
+            </button>
+          </div>
+
+          <div class="form-row mb-md">
+            <input type="url" id="admin-new-game-source-url" class="input" style="flex: 1; min-width: 240px;" placeholder="https://hydralinks.cloud/sources/onlinefix.json" aria-label="Game Source JSON URL">
+            <button class="btn btn-primary" id="btn-admin-add-game-source">Add Source</button>
+          </div>
+
+          <div id="admin-game-sources-list" class="history-items-list">
+            <div class="empty-state"><div class="spinner"></div></div>
           </div>
         </div>
 

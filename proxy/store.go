@@ -669,6 +669,11 @@ func (st *Store) InitDefaultSettings(existingKeys []string) {
 	initIfMissing("aiostreams_uuid", "")
 	initIfMissing("aiostreams_password", "")
 	initIfMissing("tmdb_api_key", "")
+	initIfMissing("igdb_client_id", "")
+	initIfMissing("igdb_client_secret", "")
+	initIfMissing("flaresolverr_url", "http://flaresolverr:8191/v1")
+	initIfMissing("game_sources", `["https://hydralinks.cloud/sources/onlinefix.json","https://hydralinks.cloud/sources/fitgirl.json","https://raw.githubusercontent.com/ertila007/ErtilaRepo.json/main/ErtilaRepo.json"]`)
+	initIfMissing("search_default_language", "all")
 	initIfMissing("remove_from_torbox_on_delete", "true")
 	initIfMissing("whitelist_guild_roles", "{}")
 }

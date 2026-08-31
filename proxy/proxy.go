@@ -232,6 +232,10 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/v1/admin/announcements/remove", s.handleAdminAnnouncementsRemove)
 	mux.HandleFunc("/v1/admin/announcements/clear", s.handleAdminAnnouncementsClear)
 	mux.HandleFunc("/v1/admin/discord/guild", s.handleAdminDiscordGuild)
+	mux.HandleFunc("/v1/search/games", s.handleSearchGames)
+	mux.HandleFunc("/v1/search/games/downloads", s.handleGameDownloads)
+	mux.HandleFunc("/v1/admin/game-sources", s.handleAdminGameSources)
+	mux.HandleFunc("/v1/admin/game-sources/sync", s.handleAdminSyncGameSources)
 }
 
 func (s *Server) Start() error {
