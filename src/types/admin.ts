@@ -59,6 +59,8 @@ export interface AdminGlobalHistoryItem {
   user_id: string;
   username: string;
   name: string;
+  original_name?: string;
+  custom_name?: string;
   type: string;
   size: number;
   created_at: string;
@@ -71,6 +73,8 @@ export interface AdminUserHistoryEntry {
   token: string;
   link_token?: string;
   name: string;
+  original_name?: string;
+  custom_name?: string;
   type: string;
   size: number;
   created_at: string;

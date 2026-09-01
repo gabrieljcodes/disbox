@@ -50,11 +50,7 @@ export function initHistoryTab(cloudModal?: Modal) {
       item.name = newName;
       item.custom_name = newName;
     }
-    const titleEl = document.getElementById(`torbox-title-${token}`);
-    if (titleEl) {
-      titleEl.textContent = newName;
-      titleEl.setAttribute('title', newName);
-    }
+    filterAndRender();
   });
 
   searchInput?.addEventListener('input', () => filterAndRender());
@@ -78,7 +74,7 @@ export function initHistoryTab(cloudModal?: Modal) {
       setTimeout(() => {
         const a = document.createElement('a');
         a.href = item.download_url;
-        a.download = item.name || 'download';
+        a.download = item.custom_name || item.name || 'download';
         a.style.display = 'none';
         document.body.appendChild(a);
         a.click();
@@ -496,11 +492,11 @@ function renderHistoryItems(container: HTMLElement, items: HistoryItem[]) {
           </div>
 
           <div class="torbox-card-actions">
-            <a href="${item.download_url}" class="btn btn-secondary btn-icon btn-sm" title="Direct Download" aria-label="Direct Download" download>
+            <a href="${item.download_url}" class="btn btn-secondary btn-icon btn-sm" title="Direct Download" aria-label="Direct Download" download="${escapeHtml(item.custom_name || item.name)}">
               ${icon('download', 14)}
             </a>
             ${shouldShowZip ? `
-            <a href="${item.zip_url || `${item.download_url}?zip=true`}" class="btn btn-secondary btn-icon btn-sm" title="Download as ZIP Archive" aria-label="Download as ZIP Archive" download>
+            <a href="${item.zip_url || `${item.download_url}?zip=true`}" class="btn btn-secondary btn-icon btn-sm" title="Download as ZIP Archive" aria-label="Download as ZIP Archive" download="${escapeHtml(item.custom_name || item.name).toLowerCase().endsWith('.zip') ? escapeHtml(item.custom_name || item.name) : `${escapeHtml(item.custom_name || item.name)}.zip`}">
               ${icon('archive', 14)}
             </a>
             ` : ''}
@@ -515,12 +511,12 @@ function renderHistoryItems(container: HTMLElement, items: HistoryItem[]) {
                 ${icon('moreVertical', 14)}
               </button>
               <div class="dropdown-menu">
-                <a href="${item.download_url}" class="dropdown-item" download title="Download Direct File">
+                <a href="${item.download_url}" class="dropdown-item" download="${escapeHtml(item.custom_name || item.name)}" title="Download Direct File">
                   ${icon('download', 14)}
                   <span>Download Direct File</span>
                 </a>
                 ${shouldShowZip ? `
-                <a href="${item.zip_url || `${item.download_url}?zip=true`}" class="dropdown-item" download title="Download as ZIP">
+                <a href="${item.zip_url || `${item.download_url}?zip=true`}" class="dropdown-item" download="${escapeHtml(item.custom_name || item.name).toLowerCase().endsWith('.zip') ? escapeHtml(item.custom_name || item.name) : `${escapeHtml(item.custom_name || item.name)}.zip`}" title="Download as ZIP">
                   ${icon('archive', 14)}
                   <span>Download as ZIP (.zip)</span>
                 </a>

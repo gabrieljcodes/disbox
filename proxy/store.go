@@ -486,7 +486,7 @@ func (st *Store) SetCustomDownloadName(userID, token, customName string) (string
 // GetDownloadNameForToken returns the custom name (if any) and the original name for a token or link token.
 func (st *Store) GetDownloadNameForToken(token string) (customName string, originalName string, err error) {
 	err = st.db.QueryRow(
-		"SELECT COALESCE(custom_name, ''), name FROM download_history WHERE token = $1 OR link_token = $1 ORDER BY id DESC LIMIT 1",
+		"SELECT COALESCE(custom_name, ''), name FROM download_history WHERE (token = $1 OR link_token = $1) AND deleted = false ORDER BY id DESC LIMIT 1",
 		token,
 	).Scan(&customName, &originalName)
 	return customName, originalName, err

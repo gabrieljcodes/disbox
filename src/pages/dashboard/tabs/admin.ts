@@ -833,7 +833,7 @@ function filterAdminHistory() {
           </div>
         </div>
         <div class="history-item-actions">
-          <a href="${item.download_url || `/dl/${item.token}`}" class="btn btn-secondary btn-icon btn-sm" title="Download" aria-label="Download" download>
+          <a href="${item.download_url || `/dl/${item.token}`}" class="btn btn-secondary btn-icon btn-sm" title="Download" aria-label="Download" download="${escapeHtml(item.custom_name || item.name || 'download')}">
             ${icon('download', 14)}
           </a>
           <a href="${item.browse_url || `/browser/${item.token}`}" class="btn btn-secondary btn-icon btn-sm" title="Browse Files" aria-label="Browse Files">

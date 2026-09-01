@@ -515,7 +515,10 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if !s.proxyMode {
+	// Query custom name for this download token (if set by the user)
+	customName, origName, _ := s.store.GetDownloadNameForToken(token)
+
+	if !s.proxyMode && customName == "" {
 		userIP := r.Header.Get("X-Forwarded-For")
 		if userIP == "" {
 			userIP = strings.Split(r.RemoteAddr, ":")[0]
@@ -565,9 +568,6 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 	if cl := resp.Header.Get("Content-Length"); cl != "" {
 		w.Header().Set("Content-Length", cl)
 	}
-	
-	// Query custom name for this download token (if set by the user)
-	customName, origName, _ := s.store.GetDownloadNameForToken(token)
 
 	if cd := resp.Header.Get("Content-Disposition"); cd != "" {
 		cd = strings.ReplaceAll(cd, ".zip.zip", ".zip")
@@ -577,12 +577,18 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 				upstreamFilename = params["filename"]
 			}
 			finalFilename := formatCustomDownloadFilename(customName, upstreamFilename, origName)
+			if forceZip && !strings.HasSuffix(strings.ToLower(finalFilename), ".zip") {
+				finalFilename = strings.TrimSuffix(finalFilename, filepath.Ext(finalFilename)) + ".zip"
+			}
 			w.Header().Set("Content-Disposition", formatContentDisposition(finalFilename))
 		} else {
 			w.Header().Set("Content-Disposition", cd)
 		}
 	} else if customName != "" {
 		finalFilename := formatCustomDownloadFilename(customName, "", origName)
+		if forceZip && !strings.HasSuffix(strings.ToLower(finalFilename), ".zip") {
+			finalFilename = strings.TrimSuffix(finalFilename, filepath.Ext(finalFilename)) + ".zip"
+		}
 		w.Header().Set("Content-Disposition", formatContentDisposition(finalFilename))
 	}
 
