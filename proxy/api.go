@@ -870,7 +870,7 @@ func (s *Server) handleUserFtp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Password == "" {
+	if req.Password == "" || isSecretMasked(req.Password) {
 		_, _, existingPassword, _ := s.store.GetFTPConfig(userID)
 		req.Password = existingPassword
 	}
@@ -1009,7 +1009,22 @@ func (s *Server) handleHosters(w http.ResponseWriter, r *http.Request) {
 	jsonOK(w, hosters)
 }
 
-// ─── Cloud Config ───
+// maskSecret masks a sensitive token/key to protect it from being exposed in plain text.
+func maskSecret(token string) string {
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return ""
+	}
+	if len(token) <= 8 {
+		return "••••••••"
+	}
+	return token[:4] + strings.Repeat("•", len(token)-8) + token[len(token)-4:]
+}
+
+// isSecretMasked checks if a submitted token is a masked placeholder (should not overwrite existing secret).
+func isSecretMasked(token string) bool {
+	return strings.Contains(token, "•") || strings.Contains(token, "*")
+}
 
 func (s *Server) handleUserCloud(w http.ResponseWriter, r *http.Request) {
 	userID, ok := s.resolveUser(w, r)
@@ -1024,12 +1039,12 @@ func (s *Server) handleUserCloud(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		jsonOK(w, map[string]string{
-			"google":     config.Google,
-			"dropbox":    config.Dropbox,
-			"onedrive":   config.OneDrive,
-			"gofile":     config.Gofile,
-			"onefichier": config.Onefichier,
-			"pixeldrain": config.Pixeldrain,
+			"google":     maskSecret(config.Google),
+			"dropbox":    maskSecret(config.Dropbox),
+			"onedrive":   maskSecret(config.OneDrive),
+			"gofile":     maskSecret(config.Gofile),
+			"onefichier": maskSecret(config.Onefichier),
+			"pixeldrain": maskSecret(config.Pixeldrain),
 		})
 		return
 	}
@@ -1042,12 +1057,12 @@ func (s *Server) handleUserCloud(w http.ResponseWriter, r *http.Request) {
 		}
 
 		existing, _ := s.store.GetCloudConfig(userID)
-		if req.Google == "" { req.Google = existing.Google }
-		if req.Dropbox == "" { req.Dropbox = existing.Dropbox }
-		if req.OneDrive == "" { req.OneDrive = existing.OneDrive }
-		if req.Gofile == "" { req.Gofile = existing.Gofile }
-		if req.Onefichier == "" { req.Onefichier = existing.Onefichier }
-		if req.Pixeldrain == "" { req.Pixeldrain = existing.Pixeldrain }
+		if req.Google == "" || isSecretMasked(req.Google) { req.Google = existing.Google }
+		if req.Dropbox == "" || isSecretMasked(req.Dropbox) { req.Dropbox = existing.Dropbox }
+		if req.OneDrive == "" || isSecretMasked(req.OneDrive) { req.OneDrive = existing.OneDrive }
+		if req.Gofile == "" || isSecretMasked(req.Gofile) { req.Gofile = existing.Gofile }
+		if req.Onefichier == "" || isSecretMasked(req.Onefichier) { req.Onefichier = existing.Onefichier }
+		if req.Pixeldrain == "" || isSecretMasked(req.Pixeldrain) { req.Pixeldrain = existing.Pixeldrain }
 
 		if err := s.store.SaveCloudConfig(userID, req); err != nil {
 			jsonError(w, http.StatusInternalServerError, "Failed to save cloud config")

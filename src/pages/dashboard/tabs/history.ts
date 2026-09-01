@@ -37,6 +37,7 @@ export function initHistoryTab(cloudModal?: Modal) {
   const filterType = document.getElementById('history-filter-type') as HTMLSelectElement | null;
   const sortSelect = document.getElementById('history-sort') as HTMLSelectElement | null;
   const btnRefresh = document.getElementById('btn-refresh-history');
+  const btnMassDownload = document.getElementById('btn-mass-download');
   const btnMassDelete = document.getElementById('btn-mass-delete');
   const btnConfirmMassDelete = document.getElementById('btn-confirm-mass-delete');
 
@@ -62,6 +63,30 @@ export function initHistoryTab(cloudModal?: Modal) {
   sortSelect?.addEventListener('change', () => filterAndRender());
   btnRefresh?.addEventListener('click', () => loadHistory(true));
 
+  btnMassDownload?.addEventListener('click', () => {
+    if (selectedTokens.size === 0) return;
+    const itemsToDownload = historyItems.filter(
+      (h) => selectedTokens.has(h.token) || (h.link_token && selectedTokens.has(h.link_token))
+    );
+    if (itemsToDownload.length === 0) {
+      toastError('No downloadable items selected');
+      return;
+    }
+
+    toastInfo(`Starting batch download of ${itemsToDownload.length} items...`);
+    itemsToDownload.forEach((item, index) => {
+      setTimeout(() => {
+        const a = document.createElement('a');
+        a.href = item.download_url;
+        a.download = item.name || 'download';
+        a.style.display = 'none';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      }, index * 300);
+    });
+  });
+
   btnMassDelete?.addEventListener('click', () => {
     if (selectedTokens.size === 0) return;
     const modalCount = document.getElementById('modal-delete-count');
@@ -78,7 +103,7 @@ export function initHistoryTab(cloudModal?: Modal) {
     if (res.success) {
       toastSuccess(`Deleted ${tokensArray.length} downloads`);
       selectedTokens.clear();
-      updateMassDeleteButton();
+      updateBulkActionButtons();
       loadHistory(false);
     } else {
       toastError(res.error || 'Failed to delete downloads');
@@ -124,7 +149,7 @@ export function initHistoryTab(cloudModal?: Modal) {
       } else {
         selectedTokens.delete(token);
       }
-      updateMassDeleteButton();
+      updateBulkActionButtons();
     } else if (action === 'copy') {
       const url = target.getAttribute('data-url') || '';
       const ok = await copyToClipboard(url);
@@ -210,7 +235,7 @@ export function initHistoryTab(cloudModal?: Modal) {
       // Temporarily remove from UI
       historyItems.splice(itemIndex, 1);
       selectedTokens.delete(token);
-      updateMassDeleteButton();
+      updateBulkActionButtons();
       updateMetrics();
       if (itemEl) itemEl.style.display = 'none';
 
@@ -342,16 +367,17 @@ function updateMetrics() {
   if (metricBandwidth) metricBandwidth.textContent = formatBytes(totalBytes);
 }
 
-function updateMassDeleteButton() {
-  const btn = document.getElementById('btn-mass-delete');
-  const countEl = document.getElementById('mass-delete-count');
-  if (!btn) return;
+function updateBulkActionButtons() {
+  const bulkGroup = document.getElementById('bulk-actions-group');
+  const countDelete = document.getElementById('mass-delete-count');
+  const countDownload = document.getElementById('mass-download-count');
 
   if (selectedTokens.size > 0) {
-    btn.style.display = 'inline-flex';
-    if (countEl) countEl.textContent = `Delete Selected (${selectedTokens.size})`;
+    if (bulkGroup) bulkGroup.style.display = 'inline-flex';
+    if (countDelete) countDelete.textContent = `Delete Selected (${selectedTokens.size})`;
+    if (countDownload) countDownload.textContent = `Download Selected (${selectedTokens.size})`;
   } else {
-    btn.style.display = 'none';
+    if (bulkGroup) bulkGroup.style.display = 'none';
   }
 }
 

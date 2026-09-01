@@ -996,24 +996,57 @@ type CloudConfig struct {
 
 func (st *Store) GetCloudConfig(userID string) (CloudConfig, error) {
 	var c CloudConfig
+	var g, d, o, gof, onef, p sql.NullString
 	err := st.db.QueryRow(
-		"SELECT google_token, dropbox_token, onedrive_token, gofile_token, onefichier_token, pixeldrain_token FROM user_cloud_configs WHERE user_id = $1",
+		"SELECT COALESCE(google_token, ''), COALESCE(dropbox_token, ''), COALESCE(onedrive_token, ''), COALESCE(gofile_token, ''), COALESCE(onefichier_token, ''), COALESCE(pixeldrain_token, '') FROM user_cloud_configs WHERE user_id = $1",
 		userID,
-	).Scan(&c.Google, &c.Dropbox, &c.OneDrive, &c.Gofile, &c.Onefichier, &c.Pixeldrain)
+	).Scan(&g, &d, &o, &gof, &onef, &p)
 	if err == sql.ErrNoRows {
 		return c, nil
 	}
 	if err != nil {
 		return c, err
 	}
-	
-	if c.Google != "" { c.Google, err = decrypt(st.encryptionKey, c.Google); if err != nil { return c, err } }
-	if c.Dropbox != "" { c.Dropbox, err = decrypt(st.encryptionKey, c.Dropbox); if err != nil { return c, err } }
-	if c.OneDrive != "" { c.OneDrive, err = decrypt(st.encryptionKey, c.OneDrive); if err != nil { return c, err } }
-	if c.Gofile != "" { c.Gofile, err = decrypt(st.encryptionKey, c.Gofile); if err != nil { return c, err } }
-	if c.Onefichier != "" { c.Onefichier, err = decrypt(st.encryptionKey, c.Onefichier); if err != nil { return c, err } }
-	if c.Pixeldrain != "" { c.Pixeldrain, err = decrypt(st.encryptionKey, c.Pixeldrain); if err != nil { return c, err } }
-	
+
+	c.Google = g.String
+	c.Dropbox = d.String
+	c.OneDrive = o.String
+	c.Gofile = gof.String
+	c.Onefichier = onef.String
+	c.Pixeldrain = p.String
+
+	// Decrypt tokens gracefully; if decryption fails, fallback to value or empty
+	if c.Google != "" {
+		if dec, err := decrypt(st.encryptionKey, c.Google); err == nil {
+			c.Google = dec
+		}
+	}
+	if c.Dropbox != "" {
+		if dec, err := decrypt(st.encryptionKey, c.Dropbox); err == nil {
+			c.Dropbox = dec
+		}
+	}
+	if c.OneDrive != "" {
+		if dec, err := decrypt(st.encryptionKey, c.OneDrive); err == nil {
+			c.OneDrive = dec
+		}
+	}
+	if c.Gofile != "" {
+		if dec, err := decrypt(st.encryptionKey, c.Gofile); err == nil {
+			c.Gofile = dec
+		}
+	}
+	if c.Onefichier != "" {
+		if dec, err := decrypt(st.encryptionKey, c.Onefichier); err == nil {
+			c.Onefichier = dec
+		}
+	}
+	if c.Pixeldrain != "" {
+		if dec, err := decrypt(st.encryptionKey, c.Pixeldrain); err == nil {
+			c.Pixeldrain = dec
+		}
+	}
+
 	return c, nil
 }
 
@@ -1041,12 +1074,16 @@ func (st *Store) SaveCloudConfig(userID string, c CloudConfig) error {
 }
 
 func (st *Store) GetCloudProviderToken(userID, dbField string) (string, error) {
-	var encToken string
-	err := st.db.QueryRow(fmt.Sprintf("SELECT %s FROM user_cloud_configs WHERE user_id = $1", dbField), userID).Scan(&encToken)
-	if err != nil || encToken == "" {
-		return encToken, err
+	var encToken sql.NullString
+	err := st.db.QueryRow(fmt.Sprintf("SELECT COALESCE(%s, '') FROM user_cloud_configs WHERE user_id = $1", dbField), userID).Scan(&encToken)
+	if err != nil || !encToken.Valid || encToken.String == "" {
+		return "", err
 	}
-	return decrypt(st.encryptionKey, encToken)
+	decToken, err := decrypt(st.encryptionKey, encToken.String)
+	if err != nil {
+		return encToken.String, nil
+	}
+	return decToken, nil
 }
 
 // ─── Admin User Profile ───

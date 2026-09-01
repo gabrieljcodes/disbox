@@ -81,10 +81,17 @@ export function renderPanels(): string {
               ${icon('refresh', 14)}
             </button>
 
-            <button class="btn btn-danger btn-sm" id="btn-mass-delete" style="display: none;" aria-label="Delete selected downloads">
-              ${icon('trash', 14)}
-              <span id="mass-delete-count">Delete Selected</span>
-            </button>
+            <div class="bulk-actions-group" id="bulk-actions-group" style="display: none;">
+              <button class="btn btn-primary btn-sm" id="btn-mass-download" aria-label="Download selected">
+                ${icon('download', 14)}
+                <span id="mass-download-count">Download Selected</span>
+              </button>
+
+              <button class="btn btn-danger btn-sm" id="btn-mass-delete" aria-label="Delete selected downloads">
+                ${icon('trash', 14)}
+                <span id="mass-delete-count">Delete Selected</span>
+              </button>
+            </div>
           </div>
 
           <!-- History Items Container -->

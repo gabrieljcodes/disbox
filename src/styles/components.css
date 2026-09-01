@@ -409,6 +409,13 @@
   padding-left: 38px;
   width: 100%;
 }
+.bulk-actions-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
 
 /* ─── Dropzone ─── */
 .dropzone-container {
