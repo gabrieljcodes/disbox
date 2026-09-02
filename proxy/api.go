@@ -1142,22 +1142,117 @@ func (s *Server) handleIntegration(w http.ResponseWriter, r *http.Request) {
 	}
 	delete(req, "token")
 
-	if _, ok := req["zip"]; !ok {
-		req["zip"] = false
-	}
-	if _, ok := req["file_id"]; !ok {
-		req["file_id"] = 0
+	client := s.clientPool.GetClient(clientIndex)
+	var adapter torbox.DownloadAdapter
+	if dlType == "webdl" {
+		adapter = &torbox.WebDLAdapter{Client: client}
+	} else {
+		adapter = &torbox.TorrentAdapter{Client: client}
 	}
 
-	client := s.clientPool.GetClient(clientIndex)
-	resp, err := client.UploadToCloud(provider, req)
+	// Fetch metadata to check files and prevent double-zipping archives
+	info, _ := adapter.GetInfo(downloadID)
+
+	isSingleArchive := false
+	if info != nil && len(info.Files) == 1 {
+		singleFileName := strings.ToLower(info.Files[0].Name)
+		isSingleArchive = strings.HasSuffix(singleFileName, ".zip") ||
+			strings.HasSuffix(singleFileName, ".rar") ||
+			strings.HasSuffix(singleFileName, ".7z") ||
+			strings.HasSuffix(singleFileName, ".tar") ||
+			strings.HasSuffix(singleFileName, ".gz") ||
+			strings.HasSuffix(singleFileName, ".bz2") ||
+			strings.HasSuffix(singleFileName, ".xz")
+	}
+
+	rawFileID, hasFileID := req["file_id"]
+	var targetFileID int = -1
+	if hasFileID && rawFileID != nil {
+		switch v := rawFileID.(type) {
+		case float64:
+			targetFileID = int(v)
+		case int:
+			targetFileID = v
+		case string:
+			targetFileID, _ = strconv.Atoi(v)
+		}
+	}
+
+	reqZip, _ := req["zip"].(bool)
+
+	var resp *torbox.APIResponse
+
+	if targetFileID >= 0 {
+		// Explicit single file dispatch from file browser
+		req["file_id"] = targetFileID
+		req["zip"] = false
+		resp, err = client.UploadToCloud(provider, req)
+	} else if isSingleArchive {
+		// Single archive file: dispatch directly without double-zipping into .zip.zip
+		if len(info.Files) > 0 {
+			req["file_id"] = info.Files[0].ID
+		}
+		req["zip"] = false
+		resp, err = client.UploadToCloud(provider, req)
+	} else if reqZip {
+		// Whole package as ZIP archive
+		req["zip"] = true
+		delete(req, "file_id")
+		resp, err = client.UploadToCloud(provider, req)
+	} else {
+		// Unzipped multi-file dispatch: upload each individual file
+		if info != nil && len(info.Files) > 1 {
+			var lastResp *torbox.APIResponse
+			var lastErr error
+			successCount := 0
+
+			for _, f := range info.Files {
+				fileReq := make(map[string]interface{})
+				for k, v := range req {
+					fileReq[k] = v
+				}
+				fileReq["file_id"] = f.ID
+				fileReq["zip"] = false
+				r, errUpload := client.UploadToCloud(provider, fileReq)
+				if errUpload != nil {
+					lastErr = errUpload
+				} else if r != nil {
+					lastResp = r
+					if r.Success {
+						successCount++
+					}
+				}
+			}
+
+			if successCount > 0 {
+				resp = &torbox.APIResponse{
+					Success: true,
+					Detail:  fmt.Sprintf("Successfully dispatched %d files to %s", successCount, provider),
+				}
+			} else if lastResp != nil {
+				resp = lastResp
+			} else if lastErr != nil {
+				jsonError(w, http.StatusInternalServerError, lastErr.Error())
+				return
+			}
+		} else if info != nil && len(info.Files) == 1 {
+			req["file_id"] = info.Files[0].ID
+			req["zip"] = false
+			resp, err = client.UploadToCloud(provider, req)
+		} else {
+			delete(req, "file_id")
+			req["zip"] = false
+			resp, err = client.UploadToCloud(provider, req)
+		}
+	}
+
 	if err != nil {
 		log.Printf("[Cloud] Request to Torbox failed: %v", err)
 		jsonError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	if !resp.Success {
+	if resp != nil && !resp.Success {
 		log.Printf("[Cloud] Torbox rejected %s upload: %s (error: %s)", provider, resp.Detail, resp.Error)
 	} else {
 		log.Printf("[Cloud] Successfully requested %s upload", provider)

@@ -331,12 +331,19 @@ export function renderModals(): string {
 
           <div class="cloud-modal-footer-options">
             <label class="cloud-zip-option">
-              <input type="checkbox" id="cloud-modal-zip">
+              <input type="checkbox" id="cloud-modal-zip" checked>
               <div class="cloud-zip-text">
-                <span class="cloud-zip-title">Upload as .ZIP archive</span>
+                <span class="cloud-zip-title">Upload as .ZIP archive (Recommended)</span>
                 <span class="cloud-zip-desc">Pack all files into a single compressed ZIP archive before uploading</span>
               </div>
             </label>
+            <div class="cloud-zip-warning" id="cloud-zip-warning" style="display: none;">
+              ${icon('alertTriangle', 18)}
+              <div>
+                <strong>Rate Limit Warning</strong>
+                <span>Uploading without ZIP transfers each file individually. For downloads with many files (e.g. 20+), your cloud provider may rate-limit or temporarily block your API key due to high request volume.</span>
+              </div>
+            </div>
           </div>
 
           <div class="cloud-modal-hint">

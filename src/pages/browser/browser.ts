@@ -150,13 +150,20 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // Cloud Provider Selection
+  const zipCheckbox = document.getElementById('cloud-modal-zip') as HTMLInputElement | null;
+  const zipWarning = document.getElementById('cloud-zip-warning');
+  zipCheckbox?.addEventListener('change', () => {
+    if (zipWarning && zipCheckbox) {
+      zipWarning.style.display = zipCheckbox.checked ? 'none' : 'flex';
+    }
+  });
+
   document.querySelectorAll('#cloud-modal [data-provider]').forEach((btn) => {
     btn.addEventListener('click', async () => {
       const provider = btn.getAttribute('data-provider') || '';
       if (!provider || !activeCloudToken) return;
 
-      const zipCheckbox = document.getElementById('cloud-modal-zip') as HTMLInputElement | null;
-      const isZip = zipCheckbox ? zipCheckbox.checked : false;
+      const isZip = zipCheckbox ? zipCheckbox.checked : true;
 
       toastInfo(`Starting upload to ${provider}...`);
       cloudModal.close();

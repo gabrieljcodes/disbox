@@ -825,6 +825,31 @@
   font-size: 11px;
   color: var(--text-muted);
 }
+.cloud-zip-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: rgba(var(--status-warning-rgb), 0.1);
+  border: 1px solid rgba(var(--status-warning-rgb), 0.3);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  margin-top: 10px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: #fcd34d;
+  animation: fadeIn 0.2s ease;
+}
+.cloud-zip-warning svg {
+  color: var(--status-warning);
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.cloud-zip-warning strong {
+  color: #fbbf24;
+  display: block;
+  font-size: 12px;
+  margin-bottom: 2px;
+}
 .cloud-modal-hint {
   display: flex;
   align-items: center;
