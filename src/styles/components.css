@@ -2923,4 +2923,220 @@
   border: 1px solid rgba(168, 85, 247, 0.3);
 }
 
+/* ─── Personal API Tokens Tab ─── */
+.api-header-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-xl);
+  padding: 20px 24px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+.api-header-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.token-header-badge {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-lg);
+  background: rgba(var(--brand-green-rgb), 0.12);
+  border: 1px solid rgba(var(--brand-green-rgb), 0.3);
+  color: var(--brand-green);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 0 16px rgba(var(--brand-green-rgb), 0.15);
+}
+.token-count-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px;
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-subtle);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-left: 8px;
+  vertical-align: middle;
+}
+.api-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.api-create-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-accent);
+  border-radius: var(--radius-xl);
+  padding: 20px 24px;
+  box-shadow: var(--shadow-glow);
+  animation: fadeIn 0.2s ease;
+}
+.api-new-token-banner {
+  background: linear-gradient(135deg, rgba(30, 191, 106, 0.1) 0%, rgba(17, 24, 34, 0.95) 100%);
+  border: 1px solid var(--brand-green);
+  border-radius: var(--radius-xl);
+  padding: 20px 24px;
+  box-shadow: var(--shadow-glow);
+  animation: fadeIn 0.25s ease;
+}
+.token-snippet-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: #080c10;
+  border: 1px solid rgba(var(--brand-green-rgb), 0.35);
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  margin: 12px 0 8px;
+}
+.token-snippet-text {
+  font-family: var(--font-mono);
+  font-size: 13.5px;
+  color: #5ECBA5;
+  word-break: break-all;
+  user-select: all;
+  font-weight: 500;
+}
+.api-tokens-container {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.api-token-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 20px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  transition: all var(--transition-normal);
+}
+.api-token-card:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--border-medium);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+.api-token-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  flex: 1;
+}
+.token-avatar-badge {
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-subtle);
+  color: var(--brand-green);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: transform var(--transition-normal);
+}
+.api-token-card:hover .token-avatar-badge {
+  transform: scale(1.06);
+  border-color: rgba(var(--brand-green-rgb), 0.3);
+}
+.token-info {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+}
+.token-name-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.token-name-text {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: -0.2px;
+}
+.token-meta-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.token-key-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-subtle);
+  padding: 2px 8px;
+  border-radius: var(--radius-xs);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  letter-spacing: 0.2px;
+}
+.token-copy-chip-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  transition: color var(--transition-fast);
+}
+.token-copy-chip-btn:hover {
+  color: var(--brand-green);
+}
+.token-meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.api-token-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.api-guide-card {
+  margin-top: 24px;
+  background: rgba(14, 18, 26, 0.6);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xl);
+  padding: 20px 24px;
+}
+.api-guide-code {
+  background: #080c10;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 12px 16px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: #e2e8f0;
+  overflow-x: auto;
+  margin-top: 10px;
+}
+.api-guide-code .comment {
+  color: #64748b;
+}
+.api-guide-code .token-highlight {
+  color: var(--brand-green-light);
+}
+
 

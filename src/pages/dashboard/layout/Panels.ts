@@ -218,46 +218,105 @@ export function renderPanels(): string {
 
     <!-- ═══ TAB 5: API TOKENS ═══ -->
     <div class="tab-panel" id="panel-api">
-      <div class="card mb-lg">
+      <div class="api-header-card mb-lg">
         <div class="section-header between" style="margin-bottom: 0;">
-          <div class="section-title-group">
-            <h2 class="card-title">Personal API Tokens</h2>
-            <p class="card-subtitle">Generate API keys to authenticate with Disbox programmatically.</p>
+          <div class="api-header-left">
+            <div class="token-header-badge">
+              ${icon('key', 20)}
+            </div>
+            <div>
+              <div style="display: flex; align-items: center;">
+                <h2 class="card-title" style="margin: 0;">Personal API Tokens</h2>
+                <span class="token-count-pill" id="token-count-badge">0 tokens</span>
+              </div>
+              <p class="card-subtitle" style="margin-top: 4px;">Generate API keys to authenticate with Disbox programmatically.</p>
+            </div>
           </div>
-          <button class="btn btn-primary btn-sm" id="btn-open-create-token">
-            ${icon('plus', 14)}
-            <span>Create Token</span>
-          </button>
+          <div class="api-header-actions">
+            <a href="/scalar/index.html" target="_blank" rel="noopener" class="btn btn-secondary btn-sm" title="Explore Interactive API Docs">
+              ${icon('code', 14)}
+              <span>API Reference</span>
+            </a>
+            <button class="btn btn-primary btn-sm" id="btn-open-create-token">
+              ${icon('plus', 14)}
+              <span>Create Token</span>
+            </button>
+          </div>
         </div>
       </div>
 
-      <!-- Token Creation Modal or Inline Form -->
-      <div id="create-token-card" class="card mb-lg" style="display: none; border-color: var(--border-accent);">
-        <h3 class="section-title mb-sm">Create New API Token</h3>
+      <!-- Token Creation Drawer -->
+      <div id="create-token-card" class="api-create-card mb-lg" style="display: none;">
+        <div class="section-header between" style="margin-bottom: 12px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            ${icon('key', 16, 'var(--brand-green)')}
+            <h3 class="section-title" style="margin: 0; font-size: 14px;">Generate New API Token</h3>
+          </div>
+          <button class="btn btn-secondary btn-icon btn-sm" id="btn-close-create-token" aria-label="Close form">
+            ${icon('x', 14)}
+          </button>
+        </div>
+        <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 14px;">
+          Give your token a descriptive label (e.g. <code>CLI Desktop</code>, <code>Home Assistant</code>, <code>Extension</code>) to easily manage access.
+        </p>
         <div class="form-row">
-          <input type="text" id="new-token-name" class="input" style="flex: 1; min-width: 200px;" placeholder="Token name (e.g. CLI tool, Home Assistant)" aria-label="New token name">
-          <button class="btn btn-solid btn-sm" id="btn-confirm-create-token">Generate</button>
+          <input type="text" id="new-token-name" class="input" style="flex: 1; min-width: 220px;" placeholder="Token label (e.g. My Laptop CLI)" aria-label="New token name">
+          <button class="btn btn-solid btn-sm" id="btn-confirm-create-token">
+            ${icon('check', 14)}
+            <span>Generate Key</span>
+          </button>
           <button class="btn btn-secondary btn-sm" id="btn-cancel-create-token">Cancel</button>
         </div>
       </div>
 
       <!-- Generated Token Display Banner -->
-      <div id="new-token-display-banner" class="card mb-lg" style="display: none; background: rgba(30, 191, 106, 0.08); border-color: var(--brand-green);">
-        <div class="section-header between" style="margin-bottom: 0;">
-          <div style="flex: 1; min-width: 0;">
-            <div style="font-size: 12px; font-weight: 700; color: var(--brand-green-light); margin-bottom: 4px; letter-spacing: 0.5px;">TOKEN GENERATED SUCCESSFULLY</div>
-            <div class="mono" id="new-token-plaintext" style="font-size: 13px; color: #fff; word-break: break-all;"></div>
-            <p style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">Make sure to copy it now. You won't be able to see it again.</p>
+      <div id="new-token-display-banner" class="api-new-token-banner mb-lg" style="display: none;">
+        <div class="section-header between" style="margin-bottom: 4px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <div style="width: 24px; height: 24px; border-radius: 50%; background: rgba(16, 185, 129, 0.2); display: flex; align-items: center; justify-content: center; color: var(--brand-green);">
+              ${icon('check', 14)}
+            </div>
+            <span style="font-size: 12px; font-weight: 700; color: var(--brand-green-light); letter-spacing: 0.5px;">API TOKEN GENERATED SUCCESSFULLY</span>
           </div>
-          <button class="btn btn-solid btn-sm" id="btn-copy-new-token">Copy</button>
+          <button class="btn btn-secondary btn-icon btn-sm" id="btn-dismiss-new-token" aria-label="Dismiss banner" title="Dismiss">
+            ${icon('x', 14)}
+          </button>
+        </div>
+        <p style="font-size: 12px; color: var(--text-secondary); margin: 6px 0 10px;">
+          Make sure to copy your API key now. For security, the full token secret will not be displayed again.
+        </p>
+        <div class="token-snippet-box">
+          <span class="token-snippet-text" id="new-token-plaintext"></span>
+          <button class="btn btn-solid btn-sm" id="btn-copy-new-token" style="flex-shrink: 0;">
+            ${icon('copy', 13)}
+            <span id="btn-copy-new-token-text">Copy Key</span>
+          </button>
         </div>
       </div>
 
-      <!-- Tokens Table -->
-      <div class="history-items-list" id="tokens-list-container">
+      <!-- Tokens List -->
+      <div class="api-tokens-container" id="tokens-list-container">
         <div class="empty-state">
           <div class="spinner"></div>
           <p>Loading API tokens...</p>
+        </div>
+      </div>
+
+      <!-- API Quickstart Guide -->
+      <div class="api-guide-card">
+        <div class="section-header between" style="margin-bottom: 8px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            ${icon('terminal', 16, 'var(--brand-green)')}
+            <h4 style="margin: 0; font-size: 13px; font-weight: 600; color: var(--text-primary);">Quick API Integration</h4>
+          </div>
+          <span class="badge badge-neutral" style="font-size: 11px;">HTTP Bearer Auth</span>
+        </div>
+        <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 8px;">
+          Include your personal API token in the <code>Authorization</code> header when sending HTTP requests:
+        </p>
+        <div class="api-guide-code">
+          <span class="comment"># Example: Fetch user profile & download statistics</span><br>
+          curl -s -H <span class="token-highlight">"Authorization: Bearer &lt;YOUR_API_KEY&gt;"</span> http://localhost:8080/v1/user/profile
         </div>
       </div>
     </div>
