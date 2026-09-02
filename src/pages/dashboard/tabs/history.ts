@@ -219,6 +219,13 @@ export function initHistoryTab(cloudModal?: Modal) {
       else toastError(res.error || 'Failed to send to FTP');
     } else if (action === 'cloud') {
       activeCloudToken = token;
+      const item = historyItems.find((h) => h.token === token || h.link_token === token);
+      const targetBanner = document.getElementById('cloud-target-banner');
+      const targetName = document.getElementById('cloud-target-name');
+      if (targetBanner && targetName && item) {
+        targetName.textContent = item.custom_name || item.name;
+        targetBanner.style.display = 'flex';
+      }
       cloudModal?.open();
     } else if (action === 'delete') {
       // Optimistic delete with Undo Toast pattern

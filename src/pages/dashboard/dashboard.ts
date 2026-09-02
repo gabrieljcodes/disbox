@@ -147,10 +147,13 @@ async function initApp() {
       const token = getActiveCloudToken();
       if (!provider || !token) return;
 
+      const zipCheckbox = document.getElementById('cloud-modal-zip') as HTMLInputElement | null;
+      const isZip = zipCheckbox ? zipCheckbox.checked : false;
+
       toastInfo(`Starting upload to ${provider}...`);
       cloudModal.close();
 
-      const res = await sendToCloud(provider, token);
+      const res = await sendToCloud(provider, token, undefined, isZip);
       if (res.success) {
         toastSuccess(`Upload to ${provider} started successfully`);
       } else {

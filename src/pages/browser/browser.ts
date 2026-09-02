@@ -135,20 +135,33 @@ document.addEventListener('DOMContentLoaded', () => {
       activeCloudToken = target.getAttribute('data-token') || '';
       const fileIdStr = target.getAttribute('data-file-id');
       activeCloudFileId = fileIdStr ? parseInt(fileIdStr, 10) : undefined;
+
+      const targetBanner = document.getElementById('cloud-target-banner');
+      const targetName = document.getElementById('cloud-target-name');
+      const row = target.closest('tr') || target.closest('.file-card');
+      const fileNameEl = row?.querySelector('.file-name, .hero-title');
+      if (targetBanner && targetName) {
+        targetName.textContent = fileNameEl?.textContent?.trim() || 'Selected file/archive';
+        targetBanner.style.display = 'flex';
+      }
+
       cloudModal.open();
     }
   });
 
   // Cloud Provider Selection
-  document.querySelectorAll('[data-provider]').forEach((btn) => {
+  document.querySelectorAll('#cloud-modal [data-provider]').forEach((btn) => {
     btn.addEventListener('click', async () => {
       const provider = btn.getAttribute('data-provider') || '';
       if (!provider || !activeCloudToken) return;
 
+      const zipCheckbox = document.getElementById('cloud-modal-zip') as HTMLInputElement | null;
+      const isZip = zipCheckbox ? zipCheckbox.checked : false;
+
       toastInfo(`Starting upload to ${provider}...`);
       cloudModal.close();
 
-      const res = await sendToCloud(provider, activeCloudToken, activeCloudFileId);
+      const res = await sendToCloud(provider, activeCloudToken, activeCloudFileId, isZip);
       if (res.success) {
         toastSuccess(`Upload to ${provider} started successfully`);
       } else {

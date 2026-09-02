@@ -228,42 +228,120 @@ export function renderModals(): string {
 
     <!-- Send to Cloud Modal -->
     <div class="modal-backdrop" id="cloud-modal">
-      <div class="modal-window" style="max-width: 480px;">
+      <div class="modal-window cloud-modal-window">
         <div class="modal-header">
-          <h2 class="modal-title">Send to Cloud</h2>
+          <div class="modal-header-with-icon">
+            <div class="modal-icon-badge modal-icon-cloud">
+              ${icon('cloud', 18)}
+            </div>
+            <div>
+              <h2 class="modal-title">Send to Cloud</h2>
+              <p class="modal-subtitle">Direct cloud-to-cloud transfer to your storage account</p>
+            </div>
+          </div>
           <button class="btn btn-secondary btn-icon btn-sm" data-close-modal aria-label="Close send to cloud modal">
             ${icon('x', 16)}
           </button>
         </div>
         <div class="modal-body">
-          <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 16px;">
-            Select a cloud provider to upload this download:
-          </p>
+          <div class="cloud-target-banner" id="cloud-target-banner" style="display: none;">
+            <span class="cloud-target-label">Target:</span>
+            <span class="cloud-target-name" id="cloud-target-name">—</span>
+          </div>
+
           <div class="cloud-options-grid">
-            <button class="cloud-provider-btn" data-provider="googledrive" aria-label="Upload to Google Drive">
-              ${cloudIcon('googledrive', 22)}
-              <span>Google Drive</span>
+            <button class="cloud-provider-card" data-provider="googledrive" aria-label="Upload to Google Drive">
+              <div class="cloud-provider-icon">
+                ${cloudIcon('googledrive', 22)}
+              </div>
+              <div class="cloud-provider-details">
+                <span class="cloud-provider-title">Google Drive</span>
+                <span class="cloud-provider-desc">My Drive / Workspace</span>
+              </div>
+              <div class="cloud-provider-arrow">
+                ${icon('chevronRight', 14)}
+              </div>
             </button>
-            <button class="cloud-provider-btn" data-provider="dropbox" aria-label="Upload to Dropbox">
-              ${cloudIcon('dropbox', 22)}
-              <span>Dropbox</span>
+
+            <button class="cloud-provider-card" data-provider="dropbox" aria-label="Upload to Dropbox">
+              <div class="cloud-provider-icon">
+                ${cloudIcon('dropbox', 22)}
+              </div>
+              <div class="cloud-provider-details">
+                <span class="cloud-provider-title">Dropbox</span>
+                <span class="cloud-provider-desc">Apps / Disbox Sync</span>
+              </div>
+              <div class="cloud-provider-arrow">
+                ${icon('chevronRight', 14)}
+              </div>
             </button>
-            <button class="cloud-provider-btn" data-provider="onedrive" aria-label="Upload to OneDrive">
-              ${cloudIcon('onedrive', 22)}
-              <span>OneDrive</span>
+
+            <button class="cloud-provider-card" data-provider="onedrive" aria-label="Upload to OneDrive">
+              <div class="cloud-provider-icon">
+                ${cloudIcon('onedrive', 22)}
+              </div>
+              <div class="cloud-provider-details">
+                <span class="cloud-provider-title">OneDrive</span>
+                <span class="cloud-provider-desc">Personal / 365 Cloud</span>
+              </div>
+              <div class="cloud-provider-arrow">
+                ${icon('chevronRight', 14)}
+              </div>
             </button>
-            <button class="cloud-provider-btn" data-provider="gofile" aria-label="Upload to GoFile">
-              ${cloudIcon('gofile', 22)}
-              <span>GoFile</span>
+
+            <button class="cloud-provider-card" data-provider="gofile" aria-label="Upload to GoFile">
+              <div class="cloud-provider-icon">
+                ${cloudIcon('gofile', 22)}
+              </div>
+              <div class="cloud-provider-details">
+                <span class="cloud-provider-title">GoFile</span>
+                <span class="cloud-provider-desc">High-speed Storage</span>
+              </div>
+              <div class="cloud-provider-arrow">
+                ${icon('chevronRight', 14)}
+              </div>
             </button>
-            <button class="cloud-provider-btn" data-provider="1fichier" aria-label="Upload to 1Fichier">
-              ${cloudIcon('1fichier', 22)}
-              <span>1Fichier</span>
+
+            <button class="cloud-provider-card" data-provider="1fichier" aria-label="Upload to 1Fichier">
+              <div class="cloud-provider-icon">
+                ${cloudIcon('1fichier', 22)}
+              </div>
+              <div class="cloud-provider-details">
+                <span class="cloud-provider-title">1Fichier</span>
+                <span class="cloud-provider-desc">Direct Host Storage</span>
+              </div>
+              <div class="cloud-provider-arrow">
+                ${icon('chevronRight', 14)}
+              </div>
             </button>
-            <button class="cloud-provider-btn" data-provider="pixeldrain" aria-label="Upload to PixelDrain">
-              ${cloudIcon('pixeldrain', 22)}
-              <span>PixelDrain</span>
+
+            <button class="cloud-provider-card" data-provider="pixeldrain" aria-label="Upload to PixelDrain">
+              <div class="cloud-provider-icon">
+                ${cloudIcon('pixeldrain', 22)}
+              </div>
+              <div class="cloud-provider-details">
+                <span class="cloud-provider-title">PixelDrain</span>
+                <span class="cloud-provider-desc">Fast API File Sharing</span>
+              </div>
+              <div class="cloud-provider-arrow">
+                ${icon('chevronRight', 14)}
+              </div>
             </button>
+          </div>
+
+          <div class="cloud-modal-footer-options">
+            <label class="cloud-zip-option">
+              <input type="checkbox" id="cloud-modal-zip">
+              <div class="cloud-zip-text">
+                <span class="cloud-zip-title">Upload as .ZIP archive</span>
+                <span class="cloud-zip-desc">Pack all files into a single compressed ZIP archive before uploading</span>
+              </div>
+            </label>
+          </div>
+
+          <div class="cloud-modal-hint">
+            ${icon('info', 14)}
+            <span>Make sure API keys are configured in your Profile & Integrations.</span>
           </div>
         </div>
       </div>
