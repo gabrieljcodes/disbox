@@ -518,7 +518,7 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 	// Query custom name for this download token (if set by the user)
 	customName, origName, _ := s.store.GetDownloadNameForToken(token)
 
-	if !s.proxyMode && customName == "" {
+	if !s.proxyMode && customName == "" && !forceZip {
 		userIP := r.Header.Get("X-Forwarded-For")
 		if userIP == "" {
 			userIP = strings.Split(r.RemoteAddr, ":")[0]
@@ -571,23 +571,32 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 
 	if cd := resp.Header.Get("Content-Disposition"); cd != "" {
 		cd = strings.ReplaceAll(cd, ".zip.zip", ".zip")
-		if customName != "" {
-			var upstreamFilename string
-			if _, params, err := mime.ParseMediaType(cd); err == nil {
-				upstreamFilename = params["filename"]
-			}
-			finalFilename := formatCustomDownloadFilename(customName, upstreamFilename, origName)
-			if forceZip && !strings.HasSuffix(strings.ToLower(finalFilename), ".zip") {
-				finalFilename = strings.TrimSuffix(finalFilename, filepath.Ext(finalFilename)) + ".zip"
-			}
-			w.Header().Set("Content-Disposition", formatContentDisposition(finalFilename))
-		} else {
-			w.Header().Set("Content-Disposition", cd)
+		var upstreamFilename string
+		if _, params, err := mime.ParseMediaType(cd); err == nil {
+			upstreamFilename = params["filename"]
 		}
-	} else if customName != "" {
-		finalFilename := formatCustomDownloadFilename(customName, "", origName)
-		if forceZip && !strings.HasSuffix(strings.ToLower(finalFilename), ".zip") {
-			finalFilename = strings.TrimSuffix(finalFilename, filepath.Ext(finalFilename)) + ".zip"
+
+		var finalFilename string
+		if customName != "" {
+			finalFilename = formatCustomDownloadFilename(customName, upstreamFilename, origName)
+		} else {
+			finalFilename = upstreamFilename
+			if finalFilename == "" {
+				finalFilename = origName
+			}
+		}
+
+		if forceZip {
+			finalFilename = cleanZipFilename(finalFilename)
+		}
+		w.Header().Set("Content-Disposition", formatContentDisposition(finalFilename))
+	} else {
+		finalFilename := origName
+		if customName != "" {
+			finalFilename = formatCustomDownloadFilename(customName, "", origName)
+		}
+		if forceZip {
+			finalFilename = cleanZipFilename(finalFilename)
 		}
 		w.Header().Set("Content-Disposition", formatContentDisposition(finalFilename))
 	}
@@ -873,15 +882,17 @@ type BrowseFile struct {
 }
 
 type BrowseData struct {
-	Title        string
-	TotalSize    string
-	FileCount    int
-	DownloadURL  string
-	ZipURL       string
-	ShowZip      bool
-	Token        string
-	Files        []BrowseFile
-	ErrorMessage string
+	Title           string
+	TotalSize       string
+	FileCount       int
+	DownloadURL     string
+	ZipURL          string
+	ZipFilename     string
+	ShowZip         bool
+	IsSingleArchive bool
+	Token           string
+	Files           []BrowseFile
+	ErrorMessage    string
 }
 
 type PreviewData struct {
@@ -951,14 +962,25 @@ func (s *Server) handleBrowse(w http.ResponseWriter, r *http.Request) {
 
 	showZip := len(info.Files) > 1 || (len(info.Files) == 1 && !isSingleArchive)
 
+	customName, origName, _ := s.store.GetDownloadNameForToken(token)
+	effectiveZipName := info.Name
+	if customName != "" {
+		effectiveZipName = customName
+	} else if origName != "" {
+		effectiveZipName = origName
+	}
+	zipFilename := cleanZipFilename(effectiveZipName)
+
 	data := BrowseData{
-		Title:       info.Name,
-		TotalSize:   formatBytes(info.Size),
-		FileCount:   len(info.Files),
-		DownloadURL: fmt.Sprintf("%s/dl/%s", s.baseURL, token),
-		ZipURL:      fmt.Sprintf("%s/dl/%s?zip=true", s.baseURL, token),
-		ShowZip:     showZip,
-		Token:       token,
+		Title:           info.Name,
+		TotalSize:       formatBytes(info.Size),
+		FileCount:       len(info.Files),
+		DownloadURL:     fmt.Sprintf("%s/dl/%s", s.baseURL, token),
+		ZipURL:          fmt.Sprintf("%s/dl/%s?zip=true", s.baseURL, token),
+		ZipFilename:     zipFilename,
+		ShowZip:         showZip,
+		IsSingleArchive: isSingleArchive,
+		Token:           token,
 	}
 
 	for _, f := range info.Files {
@@ -1294,6 +1316,23 @@ func formatCustomDownloadFilename(customName, upstreamFilename, origName string)
 		return customName + ext
 	}
 	return customName
+}
+
+func cleanZipFilename(filename string) string {
+	filename = strings.TrimSpace(filename)
+	if filename == "" {
+		return "download.zip"
+	}
+	// Clean any double .zip suffixes first (.zip.zip, etc.)
+	for strings.HasSuffix(strings.ToLower(filename), ".zip") {
+		filename = strings.TrimSpace(filename[:len(filename)-4])
+	}
+	// If the remaining filename has another extension (like .mp4, .mkv, .iso, .7z, etc.), strip it
+	ext := filepath.Ext(filename)
+	if ext != "" && len(ext) >= 2 && len(ext) <= 6 {
+		filename = strings.TrimSuffix(filename, ext)
+	}
+	return filename + ".zip"
 }
 
 func formatContentDisposition(filename string) string {

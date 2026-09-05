@@ -11,6 +11,7 @@ export interface HistoryItem {
   download_url: string;
   zip_url?: string;
   show_zip?: boolean;
+  is_single_archive?: boolean;
   source_url?: string;
 }
 

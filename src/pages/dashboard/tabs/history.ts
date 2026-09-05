@@ -8,13 +8,22 @@ import {
 } from '../../../api/downloads';
 import { sendToFtp } from '../../../api/integrations';
 import type { HistoryItem, ProgressMap, CachedProgress } from '../../../types/downloads';
-import { formatBytes, formatRelativeTime, formatSpeed, formatEta, escapeHtml } from '../../../utils/format';
+import {
+  formatBytes,
+  formatRelativeTime,
+  formatSpeed,
+  formatEta,
+  escapeHtml,
+  formatZipDownloadFilename,
+  isArchiveFilename,
+} from '../../../utils/format';
 import { copyToClipboard } from '../../../utils/clipboard';
 import { toastSuccess, toastError, toastInfo, toastUndo } from '../../../components/toast';
 import { icon } from '../../../components/icons';
 import { Modal } from '../../../components/modal';
 import { SpeedGraph } from '../components/SpeedGraph';
 import { openRenameModal, initRenameModal } from '../modals/rename-modal';
+import { setCloudZipOptionState } from '../../../utils/cloud-modal';
 
 let historyItems: HistoryItem[] = [];
 let selectedTokens = new Set<string>();
@@ -226,6 +235,8 @@ export function initHistoryTab(cloudModal?: Modal) {
         targetName.textContent = item.custom_name || item.name;
         targetBanner.style.display = 'flex';
       }
+      const isSingleArchive = !!item?.is_single_archive || isArchiveFilename(item?.custom_name || item?.name || '');
+      setCloudZipOptionState(isSingleArchive);
       cloudModal?.open();
     } else if (action === 'delete') {
       // Optimistic delete with Undo Toast pattern
@@ -503,7 +514,7 @@ function renderHistoryItems(container: HTMLElement, items: HistoryItem[]) {
               ${icon('download', 14)}
             </a>
             ${shouldShowZip ? `
-            <a href="${item.zip_url || `${item.download_url}?zip=true`}" class="btn btn-secondary btn-icon btn-sm" title="Download as ZIP Archive" aria-label="Download as ZIP Archive" download="${escapeHtml(item.custom_name || item.name).toLowerCase().endsWith('.zip') ? escapeHtml(item.custom_name || item.name) : `${escapeHtml(item.custom_name || item.name)}.zip`}">
+            <a href="${item.zip_url || `${item.download_url}?zip=true`}" class="btn btn-secondary btn-icon btn-sm" title="Download as ZIP Archive" aria-label="Download as ZIP Archive" download="${escapeHtml(formatZipDownloadFilename(item.custom_name || item.name))}">
               ${icon('archive', 14)}
             </a>
             ` : ''}
@@ -523,7 +534,7 @@ function renderHistoryItems(container: HTMLElement, items: HistoryItem[]) {
                   <span>Download Direct File</span>
                 </a>
                 ${shouldShowZip ? `
-                <a href="${item.zip_url || `${item.download_url}?zip=true`}" class="dropdown-item" download="${escapeHtml(item.custom_name || item.name).toLowerCase().endsWith('.zip') ? escapeHtml(item.custom_name || item.name) : `${escapeHtml(item.custom_name || item.name)}.zip`}" title="Download as ZIP">
+                <a href="${item.zip_url || `${item.download_url}?zip=true`}" class="dropdown-item" download="${escapeHtml(formatZipDownloadFilename(item.custom_name || item.name))}" title="Download as ZIP">
                   ${icon('archive', 14)}
                   <span>Download as ZIP (.zip)</span>
                 </a>

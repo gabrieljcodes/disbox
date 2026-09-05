@@ -67,7 +67,7 @@
             <span>Download Direct</span>
           </a>
           {{if .ShowZip}}
-          <a href="{{if .ZipURL}}{{.ZipURL}}{{else}}{{.DownloadURL}}?zip=true{{end}}" class="btn btn-primary btn-lg" id="btn-download-zip" title="Download as ZIP Archive" download>
+          <a href="{{if .ZipURL}}{{.ZipURL}}{{else}}{{.DownloadURL}}?zip=true{{end}}" class="btn btn-primary btn-lg" id="btn-download-zip" title="Download as ZIP Archive" download="{{.ZipFilename}}">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M10 12h4"/></svg>
             <span>Download ZIP</span>
           </a>
@@ -111,7 +111,7 @@
     </div>
 
     <!-- File List -->
-    <div class="file-list" id="file-list" data-token="{{.Token}}">
+    <div class="file-list" id="file-list" data-token="{{.Token}}" data-is-single-archive="{{.IsSingleArchive}}">
       {{range .Files}}
       <div class="file-item" data-name="{{.Name}}" data-size="{{.Size}}" data-category="{{.Category}}">
         <div class="file-icon-box {{.Category}}">
@@ -281,11 +281,11 @@
         </div>
 
         <div class="cloud-modal-footer-options">
-          <label class="cloud-zip-option">
+          <label class="cloud-zip-option" id="cloud-zip-label">
             <input type="checkbox" id="cloud-modal-zip" checked>
             <div class="cloud-zip-text">
-              <span class="cloud-zip-title">Upload as .ZIP archive (Recommended)</span>
-              <span class="cloud-zip-desc">Pack all files into a single compressed ZIP archive before uploading</span>
+              <span class="cloud-zip-title" id="cloud-zip-title">Upload as .ZIP archive (Recommended)</span>
+              <span class="cloud-zip-desc" id="cloud-zip-desc">Pack all files into a single compressed ZIP archive before uploading</span>
             </div>
           </label>
           <div class="cloud-zip-warning" id="cloud-zip-warning" style="display: none;">

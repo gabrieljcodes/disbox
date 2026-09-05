@@ -95,3 +95,28 @@ func TestSanitizeCustomFilename(t *testing.T) {
 		}
 	}
 }
+
+func TestCleanZipFilename(t *testing.T) {
+	cases := []struct {
+		input    string
+		expected string
+	}{
+		{"02 Leon x Grace 3D.mp4.zip", "02 Leon x Grace 3D.zip"},
+		{"02 Leon x Grace 3D.mp4", "02 Leon x Grace 3D.zip"},
+		{"02 Leon x Grace 3D.zip", "02 Leon x Grace 3D.zip"},
+		{"Movie.2024.1080p.mkv.zip", "Movie.2024.1080p.zip"},
+		{"Movie.2024.1080p.mkv", "Movie.2024.1080p.zip"},
+		{"Archlinux.iso.zip", "Archlinux.zip"},
+		{"Document.pdf.zip", "Document.zip"},
+		{"Archive.zip.zip", "Archive.zip"},
+		{"Topaz Video 1.7.0 (x64).7z.zip", "Topaz Video 1.7.0 (x64).zip"},
+		{"", "download.zip"},
+	}
+
+	for _, c := range cases {
+		got := cleanZipFilename(c.input)
+		if got != c.expected {
+			t.Errorf("cleanZipFilename(%q) = %q; expected %q", c.input, got, c.expected)
+		}
+	}
+}

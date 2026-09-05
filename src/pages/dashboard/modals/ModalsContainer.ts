@@ -330,11 +330,11 @@ export function renderModals(): string {
           </div>
 
           <div class="cloud-modal-footer-options">
-            <label class="cloud-zip-option">
+            <label class="cloud-zip-option" id="cloud-zip-label">
               <input type="checkbox" id="cloud-modal-zip" checked>
               <div class="cloud-zip-text">
-                <span class="cloud-zip-title">Upload as .ZIP archive (Recommended)</span>
-                <span class="cloud-zip-desc">Pack all files into a single compressed ZIP archive before uploading</span>
+                <span class="cloud-zip-title" id="cloud-zip-title">Upload as .ZIP archive (Recommended)</span>
+                <span class="cloud-zip-desc" id="cloud-zip-desc">Pack all files into a single compressed ZIP archive before uploading</span>
               </div>
             </label>
             <div class="cloud-zip-warning" id="cloud-zip-warning" style="display: none;">

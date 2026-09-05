@@ -90,3 +90,42 @@ export function truncateText(text: string, maxLen = 60): string {
   if (text.length <= maxLen) return text;
   return text.substring(0, maxLen - 3) + '...';
 }
+
+/**
+ * Checks if a filename is a compressed archive (.zip, .7z, .rar, .tar, .gz, etc.).
+ */
+export function isArchiveFilename(name: string): boolean {
+  if (!name) return false;
+  const lower = name.toLowerCase().trim();
+  return (
+    lower.endsWith('.zip') ||
+    lower.endsWith('.rar') ||
+    lower.endsWith('.7z') ||
+    lower.endsWith('.tar') ||
+    lower.endsWith('.gz') ||
+    lower.endsWith('.bz2') ||
+    lower.endsWith('.xz')
+  );
+}
+
+/**
+ * Strips any inner extension (e.g. .mp4, .mkv, .iso, etc.) before appending .zip,
+ * avoiding duplicate extensions like "file.mp4.zip" or "archive.zip.zip".
+ */
+export function formatZipDownloadFilename(name: string): string {
+  if (!name) return 'download.zip';
+  let base = name.trim();
+  // Strip outer .zip suffixes
+  while (base.toLowerCase().endsWith('.zip')) {
+    base = base.slice(0, -4).trim();
+  }
+  // Strip inner extension if present (e.g. .mp4, .mkv, .iso, .pdf, .7z, etc.)
+  const lastDot = base.lastIndexOf('.');
+  if (lastDot > 0 && lastDot > base.lastIndexOf('/') && lastDot > base.lastIndexOf('\\')) {
+    const ext = base.slice(lastDot).toLowerCase();
+    if (ext.length >= 2 && ext.length <= 6) {
+      base = base.slice(0, lastDot).trim();
+    }
+  }
+  return `${base}.zip`;
+}

@@ -4,6 +4,7 @@ import { toastSuccess, toastError, toastInfo } from '../../components/toast';
 import { Modal } from '../../components/modal';
 import { sendToFtp, sendToCloud } from '../../api/integrations';
 import { debounce } from '../../utils/debounce';
+import { setCloudZipOptionState, isArchiveFilename } from '../../utils/cloud-modal';
 
 let activeCloudToken = '';
 let activeCloudFileId: number | undefined;
@@ -138,13 +139,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const targetBanner = document.getElementById('cloud-target-banner');
       const targetName = document.getElementById('cloud-target-name');
-      const row = target.closest('tr') || target.closest('.file-card');
+      const row = target.closest('tr') || target.closest('.file-card') || target.closest('.file-item');
       const fileNameEl = row?.querySelector('.file-name, .hero-title');
+      const fileName = fileNameEl?.textContent?.trim() || 'Selected file/archive';
       if (targetBanner && targetName) {
-        targetName.textContent = fileNameEl?.textContent?.trim() || 'Selected file/archive';
+        targetName.textContent = fileName;
         targetBanner.style.display = 'flex';
       }
 
+      // Check if this download or selected file is a single compressed archive (.zip, .7z, .rar, etc.)
+      const isSingleArchive =
+        isArchiveFilename(fileName) ||
+        row?.getAttribute('data-category') === 'archive' ||
+        document.getElementById('file-list')?.getAttribute('data-is-single-archive') === 'true';
+
+      setCloudZipOptionState(isSingleArchive);
       cloudModal.open();
     }
   });

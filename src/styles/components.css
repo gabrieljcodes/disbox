@@ -825,6 +825,28 @@
   font-size: 11px;
   color: var(--text-muted);
 }
+.cloud-zip-option.disabled {
+  cursor: not-allowed;
+  opacity: 0.88;
+}
+.cloud-zip-option.disabled input[type="checkbox"] {
+  cursor: not-allowed;
+}
+.cloud-zip-badge-locked {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(var(--brand-green-rgb), 0.15);
+  border: 1px solid rgba(var(--brand-green-rgb), 0.3);
+  color: var(--brand-green);
+  border-radius: var(--radius-xs);
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  margin-left: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
 .cloud-zip-warning {
   display: flex;
   align-items: flex-start;

@@ -98,9 +98,10 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 		CreatedAt    time.Time `json:"created_at"`
 		BrowseURL    string    `json:"browse_url"`
 		DownloadURL  string    `json:"download_url"`
-		ZipURL       string    `json:"zip_url"`
-		ShowZip      bool      `json:"show_zip"`
-		SourceURL    string    `json:"source_url"`
+		ZipURL          string    `json:"zip_url"`
+		ShowZip         bool      `json:"show_zip"`
+		IsSingleArchive bool      `json:"is_single_archive"`
+		SourceURL       string    `json:"source_url"`
 	}
 
 	var result []HistoryItem
@@ -123,6 +124,7 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 			strings.HasSuffix(nameToCheck, ".bz2") ||
 			strings.HasSuffix(nameToCheck, ".xz")
 
+		isSingleArchive := isArchiveByName
 		if !isArchiveByName {
 			s.mu.RLock()
 			entry, exists := s.downloads[activeToken]
@@ -134,6 +136,9 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 			if exists && entry != nil {
 				cacheKey := fmt.Sprintf("%d_%s_%d", entry.ClientIndex, entry.Type, entry.ID)
 				if prog, found := s.downloadManager.GetProgress(cacheKey); found {
+					if prog.FilesCount == 1 && prog.IsArchive {
+						isSingleArchive = true
+					}
 					// Only true when it is exactly 1 single file and not an archive
 					if prog.FilesCount == 1 && !prog.IsArchive {
 						showZip = true
@@ -145,7 +150,9 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 							if len(info.Files) == 1 {
 								singleExt := strings.ToLower(filepath.Ext(info.Files[0].Name))
 								isArchive := singleExt == ".zip" || singleExt == ".rar" || singleExt == ".7z" || singleExt == ".tar" || singleExt == ".gz" || singleExt == ".bz2" || singleExt == ".xz"
-								if !isArchive {
+								if isArchive {
+									isSingleArchive = true
+								} else {
 									showZip = true
 								}
 							}
@@ -156,19 +163,20 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 		}
 
 		result = append(result, HistoryItem{
-			Token:        activeToken,
-			LinkToken:    item.LinkToken,
-			Name:         item.Name,
-			OriginalName: item.OriginalName,
-			CustomName:   item.CustomName,
-			Type:         item.Type,
-			Size:         item.Size,
-			CreatedAt:    item.CreatedAt,
-			BrowseURL:    fmt.Sprintf("%s/browse/%s", s.baseURL, activeToken),
-			DownloadURL:  fmt.Sprintf("%s/dl/%s", s.baseURL, activeToken),
-			ZipURL:       fmt.Sprintf("%s/dl/%s?zip=true", s.baseURL, activeToken),
-			ShowZip:      showZip,
-			SourceURL:    item.SourceURL,
+			Token:           activeToken,
+			LinkToken:       item.LinkToken,
+			Name:            item.Name,
+			OriginalName:    item.OriginalName,
+			CustomName:      item.CustomName,
+			Type:            item.Type,
+			Size:            item.Size,
+			CreatedAt:       item.CreatedAt,
+			BrowseURL:       fmt.Sprintf("%s/browse/%s", s.baseURL, activeToken),
+			DownloadURL:     fmt.Sprintf("%s/dl/%s", s.baseURL, activeToken),
+			ZipURL:          fmt.Sprintf("%s/dl/%s?zip=true", s.baseURL, activeToken),
+			ShowZip:         showZip,
+			IsSingleArchive: isSingleArchive,
+			SourceURL:       item.SourceURL,
 		})
 	}
 	if result == nil {
