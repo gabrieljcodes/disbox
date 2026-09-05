@@ -119,13 +119,30 @@ export function formatZipDownloadFilename(name: string): string {
   while (base.toLowerCase().endsWith('.zip')) {
     base = base.slice(0, -4).trim();
   }
-  // Strip inner extension if present (e.g. .mp4, .mkv, .iso, .pdf, .7z, etc.)
-  const lastDot = base.lastIndexOf('.');
-  if (lastDot > 0 && lastDot > base.lastIndexOf('/') && lastDot > base.lastIndexOf('\\')) {
-    const ext = base.slice(lastDot).toLowerCase();
-    if (ext.length >= 2 && ext.length <= 6) {
-      base = base.slice(0, lastDot).trim();
+  // Strip inner compound or single extensions if present (e.g. .mp4, .mkv, .iso, .tar.gz, etc.)
+  while (true) {
+    const lastDot = base.lastIndexOf('.');
+    if (lastDot > 0 && lastDot > base.lastIndexOf('/') && lastDot > base.lastIndexOf('\\')) {
+      const ext = base.slice(lastDot).toLowerCase();
+      if (ext.length >= 2 && ext.length <= 6) {
+        // Don't strip if it looks like a version number (e.g. .0 or .1)
+        if (!/^\.\d+$/.test(ext)) {
+          base = base.slice(0, lastDot).trim();
+          if (ext === '.gz' || ext === '.bz2' || ext === '.xz') {
+            continue;
+          }
+        }
+      }
     }
+    break;
   }
-  return `${base}.zip`;
+  return `${base || 'download'}.zip`;
+}
+
+/**
+ * Returns the clean root folder name inside a ZIP archive by stripping extensions.
+ */
+export function formatZipFolderName(name: string): string {
+  const zipName = formatZipDownloadFilename(name);
+  return zipName.slice(0, -4);
 }

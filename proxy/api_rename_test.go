@@ -110,6 +110,8 @@ func TestCleanZipFilename(t *testing.T) {
 		{"Document.pdf.zip", "Document.zip"},
 		{"Archive.zip.zip", "Archive.zip"},
 		{"Topaz Video 1.7.0 (x64).7z.zip", "Topaz Video 1.7.0 (x64).zip"},
+		{"Topaz Video 1.7.0 (x64)", "Topaz Video 1.7.0 (x64).zip"},
+		{"archive.tar.gz", "archive.zip"},
 		{"", "download.zip"},
 	}
 
@@ -120,3 +122,32 @@ func TestCleanZipFilename(t *testing.T) {
 		}
 	}
 }
+
+func TestCleanZipFolderName(t *testing.T) {
+	cases := []struct {
+		input    string
+		expected string
+	}{
+		{"02 Leon x Grace 3D.mp4", "02 Leon x Grace 3D"},
+		{"02 Leon x Grace 3D.mp4.zip", "02 Leon x Grace 3D"},
+		{"02 Leon x Grace 3D.zip", "02 Leon x Grace 3D"},
+		{"02 Leon x Grace 3D", "02 Leon x Grace 3D"},
+		{"Movie.2024.1080p.mkv.zip", "Movie.2024.1080p"},
+		{"Movie.2024.1080p.mkv", "Movie.2024.1080p"},
+		{"Archlinux.iso.zip", "Archlinux"},
+		{"Document.pdf", "Document"},
+		{"Archive.zip.zip", "Archive"},
+		{"Topaz Video 1.7.0 (x64).7z.zip", "Topaz Video 1.7.0 (x64)"},
+		{"Topaz Video 1.7.0 (x64)", "Topaz Video 1.7.0 (x64)"},
+		{"archive.tar.gz", "archive"},
+		{"", "download"},
+	}
+
+	for _, c := range cases {
+		got := cleanZipFolderName(c.input)
+		if got != c.expected {
+			t.Errorf("cleanZipFolderName(%q) = %q; expected %q", c.input, got, c.expected)
+		}
+	}
+}
+

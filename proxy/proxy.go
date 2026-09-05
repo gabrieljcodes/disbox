@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"archive/zip"
 	"context"
 	"crypto/rand"
 	"database/sql"
@@ -495,11 +496,17 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 
 	forceZip := r.URL.Query().Get("zip") == "true" || r.URL.Query().Get("zip") == "1" || r.URL.Query().Get("zip_link") == "true"
 
+	isSingleFile := false
+	var singleFile torbox.TorrentFile
+	isSingleArchive := false
+
 	// If no specific file_id was requested, check if the download contains only a single file:
 	if fileID == -1 {
 		if info, err := adapter.GetInfo(entry.ID); err == nil && info != nil && len(info.Files) == 1 {
-			singleFileName := strings.ToLower(info.Files[0].Name)
-			isSingleArchive := strings.HasSuffix(singleFileName, ".zip") ||
+			isSingleFile = true
+			singleFile = info.Files[0]
+			singleFileName := strings.ToLower(singleFile.Name)
+			isSingleArchive = strings.HasSuffix(singleFileName, ".zip") ||
 				strings.HasSuffix(singleFileName, ".rar") ||
 				strings.HasSuffix(singleFileName, ".7z") ||
 				strings.HasSuffix(singleFileName, ".tar") ||
@@ -507,10 +514,25 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 				strings.HasSuffix(singleFileName, ".bz2") ||
 				strings.HasSuffix(singleFileName, ".xz")
 
-			// If it's already an archive or not forcing zip, download that single file directly
-			// to avoid creating an outer .zip.zip duplicate archive.
-			if isSingleArchive || !forceZip {
-				fileID = info.Files[0].ID
+			// For single files, fetch that file directly from TorBox
+			fileID = singleFile.ID
+		}
+	} else {
+		if info, err := adapter.GetInfo(entry.ID); err == nil && info != nil {
+			for _, f := range info.Files {
+				if f.ID == fileID {
+					isSingleFile = true
+					singleFile = f
+					singleFileName := strings.ToLower(f.Name)
+					isSingleArchive = strings.HasSuffix(singleFileName, ".zip") ||
+						strings.HasSuffix(singleFileName, ".rar") ||
+						strings.HasSuffix(singleFileName, ".7z") ||
+						strings.HasSuffix(singleFileName, ".tar") ||
+						strings.HasSuffix(singleFileName, ".gz") ||
+						strings.HasSuffix(singleFileName, ".bz2") ||
+						strings.HasSuffix(singleFileName, ".xz")
+					break
+				}
 			}
 		}
 	}
@@ -548,9 +570,11 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	
-	// Forward Range header to support multithreaded downloads and pause/resume
-	if rangeHeader := r.Header.Get("Range"); rangeHeader != "" {
-		reqDownload.Header.Set("Range", rangeHeader)
+	// Forward Range header only for direct non-zip downloads to support multithreaded downloads and pause/resume
+	if !forceZip {
+		if rangeHeader := r.Header.Get("Range"); rangeHeader != "" {
+			reqDownload.Header.Set("Range", rangeHeader)
+		}
 	}
 
 	resp, err := http.DefaultClient.Do(reqDownload)
@@ -561,6 +585,70 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer resp.Body.Close()
+
+	// If forcing zip for a single file that is not already an archive, stream and package it on the fly
+	// with a sanitized internal folder name (stripping extensions like .mp4).
+	if forceZip && isSingleFile && !isSingleArchive {
+		effectiveName := origName
+		if customName != "" {
+			effectiveName = customName
+		}
+		if effectiveName == "" {
+			effectiveName = singleFile.Name
+		}
+		if effectiveName == "" {
+			effectiveName = "download"
+		}
+
+		zipFilename := cleanZipFilename(effectiveName)
+		folderName := cleanZipFolderName(effectiveName)
+
+		fileBaseName := singleFile.ShortName
+		if fileBaseName == "" {
+			fileBaseName = filepath.Base(singleFile.Name)
+		}
+		if fileBaseName == "" || fileBaseName == "." {
+			fileBaseName = singleFile.Name
+		}
+		if customName != "" {
+			fileBaseName = formatCustomDownloadFilename(customName, fileBaseName, origName)
+		}
+
+		w.Header().Set("Content-Type", "application/zip")
+		w.Header().Set("Content-Disposition", formatContentDisposition(zipFilename))
+		w.WriteHeader(http.StatusOK)
+
+		zipWriter := zip.NewWriter(w)
+		header := &zip.FileHeader{
+			Name:     folderName + "/" + fileBaseName,
+			Method:   zip.Store,
+			Modified: time.Now(),
+		}
+		if resp.ContentLength > 0 {
+			header.UncompressedSize64 = uint64(resp.ContentLength)
+		}
+
+		fw, err := zipWriter.CreateHeader(header)
+		if err != nil {
+			log.Printf("Failed to create zip header for %s #%d: %v", entry.Type, entry.ID, err)
+			return
+		}
+
+		buf := make([]byte, 128*1024)
+		written, err := io.CopyBuffer(fw, resp.Body, buf)
+		if err != nil {
+			log.Printf("Error streaming file into zip for %s #%d: %v (wrote %d bytes)", entry.Type, entry.ID, err, written)
+			return
+		}
+
+		if err := zipWriter.Close(); err != nil {
+			log.Printf("Error closing zip writer for %s #%d: %v", entry.Type, entry.ID, err)
+			return
+		}
+
+		log.Printf("Successfully packaged and streamed single file in zip (%d bytes) for %s #%d", written, entry.Type, entry.ID)
+		return
+	}
 
 	if ct := resp.Header.Get("Content-Type"); ct != "" {
 		w.Header().Set("Content-Type", ct)
@@ -1327,12 +1415,31 @@ func cleanZipFilename(filename string) string {
 	for strings.HasSuffix(strings.ToLower(filename), ".zip") {
 		filename = strings.TrimSpace(filename[:len(filename)-4])
 	}
-	// If the remaining filename has another extension (like .mp4, .mkv, .iso, .7z, etc.), strip it
-	ext := filepath.Ext(filename)
-	if ext != "" && len(ext) >= 2 && len(ext) <= 6 {
-		filename = strings.TrimSuffix(filename, ext)
+	// If the remaining filename has compound or single extensions (like .tar.gz, .mp4, etc.), strip them
+	for {
+		ext := filepath.Ext(filename)
+		if ext != "" && len(ext) >= 2 && len(ext) <= 6 {
+			lowerExt := strings.ToLower(ext)
+			// Don't strip if it looks like a version number (e.g. .0 or .1)
+			if _, err := strconv.Atoi(strings.TrimPrefix(lowerExt, ".")); err == nil {
+				break
+			}
+			filename = strings.TrimSuffix(filename, ext)
+			if lowerExt == ".gz" || lowerExt == ".bz2" || lowerExt == ".xz" {
+				continue // Check if preceded by .tar
+			}
+		}
+		break
+	}
+	filename = strings.TrimSpace(filename)
+	if filename == "" {
+		return "download.zip"
 	}
 	return filename + ".zip"
+}
+
+func cleanZipFolderName(filename string) string {
+	return strings.TrimSuffix(cleanZipFilename(filename), ".zip")
 }
 
 func formatContentDisposition(filename string) string {
