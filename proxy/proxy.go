@@ -540,14 +540,19 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 	// Query custom name for this download token (if set by the user)
 	customName, origName, _ := s.store.GetDownloadNameForToken(token)
 
-	if !s.proxyMode && customName == "" && !forceZip {
+	if !s.proxyMode && customName == "" {
 		userIP := r.Header.Get("X-Forwarded-For")
 		if userIP == "" {
 			userIP = strings.Split(r.RemoteAddr, ":")[0]
 		}
 		
-		log.Printf("Redirecting download to CDN for %s #%d (client #%d) IP: %s", entry.Type, entry.ID, entry.ClientIndex+1, userIP)
-		permalink := adapter.GetPermalink(entry.ID, fileID, userIP)
+		permalinkFileID := fileID
+		if forceZip && !isSingleArchive {
+			permalinkFileID = -1
+		}
+
+		log.Printf("Redirecting download to CDN for %s #%d (client #%d) IP: %s (forceZip: %v, fileID: %d)", entry.Type, entry.ID, entry.ClientIndex+1, userIP, forceZip, permalinkFileID)
+		permalink := adapter.GetPermalink(entry.ID, permalinkFileID, userIP)
 		http.Redirect(w, r, permalink, http.StatusFound)
 		return
 	}
