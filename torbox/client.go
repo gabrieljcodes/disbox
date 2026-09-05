@@ -472,6 +472,7 @@ func (c *Client) requestDLURL(endpoint, idParam string, id int, fileID int, user
 	q := req.URL.Query()
 	q.Add("token", c.apiKey)
 	q.Add(idParam, fmt.Sprintf("%d", id))
+	q.Add("append_name", "true")
 	if fileID >= 0 {
 		q.Add("file_id", fmt.Sprintf("%d", fileID))
 	} else {
@@ -515,7 +516,7 @@ func (c *Client) GetPermalink(downloadType string, id int, fileID int, userIP st
 		idParam = "web_id"
 	}
 	
-	urlStr := fmt.Sprintf("%s/%s?token=%s&%s=%d&redirect=true", apiBaseURL, endpoint, c.apiKey, idParam, id)
+	urlStr := fmt.Sprintf("%s/%s?token=%s&%s=%d&redirect=true&append_name=true", apiBaseURL, endpoint, c.apiKey, idParam, id)
 	if fileID >= 0 {
 		urlStr += fmt.Sprintf("&file_id=%d", fileID)
 	} else {

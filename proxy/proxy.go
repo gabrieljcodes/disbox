@@ -458,7 +458,9 @@ func (s *Server) getAdapterForType(dlType string, clientIndex int) torbox.Downlo
 // ─── Download Handler ───
 
 func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
-	token := strings.TrimPrefix(r.URL.Path, "/dl/")
+	rawPath := strings.TrimPrefix(r.URL.Path, "/dl/")
+	parts := strings.SplitN(rawPath, "/", 2)
+	token := parts[0]
 	if token == "" {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		browserTemplate.Execute(w, BrowseData{Title: "Error", ErrorMessage: "Missing download token."})
@@ -494,7 +496,10 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	forceZip := r.URL.Query().Get("zip") == "true" || r.URL.Query().Get("zip") == "1" || r.URL.Query().Get("zip_link") == "true"
+	forceZip := r.URL.Query().Get("zip") == "true" ||
+		r.URL.Query().Get("zip") == "1" ||
+		r.URL.Query().Get("zip_link") == "true" ||
+		(len(parts) > 1 && strings.HasSuffix(strings.ToLower(parts[1]), ".zip"))
 
 	isSingleFile := false
 	var singleFile torbox.TorrentFile
