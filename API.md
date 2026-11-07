@@ -265,6 +265,67 @@ If `type=magnet`, it returns a JSON response with the magnet link in the `data` 
 
 ---
 
+---
+
+## Model Context Protocol (MCP)
+
+Disbox includes a native **Model Context Protocol (MCP)** server, allowing AI agents (Claude Desktop, Cursor, Antigravity, Open WebUI, custom bots) to interact with Disbox directly through structured tool calling.
+
+### Connecting to Disbox via MCP
+
+#### 1. Server-Sent Events (SSE) / Remote Agents
+When Disbox is running, the MCP SSE server is available at:
+```
+http://<disbox-host>:<port>/v1/mcp/sse
+```
+Authenticate by supplying your Bearer token in the request headers:
+```json
+{
+  "mcpServers": {
+    "disbox": {
+      "url": "http://localhost:8080/v1/mcp/sse",
+      "headers": {
+        "Authorization": "Bearer dbx_your_token_here"
+      }
+    }
+  }
+}
+```
+Or via query parameter: `http://localhost:8080/v1/mcp/sse?token=dbx_your_token_here`.
+
+#### 2. Local CLI Stdio Mode
+Run the Disbox binary with the `--mcp` flag in your MCP client configuration:
+```json
+{
+  "mcpServers": {
+    "disbox": {
+      "command": "/path/to/disbox",
+      "args": ["--mcp"],
+      "env": {
+        "DISBOX_API_KEY": "dbx_your_token_here"
+      }
+    }
+  }
+}
+```
+
+### Exposed MCP Tools
+
+| Tool | Parameters | Description |
+| :--- | :--- | :--- |
+| `disbox_search_media` | `query` (str, req), `type` (movie/series/anime) | Search torrents/streams across Cinemeta, TMDB, and AIOStreams indexers |
+| `disbox_search_tmdb` | `query` (str, req), `type` (movie/series) | Search The Movie Database metadata catalog for titles, summaries, and release dates |
+| `disbox_search_anime` | `query` (str, req) | Search AniList GraphQL catalog for anime series and metadata |
+| `disbox_search_games` | `query` (str, req) | Search video game catalog via IGDB and indexed sources |
+| `disbox_get_game_downloads` | `title` (str, req) | Search for available game repacks and torrent magnets across Hydra sources and scrapers |
+| `disbox_add_torrent` | `link` (str, req) | Queue a magnet link or .torrent URL in Disbox/TorBox |
+| `disbox_add_webdl` | `link` (str, req) | Queue a direct hoster/debrid download link in Disbox/TorBox |
+| `disbox_get_history` | `limit` (int, opt) | List completed and active downloads with direct proxy download URLs and file sizes |
+| `disbox_get_queue` | *none* | Check the current queue status, capacity, and active download jobs |
+| `disbox_send_ftp` | `token` (str, req), `file_id` (int, opt) | Stream a completed download directly to your configured FTP server/NAS |
+
+---
+
 ## Example Request
 
 ```bash

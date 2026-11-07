@@ -16,7 +16,21 @@ import (
 )
 
 func main() {
-	log.Println("Starting Torbox Discord Bot...")
+	isMCPMode := false
+	for _, arg := range os.Args[1:] {
+		if arg == "mcp" || arg == "--mcp" {
+			isMCPMode = true
+			break
+		}
+	}
+
+	if isMCPMode {
+		// In stdio MCP mode, logs must go to stderr so stdout is reserved for JSON-RPC
+		log.SetOutput(os.Stderr)
+		log.Println("Starting Disbox in Native MCP Server mode (stdio)...")
+	} else {
+		log.Println("Starting Torbox Discord Bot...")
+	}
 
 	cfg, err := config.LoadConfig()
 	if err != nil {
@@ -42,6 +56,22 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to initialize proxy server: %v", err)
 	}
+
+	if isMCPMode {
+		defaultUser := ""
+		if len(cfg.AdminUsers) > 0 {
+			defaultUser = cfg.AdminUsers[0]
+		}
+		if envUser := os.Getenv("DISBOX_USER_ID"); envUser != "" {
+			defaultUser = envUser
+		}
+
+		if err := proxyServer.ServeMCPStdio(defaultUser); err != nil {
+			log.Fatalf("MCP server error: %v", err)
+		}
+		return
+	}
+
 	go func() {
 		if err := proxyServer.Start(); err != nil {
 			log.Fatalf("Failed to start proxy server: %v", err)

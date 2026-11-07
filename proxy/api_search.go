@@ -75,17 +75,37 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if s.store.GetSetting("search_enabled", "true") != "true" {
-		jsonError(w, http.StatusForbidden, "Search functionality is disabled by the administrator")
+	query := r.URL.Query().Get("query")
+	searchType := r.URL.Query().Get("type")
+
+	results, err := s.SearchTorrents(query, searchType)
+	if err != nil {
+		if strings.Contains(err.Error(), "disabled") {
+			jsonError(w, http.StatusForbidden, err.Error())
+			return
+		}
+		if strings.Contains(err.Error(), "missing") {
+			jsonError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		jsonError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	query := strings.TrimSpace(r.URL.Query().Get("query"))
-	searchType := strings.TrimSpace(r.URL.Query().Get("type"))
+	jsonOK(w, results)
+}
+
+// SearchTorrents performs multi-source search across Cinemeta, TMDB, AniList, and AIOStreams.
+func (s *Server) SearchTorrents(query, searchType string) ([]TorrentSearchResult, error) {
+	if s.store.GetSetting("search_enabled", "true") != "true" {
+		return nil, fmt.Errorf("search functionality is disabled by the administrator")
+	}
+
+	query = strings.TrimSpace(query)
+	searchType = strings.TrimSpace(searchType)
 
 	if query == "" {
-		jsonError(w, http.StatusBadRequest, "Missing 'query' parameter")
-		return
+		return nil, fmt.Errorf("missing 'query' parameter")
 	}
 	if searchType == "" {
 		searchType = "movie"
@@ -97,8 +117,7 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	password := s.store.GetSetting("aiostreams_password", "")
 
 	if serverURL == "" {
-		jsonError(w, http.StatusInternalServerError, "AIOStreams URL is not configured. Please configure it in Global Settings.")
-		return
+		return nil, fmt.Errorf("AIOStreams URL is not configured. Please configure it in Global Settings")
 	}
 
 	// Auto-resolve TMDB ID to IMDB ID
@@ -236,16 +255,14 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	// Check in-memory search cache first
 	cacheKey := fmt.Sprintf("%s:%s", searchType, query)
 	if cachedResults, found := getCachedSearch(cacheKey); found {
-		jsonOK(w, cachedResults)
-		return
+		return cachedResults, nil
 	}
 
 	reqURL := fmt.Sprintf("%s/api/v1/search?type=%s&id=%s", serverURL, url.QueryEscape(searchType), url.QueryEscape(query))
 
 	req, err := http.NewRequest("GET", reqURL, nil)
 	if err != nil {
-		jsonError(w, http.StatusInternalServerError, "Failed to create request: "+err.Error())
-		return
+		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
 	// Add Basic Auth if configured
@@ -258,22 +275,20 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	client := &http.Client{Timeout: 90 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		jsonError(w, http.StatusInternalServerError, "Failed to contact AIOStreams: "+err.Error())
-		return
+		return nil, fmt.Errorf("failed to contact AIOStreams: %w", err)
 	}
 	defer resp.Body.Close()
 
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
-		jsonError(w, http.StatusInternalServerError, "Failed to read response body")
-		return
+		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
 
 	normalized := parseAIOStreamsBytes(bodyBytes)
 	if len(normalized) > 0 {
 		setCachedSearch(cacheKey, normalized, 10*time.Minute)
 	}
-	jsonOK(w, normalized)
+	return normalized, nil
 }
 
 func parseAIOStreamsBytes(bodyBytes []byte) []TorrentSearchResult {

@@ -22,17 +22,33 @@ func (s *Server) handleAniListSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if s.store.GetSetting("search_enabled", "true") != "true" {
-		jsonError(w, http.StatusForbidden, "Search functionality is disabled by the administrator")
+	query := r.URL.Query().Get("query")
+	normalized, err := s.SearchAniList(query)
+	if err != nil {
+		if strings.Contains(err.Error(), "disabled") {
+			jsonError(w, http.StatusForbidden, err.Error())
+			return
+		}
+		if strings.Contains(err.Error(), "missing") {
+			jsonError(w, http.StatusBadRequest, "Missing 'query' parameter")
+			return
+		}
+		jsonError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	query := r.URL.Query().Get("query")
-	query = strings.TrimSpace(query)
+	jsonOK(w, normalized)
+}
 
+// SearchAniList queries AniList GraphQL API for anime titles and metadata
+func (s *Server) SearchAniList(query string) ([]map[string]interface{}, error) {
+	if s.store.GetSetting("search_enabled", "true") != "true" {
+		return nil, fmt.Errorf("search functionality is disabled by the administrator")
+	}
+
+	query = strings.TrimSpace(query)
 	if query == "" {
-		jsonError(w, http.StatusBadRequest, "Missing 'query' parameter")
-		return
+		return nil, fmt.Errorf("missing 'query' parameter")
 	}
 
 	gqlQuery := `query ($search: String) {
@@ -62,8 +78,7 @@ func (s *Server) handleAniListSearch(w http.ResponseWriter, r *http.Request) {
 	payloadBytes, _ := json.Marshal(payload)
 	req, err := http.NewRequest("POST", "https://graphql.anilist.co", bytes.NewBuffer(payloadBytes))
 	if err != nil {
-		jsonError(w, http.StatusInternalServerError, "Failed to create AniList request")
-		return
+		return nil, fmt.Errorf("failed to create AniList request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
@@ -71,20 +86,17 @@ func (s *Server) handleAniListSearch(w http.ResponseWriter, r *http.Request) {
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		jsonError(w, http.StatusInternalServerError, "Failed to contact AniList")
-		return
+		return nil, fmt.Errorf("failed to contact AniList: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		jsonError(w, resp.StatusCode, fmt.Sprintf("AniList API returned status %d", resp.StatusCode))
-		return
+		return nil, fmt.Errorf("AniList API returned status %d", resp.StatusCode)
 	}
 
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
-		jsonError(w, http.StatusInternalServerError, "Failed to read AniList response body")
-		return
+		return nil, fmt.Errorf("failed to read AniList response body: %w", err)
 	}
 
 	var anilistResp struct {
@@ -107,8 +119,7 @@ func (s *Server) handleAniListSearch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.Unmarshal(bodyBytes, &anilistResp); err != nil {
-		jsonError(w, http.StatusInternalServerError, "Failed to parse AniList response")
-		return
+		return nil, fmt.Errorf("failed to parse AniList response: %w", err)
 	}
 
 	var normalized []map[string]interface{}
@@ -133,5 +144,5 @@ func (s *Server) handleAniListSearch(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	jsonOK(w, normalized)
+	return normalized, nil
 }
