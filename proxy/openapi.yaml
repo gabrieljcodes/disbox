@@ -73,10 +73,50 @@ tags:
     description: Add and manage downloads
   - name: Search
     description: Search for media content
+  - name: MCP
+    description: Model Context Protocol (MCP) server endpoints for AI integration
   - name: Admin
     description: Administrative endpoints for access control
 
 paths:
+  /v1/mcp/sse:
+    get:
+      tags:
+        - MCP
+      summary: Establish SSE session for Model Context Protocol (MCP)
+      description: Initiates a Server-Sent Events stream for AI clients (Claude Desktop, Cursor, Antigravity)
+      responses:
+        "200":
+          description: Event stream established
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        "401":
+          description: Unauthorized
+  /v1/mcp/message:
+    post:
+      tags:
+        - MCP
+      summary: Post JSON-RPC message to MCP session
+      description: Sends a JSON-RPC 2.0 tool execution or handshake request to the active MCP session
+      parameters:
+        - name: sessionId
+          in: query
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Message received or result returned
+        "401":
+          description: Unauthorized
   /v1/me:
     get:
       summary: Get current user info

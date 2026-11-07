@@ -237,6 +237,9 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/v1/search/games/downloads", s.handleGameDownloads)
 	mux.HandleFunc("/v1/admin/game-sources", s.handleAdminGameSources)
 	mux.HandleFunc("/v1/admin/game-sources/sync", s.handleAdminSyncGameSources)
+
+	// Model Context Protocol (MCP) SSE endpoints
+	s.RegisterMCPRoutes(mux)
 }
 
 func (s *Server) Start() error {

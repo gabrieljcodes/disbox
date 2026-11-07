@@ -21,19 +21,37 @@ func (s *Server) handleTMDBSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if s.store.GetSetting("search_enabled", "true") != "true" {
-		jsonError(w, http.StatusForbidden, "Search functionality is disabled by the administrator")
+	query := r.URL.Query().Get("query")
+	searchType := r.URL.Query().Get("type")
+
+	normalized, err := s.SearchTMDB(query, searchType)
+	if err != nil {
+		if strings.Contains(err.Error(), "disabled") {
+			jsonError(w, http.StatusForbidden, err.Error())
+			return
+		}
+		if strings.Contains(err.Error(), "missing") {
+			jsonError(w, http.StatusBadRequest, "Missing 'query' parameter")
+			return
+		}
+		jsonError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	query := r.URL.Query().Get("query")
+	jsonOK(w, normalized)
+}
+
+// SearchTMDB queries The Movie Database API for movies or TV series metadata
+func (s *Server) SearchTMDB(query, searchType string) ([]map[string]interface{}, error) {
+	if s.store.GetSetting("search_enabled", "true") != "true" {
+		return nil, fmt.Errorf("search functionality is disabled by the administrator")
+	}
+
 	query = strings.TrimSpace(query)
-	searchType := r.URL.Query().Get("type")
 	searchType = strings.TrimSpace(searchType)
 
 	if query == "" {
-		jsonError(w, http.StatusBadRequest, "Missing 'query' parameter")
-		return
+		return nil, fmt.Errorf("missing 'query' parameter")
 	}
 	if searchType == "" {
 		searchType = "movie"
@@ -41,8 +59,7 @@ func (s *Server) handleTMDBSearch(w http.ResponseWriter, r *http.Request) {
 
 	tmdbKey := s.store.GetSetting("tmdb_api_key", "")
 	if tmdbKey == "" {
-		jsonError(w, http.StatusInternalServerError, "TMDB API Key is not configured. Please ask the administrator to set it in the Global Settings.")
-		return
+		return nil, fmt.Errorf("TMDB API Key is not configured. Please ask the administrator to set it in the Global Settings")
 	}
 
 	tmdbEndpoint := "movie"
@@ -58,8 +75,7 @@ func (s *Server) handleTMDBSearch(w http.ResponseWriter, r *http.Request) {
 
 	req, err := http.NewRequest("GET", reqURL, nil)
 	if err != nil {
-		jsonError(w, http.StatusInternalServerError, "Failed to create TMDB request: "+err.Error())
-		return
+		return nil, fmt.Errorf("failed to create TMDB request: %w", err)
 	}
 
 	if len(tmdbKey) != 32 {
@@ -70,20 +86,17 @@ func (s *Server) handleTMDBSearch(w http.ResponseWriter, r *http.Request) {
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		jsonError(w, http.StatusInternalServerError, "Failed to contact TMDB: "+err.Error())
-		return
+		return nil, fmt.Errorf("failed to contact TMDB: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		jsonError(w, http.StatusInternalServerError, fmt.Sprintf("TMDB API returned status %d", resp.StatusCode))
-		return
+		return nil, fmt.Errorf("TMDB API returned status %d", resp.StatusCode)
 	}
 
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
-		jsonError(w, http.StatusInternalServerError, "Failed to read TMDB response body")
-		return
+		return nil, fmt.Errorf("failed to read TMDB response body: %w", err)
 	}
 
 	var tmdbResp struct {
@@ -91,8 +104,7 @@ func (s *Server) handleTMDBSearch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.Unmarshal(bodyBytes, &tmdbResp); err != nil {
-		jsonError(w, http.StatusInternalServerError, "Failed to parse TMDB response")
-		return
+		return nil, fmt.Errorf("failed to parse TMDB response: %w", err)
 	}
 
 	var normalized []map[string]interface{}
@@ -125,5 +137,5 @@ func (s *Server) handleTMDBSearch(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	jsonOK(w, normalized)
+	return normalized, nil
 }

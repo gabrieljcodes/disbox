@@ -165,15 +165,30 @@ func (s *Server) handleSearchGames(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if s.store.GetSetting("search_enabled", "true") != "true" {
-		jsonError(w, http.StatusForbidden, "Search functionality is disabled by the administrator")
-		return
-	}
-
 	query := strings.TrimSpace(r.URL.Query().Get("query"))
 	if query == "" {
 		jsonError(w, http.StatusBadRequest, "Missing 'query' parameter")
 		return
+	}
+
+	games, err := s.SearchGamesMetadata(query)
+	if err != nil {
+		jsonError(w, http.StatusForbidden, err.Error())
+		return
+	}
+
+	jsonOK(w, games)
+}
+
+// SearchGamesMetadata searches IGDB for game metadata, falling back to indexed Hydra sources if IGDB is unconfigured.
+func (s *Server) SearchGamesMetadata(query string) ([]IGDBGameItem, error) {
+	if s.store.GetSetting("search_enabled", "true") != "true" {
+		return nil, fmt.Errorf("search functionality is disabled by the administrator")
+	}
+
+	query = strings.TrimSpace(query)
+	if query == "" {
+		return nil, fmt.Errorf("missing 'query' parameter")
 	}
 
 	clientID := s.store.GetSetting("igdb_client_id", "")
@@ -185,15 +200,13 @@ func (s *Server) handleSearchGames(w http.ResponseWriter, r *http.Request) {
 		if err == nil && token != "" {
 			games, err := queryIGDB(clientID, token, query)
 			if err == nil && len(games) > 0 {
-				jsonOK(w, games)
-				return
+				return games, nil
 			}
 		}
 	}
 
 	// Fallback: search indexed sources
-	fallbackGames := s.searchGameSourcesAsGames(query)
-	jsonOK(w, fallbackGames)
+	return s.searchGameSourcesAsGames(query), nil
 }
 
 func queryIGDB(clientID, token, query string) ([]IGDBGameItem, error) {
@@ -282,6 +295,17 @@ func (s *Server) handleGameDownloads(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	results := s.SearchGameDownloads(title)
+	jsonOK(w, results)
+}
+
+// SearchGameDownloads searches active Hydra sources and torrent scrapers for available game downloads
+func (s *Server) SearchGameDownloads(title string) []GameDownloadItem {
+	title = strings.TrimSpace(title)
+	if title == "" {
+		return []GameDownloadItem{}
+	}
+
 	// Ensure sources are loaded
 	s.ensureGameSourcesLoaded()
 
@@ -310,7 +334,7 @@ func (s *Server) handleGameDownloads(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	jsonOK(w, results)
+	return results
 }
 
 func (s *Server) searchTorrentIndexersForGame(gameTitle string) []GameDownloadItem {

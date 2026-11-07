@@ -70,6 +70,24 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// HistoryItem represents an item in user's download history with resolved proxy links
+type HistoryItem struct {
+	Token           string    `json:"token"`
+	LinkToken       string    `json:"link_token"`
+	Name            string    `json:"name"`
+	OriginalName    string    `json:"original_name,omitempty"`
+	CustomName      string    `json:"custom_name,omitempty"`
+	Type            string    `json:"type"`
+	Size            int64     `json:"size"`
+	CreatedAt       time.Time `json:"created_at"`
+	BrowseURL       string    `json:"browse_url"`
+	DownloadURL     string    `json:"download_url"`
+	ZipURL          string    `json:"zip_url"`
+	ShowZip         bool      `json:"show_zip"`
+	IsSingleArchive bool      `json:"is_single_archive"`
+	SourceURL       string    `json:"source_url"`
+}
+
 func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
@@ -81,27 +99,24 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	items, err := s.store.GetUserHistory(userID)
+	result, err := s.GetUserHistoryItems(userID, 0)
 	if err != nil {
 		jsonError(w, http.StatusInternalServerError, "Database error")
 		return
 	}
 
-	type HistoryItem struct {
-		Token        string    `json:"token"`
-		LinkToken    string    `json:"link_token"`
-		Name         string    `json:"name"`
-		OriginalName string    `json:"original_name,omitempty"`
-		CustomName   string    `json:"custom_name,omitempty"`
-		Type         string    `json:"type"`
-		Size         int64     `json:"size"`
-		CreatedAt    time.Time `json:"created_at"`
-		BrowseURL    string    `json:"browse_url"`
-		DownloadURL  string    `json:"download_url"`
-		ZipURL          string    `json:"zip_url"`
-		ShowZip         bool      `json:"show_zip"`
-		IsSingleArchive bool      `json:"is_single_archive"`
-		SourceURL       string    `json:"source_url"`
+	// Asynchronously repair any entries with generic placeholder names or zero sizes
+	go s.repairGenericNames(userID)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(result)
+}
+
+// GetUserHistoryItems returns the formatted download history items for a user
+func (s *Server) GetUserHistoryItems(userID string, limit int) ([]HistoryItem, error) {
+	items, err := s.store.GetUserHistory(userID)
+	if err != nil {
+		return nil, err
 	}
 
 	var result []HistoryItem
@@ -178,16 +193,15 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 			IsSingleArchive: isSingleArchive,
 			SourceURL:       item.SourceURL,
 		})
+
+		if limit > 0 && len(result) >= limit {
+			break
+		}
 	}
 	if result == nil {
 		result = []HistoryItem{}
 	}
-
-	// Asynchronously repair any entries with generic placeholder names or zero sizes
-	go s.repairGenericNames(userID)
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(result)
+	return result, nil
 }
 
 func (s *Server) handleRenameDownload(w http.ResponseWriter, r *http.Request) {
@@ -352,11 +366,6 @@ func (s *Server) handleAddTorrent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.checkGBLimit(userID); err != nil {
-		jsonError(w, http.StatusForbidden, err.Error())
-		return
-	}
-
 	var req struct {
 		Link string `json:"link"`
 	}
@@ -365,19 +374,12 @@ func (s *Server) handleAddTorrent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	username, avatar := s.getUserDetails(userID)
-
-	qd := &QueuedDownload{
-		userID: userID,
-		Username:  username,
-		Avatar:    avatar,
-		Type:      "torrent",
-		Link:      req.Link,
-		CacheOnly: false,
-	}
-
-	qd, err := s.downloadManager.Submit(qd)
+	qd, err := s.AddTorrentDownload(userID, req.Link)
 	if err != nil {
+		if strings.Contains(err.Error(), "limit") {
+			jsonError(w, http.StatusForbidden, err.Error())
+			return
+		}
 		jsonError(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -388,6 +390,31 @@ func (s *Server) handleAddTorrent(w http.ResponseWriter, r *http.Request) {
 		"queue_id": qd.ID,
 		"message":  "Download added to queue.",
 	})
+}
+
+// AddTorrentDownload queues a torrent/magnet download for the given user
+func (s *Server) AddTorrentDownload(userID, link string) (*QueuedDownload, error) {
+	if err := s.checkGBLimit(userID); err != nil {
+		return nil, err
+	}
+
+	link = strings.TrimSpace(link)
+	if link == "" {
+		return nil, fmt.Errorf("field 'link' is required (magnet link)")
+	}
+
+	username, avatar := s.getUserDetails(userID)
+
+	qd := &QueuedDownload{
+		userID:    userID,
+		Username:  username,
+		Avatar:    avatar,
+		Type:      "torrent",
+		Link:      link,
+		CacheOnly: false,
+	}
+
+	return s.downloadManager.Submit(qd)
 }
 
 func (s *Server) handleAddTorrentFile(w http.ResponseWriter, r *http.Request) {
@@ -458,18 +485,13 @@ func (s *Server) handleAddTorrentFile(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAddWebdl(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
+	if r.Method != http.MethodGet && r.Method != http.MethodPost {
 		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
 
 	userID, ok := s.resolveUser(w, r)
 	if !ok {
-		return
-	}
-
-	if err := s.checkGBLimit(userID); err != nil {
-		jsonError(w, http.StatusForbidden, err.Error())
 		return
 	}
 
@@ -481,19 +503,12 @@ func (s *Server) handleAddWebdl(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	username, avatar := s.getUserDetails(userID)
-
-	qd := &QueuedDownload{
-		userID: userID,
-		Username:  username,
-		Avatar:    avatar,
-		Type:      "webdl",
-		Link:      req.Link,
-		CacheOnly: false,
-	}
-
-	qd, err := s.downloadManager.Submit(qd)
+	qd, err := s.AddWebdlDownload(userID, req.Link)
 	if err != nil {
+		if strings.Contains(err.Error(), "limit") {
+			jsonError(w, http.StatusForbidden, err.Error())
+			return
+		}
 		jsonError(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -504,6 +519,31 @@ func (s *Server) handleAddWebdl(w http.ResponseWriter, r *http.Request) {
 		"queue_id": qd.ID,
 		"message":  "Download added to queue.",
 	})
+}
+
+// AddWebdlDownload queues a direct/debrid web download for the given user
+func (s *Server) AddWebdlDownload(userID, link string) (*QueuedDownload, error) {
+	if err := s.checkGBLimit(userID); err != nil {
+		return nil, err
+	}
+
+	link = strings.TrimSpace(link)
+	if link == "" {
+		return nil, fmt.Errorf("field 'link' is required (download URL)")
+	}
+
+	username, avatar := s.getUserDetails(userID)
+
+	qd := &QueuedDownload{
+		userID:    userID,
+		Username:  username,
+		Avatar:    avatar,
+		Type:      "webdl",
+		Link:      link,
+		CacheOnly: false,
+	}
+
+	return s.downloadManager.Submit(qd)
 }
 
 func (s *Server) removeSingleDownload(token string, userID string, isAdmin bool) error {
@@ -911,37 +951,48 @@ func (s *Server) handleFtpSend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dlType, name, downloadID, clientIndex, err := s.store.FindDownloadForFTP(req.Token, userID)
-	if err != nil {
-		jsonError(w, http.StatusNotFound, "Download not found")
+	if err := s.SendDownloadToFTP(userID, req.Token, req.FileID); err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			jsonError(w, http.StatusNotFound, err.Error())
+			return
+		}
+		jsonError(w, http.StatusBadRequest, err.Error())
 		return
+	}
+
+	jsonOK(w, map[string]string{"message": "FTP upload started in background"})
+}
+
+// SendDownloadToFTP streams a completed download directly to user's configured FTP server
+func (s *Server) SendDownloadToFTP(userID, token string, fileID *int) error {
+	dlType, name, downloadID, clientIndex, err := s.store.FindDownloadForFTP(token, userID)
+	if err != nil {
+		return fmt.Errorf("download not found")
 	}
 
 	host, username, password, err := s.store.GetFTPConfig(userID)
 	if err != nil || host == "" {
-		jsonError(w, http.StatusBadRequest, "FTP is not configured")
-		return
+		return fmt.Errorf("FTP is not configured")
 	}
 
-	fileID := -1
-	if req.FileID != nil {
-		fileID = *req.FileID
+	fid := -1
+	if fileID != nil {
+		fid = *fileID
 	}
 
 	job := &QueuedFTPJob{
-		userID:    userID,
+		userID:       userID,
 		Filename:     name,
 		Host:         host,
 		Username:     username,
 		Password:     password,
 		DownloadType: dlType,
 		DownloadID:   downloadID,
-		FileID:       fileID,
+		FileID:       fid,
 		ClientIndex:  clientIndex,
 	}
 	s.ftpManager.Submit(job)
-
-	jsonOK(w, map[string]string{"message": "FTP upload started in background"})
+	return nil
 }
 
 
