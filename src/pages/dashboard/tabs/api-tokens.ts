@@ -5,6 +5,135 @@ import { toastSuccess, toastError, toastInfo } from '../../../components/toast';
 import { icon } from '../../../components/icons';
 
 let tokens: TokenItem[] = [];
+let mcpActiveToken = '<YOUR_API_KEY>';
+let activeMcpFormat: 'http' | 'sse' | 'stdio' = 'http';
+
+function getDisboxOrigin(): string {
+  if (typeof window !== 'undefined' && window.location?.origin && window.location.origin !== 'null') {
+    return window.location.origin;
+  }
+  return 'http://localhost:8080';
+}
+
+function buildMcpConfigJson(format: 'http' | 'sse' | 'stdio', origin: string, apiKey: string): string {
+  if (format === 'stdio') {
+    return JSON.stringify(
+      {
+        mcpServers: {
+          disbox: {
+            command: '/path/to/disbox',
+            args: ['--mcp'],
+            env: {
+              DISBOX_API_KEY: apiKey,
+            },
+          },
+        },
+      },
+      null,
+      2
+    );
+  }
+
+  const url = format === 'http' ? `${origin}/v1/mcp` : `${origin}/v1/mcp/sse`;
+  return JSON.stringify(
+    {
+      mcpServers: {
+        disbox: {
+          url,
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+          },
+        },
+      },
+    },
+    null,
+    2
+  );
+}
+
+function buildMcpAiPrompt(origin: string, apiKey: string): string {
+  const hasRealKey = apiKey !== '<YOUR_API_KEY>';
+  const keyInstruction = hasRealKey
+    ? `Use this personal Disbox API token in the Authorization header:\n${apiKey}`
+    : `Replace <YOUR_API_KEY> with my personal Disbox API key (never invent a fake key; ask me for it if missing).`;
+
+  return [
+    `Please configure the Disbox MCP (Model Context Protocol) server in my MCP client configuration (without overwriting my other existing MCP servers).`,
+    ``,
+    `Connection details:`,
+    `- Server name: disbox`,
+    `- Streamable HTTP URL (preferred for modern clients): ${origin}/v1/mcp`,
+    `- Legacy SSE URL (if this client only supports SSE): ${origin}/v1/mcp/sse`,
+    `- Authentication header: Authorization: Bearer ${apiKey}`,
+    ``,
+    keyInstruction,
+    ``,
+    `JSON snippet (Streamable HTTP):`,
+    buildMcpConfigJson('http', origin, apiKey),
+    ``,
+    `After editing the MCP config file, validate JSON syntax, connect/reload the MCP server, and run tools/list (or call disbox_get_queue) to verify Disbox MCP tools are working.`,
+  ].join('\n');
+}
+
+function renderMcpGuide() {
+  const origin = getDisboxOrigin();
+  const originEl = document.getElementById('api-guide-origin');
+  const httpEl = document.getElementById('mcp-url-http');
+  const sseEl = document.getElementById('mcp-url-sse');
+  const promptEl = document.getElementById('mcp-ai-prompt');
+  const configEl = document.getElementById('mcp-config-json');
+  const statusEl = document.getElementById('mcp-token-status');
+
+  if (originEl) originEl.textContent = origin;
+  if (httpEl) httpEl.textContent = `${origin}/v1/mcp`;
+  if (sseEl) sseEl.textContent = `${origin}/v1/mcp/sse`;
+  if (promptEl) promptEl.textContent = buildMcpAiPrompt(origin, mcpActiveToken);
+  if (configEl) configEl.textContent = buildMcpConfigJson(activeMcpFormat, origin, mcpActiveToken);
+  if (statusEl) {
+    const isReal = mcpActiveToken !== '<YOUR_API_KEY>';
+    statusEl.textContent = isReal ? 'Auto-filled with Newly Created Key' : 'Replace <YOUR_API_KEY> Before Sharing';
+    statusEl.className = isReal ? 'badge badge-success' : 'badge badge-accent';
+  }
+}
+
+function initMcpGuide() {
+  renderMcpGuide();
+
+  document.getElementById('btn-copy-mcp-http')?.addEventListener('click', async () => {
+    await copyToClipboard(`${getDisboxOrigin()}/v1/mcp`);
+    toastSuccess('Streamable HTTP endpoint copied!');
+  });
+
+  document.getElementById('btn-copy-mcp-sse')?.addEventListener('click', async () => {
+    await copyToClipboard(`${getDisboxOrigin()}/v1/mcp/sse`);
+    toastSuccess('Legacy SSE endpoint copied!');
+  });
+
+  document.getElementById('btn-copy-mcp-prompt')?.addEventListener('click', async () => {
+    await copyToClipboard(buildMcpAiPrompt(getDisboxOrigin(), mcpActiveToken));
+    toastSuccess(
+      mcpActiveToken === '<YOUR_API_KEY>'
+        ? 'AI setup prompt copied! Replace <YOUR_API_KEY> with your token before sending.'
+        : 'AI setup prompt with your new token copied!'
+    );
+  });
+
+  document.getElementById('btn-copy-mcp-config')?.addEventListener('click', async () => {
+    await copyToClipboard(buildMcpConfigJson(activeMcpFormat, getDisboxOrigin(), mcpActiveToken));
+    toastSuccess('MCP JSON configuration copied!');
+  });
+
+  document.querySelectorAll<HTMLButtonElement>('.mcp-tab[data-mcp-tab]').forEach((tabBtn) => {
+    tabBtn.addEventListener('click', () => {
+      const format = tabBtn.dataset.mcpTab as 'http' | 'sse' | 'stdio' | undefined;
+      if (!format) return;
+      activeMcpFormat = format;
+      document.querySelectorAll('.mcp-tab[data-mcp-tab]').forEach((b) => b.classList.remove('active'));
+      tabBtn.classList.add('active');
+      renderMcpGuide();
+    });
+  });
+}
 
 export function initApiTokensTab() {
   const btnOpen = document.getElementById('btn-open-create-token');
@@ -55,7 +184,10 @@ export function initApiTokensTab() {
       toastSuccess('Token created successfully!');
       closeCreateForm();
 
-      // Display banner
+      // Display banner & auto-fill MCP setup snippets
+      mcpActiveToken = res.data.token;
+      renderMcpGuide();
+
       const plaintextEl = document.getElementById('new-token-plaintext');
       if (newBanner && plaintextEl) {
         newBanner.style.display = 'block';
@@ -103,6 +235,10 @@ export function initApiTokensTab() {
       const res = await revokeToken(token);
       if (res.success) {
         toastSuccess('API Token revoked');
+        if (mcpActiveToken !== '<YOUR_API_KEY>' && token && mcpActiveToken.startsWith(token.replace(/\.+$/, ''))) {
+          mcpActiveToken = '<YOUR_API_KEY>';
+          renderMcpGuide();
+        }
         loadTokens();
       } else {
         toastError(res.error || 'Failed to revoke token');
@@ -110,6 +246,7 @@ export function initApiTokensTab() {
     }
   });
 
+  initMcpGuide();
   loadTokens();
 }
 

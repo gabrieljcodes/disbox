@@ -53,12 +53,36 @@ type CachedProgress struct {
 	IsArchive     bool    `json:"is_archive,omitempty"`
 }
 
+type ActiveDownloadItem struct {
+	ID            int     `json:"id"`
+	Type          string  `json:"type"`
+	Name          string  `json:"name"`
+	ClientIndex   int     `json:"client_index"`
+	Progress      float64 `json:"progress"`
+	DownloadSpeed int64   `json:"download_speed"`
+	DownloadState string  `json:"download_state"`
+	Size          int64   `json:"size"`
+	Downloaded    int64   `json:"downloaded"`
+	ETA           int64   `json:"eta"`
+	CreatedAt     string  `json:"created_at,omitempty"`
+}
+
+type downloadStallState struct {
+	FirstSeenAt     time.Time
+	LastProgressAt  time.Time
+	LastDownloaded  int64
+	LastProgress    float64
+	LastDeleteTryAt time.Time
+}
+
 type DownloadManager struct {
-	server        *Server
-	queue         []*QueuedDownload
-	mu            sync.Mutex
-	stopChan      chan struct{}
-	progressCache map[string]CachedProgress
+	server          *Server
+	queue           []*QueuedDownload
+	mu              sync.Mutex
+	stopChan        chan struct{}
+	progressCache   map[string]CachedProgress
+	activeDownloads []ActiveDownloadItem
+	stallTrackers   map[string]*downloadStallState
 
 	globalSlots int
 	activeCount map[int]int    // active downloads per client index
@@ -76,6 +100,7 @@ func NewDownloadManager(server *Server) *DownloadManager {
 		activeCount:   make(map[int]int),
 		userActive:    make(map[string]int),
 		progressCache: make(map[string]CachedProgress),
+		stallTrackers: make(map[string]*downloadStallState),
 	}
 
 	go dm.processQueue()
@@ -163,10 +188,135 @@ func (dm *DownloadManager) GetSlotCapacity() int {
 	return dm.globalSlots
 }
 
+func parseTorboxTimestamp(raw string) (time.Time, bool) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return time.Time{}, false
+	}
+	layouts := []string{
+		time.RFC3339Nano,
+		time.RFC3339,
+		"2006-01-02T15:04:05.999999",
+		"2006-01-02T15:04:05",
+		"2006-01-02 15:04:05.999999-07:00",
+		"2006-01-02 15:04:05-07:00",
+		"2006-01-02 15:04:05",
+	}
+	for _, layout := range layouts {
+		if t, err := time.Parse(layout, raw); err == nil {
+			return t.UTC(), true
+		}
+	}
+	return time.Time{}, false
+}
+
+func (dm *DownloadManager) getStaleDownloadTimeout() time.Duration {
+	if dm.server == nil || dm.server.store == nil {
+		return 24 * time.Hour
+	}
+	raw := strings.TrimSpace(dm.server.GetSetting("stale_download_timeout_hours", "24"))
+	hours, err := strconv.Atoi(raw)
+	if err != nil {
+		return 24 * time.Hour
+	}
+	if hours <= 0 {
+		return 0
+	}
+	return time.Duration(hours) * time.Hour
+}
+
+// evaluateStaleDownload updates stall tracking state and reports whether an incomplete download
+// has exceeded the configured timeout and should be removed from TorBox to free slots/storage.
+func evaluateStaleDownload(
+	dlType string,
+	createdAtStr string,
+	downloaded int64,
+	progress float64,
+	speed int64,
+	active bool,
+	downloadFinished bool,
+	downloadPresent bool,
+	downloadState string,
+	now time.Time,
+	timeout time.Duration,
+	tracker *downloadStallState,
+) (*downloadStallState, bool, string) {
+	if tracker == nil {
+		tracker = &downloadStallState{
+			FirstSeenAt:    now,
+			LastProgressAt: now,
+			LastDownloaded: downloaded,
+			LastProgress:   progress,
+		}
+	} else if downloaded > tracker.LastDownloaded || progress > tracker.LastProgress+0.0001 {
+		tracker.LastProgressAt = now
+		tracker.LastDownloaded = downloaded
+		tracker.LastProgress = progress
+	}
+
+	if timeout <= 0 || downloadFinished || downloadPresent {
+		return tracker, false, ""
+	}
+
+	startedAt := tracker.FirstSeenAt
+	if parsed, ok := parseTorboxTimestamp(createdAtStr); ok {
+		startedAt = parsed
+	}
+
+	age := now.Sub(startedAt)
+	if age < 0 {
+		age = 0
+	}
+	if age < timeout {
+		return tracker, false, ""
+	}
+
+	// Avoid retrying TorBox deletion on every 10s poll if a previous attempt just failed.
+	if !tracker.LastDeleteTryAt.IsZero() && now.Sub(tracker.LastDeleteTryAt) < 5*time.Minute {
+		return tracker, false, ""
+	}
+
+	noProgressFor := now.Sub(tracker.LastProgressAt)
+	lowerState := strings.ToLower(strings.TrimSpace(downloadState))
+
+	if dlType == "webdl" {
+		return tracker, true, fmt.Sprintf("incomplete webdl exceeded %s (age=%s, state=%s)", timeout, age.Round(time.Minute), downloadState)
+	}
+
+	// For torrents, remove once age >= timeout if stalled/inactive/errored or no recent progress,
+	// or unconditionally once age >= 2*timeout.
+	isStalledState := strings.Contains(lowerState, "stall") ||
+		strings.Contains(lowerState, "error") ||
+		strings.Contains(lowerState, "fail") ||
+		strings.Contains(lowerState, "dead")
+	if speed <= 0 || !active || noProgressFor >= 30*time.Minute || isStalledState || age >= 2*timeout {
+		return tracker, true, fmt.Sprintf("incomplete torrent exceeded %s (age=%s, stalled_for=%s, speed=%d, state=%s)",
+			timeout, age.Round(time.Minute), noProgressFor.Round(time.Minute), speed, downloadState)
+	}
+
+	return tracker, false, ""
+}
+
+type staleRemovalCandidate struct {
+	clientIndex int
+	dlType      string
+	downloadID  int
+	name        string
+	key         string
+	reason      string
+	wasActive   bool
+}
+
 func (dm *DownloadManager) RefreshActiveCount() {
 	pool := dm.server.clientPool
 	newActiveCount := make(map[int]int)
 	newProgressCache := make(map[string]CachedProgress)
+	var newActiveDownloads []ActiveDownloadItem
+	var staleCandidates []staleRemovalCandidate
+	seenKeys := make(map[string]bool)
+
+	now := time.Now().UTC()
+	staleTimeout := dm.getStaleDownloadTimeout()
 
 	for i := 0; i < pool.GetClientCount(); i++ {
 		client := pool.GetClient(i)
@@ -176,9 +326,35 @@ func (dm *DownloadManager) RefreshActiveCount() {
 		torrents, errTorrents := client.ListTorrents()
 		if errTorrents == nil {
 			for _, t := range torrents {
-				if t.Active && !t.DownloadFinished {
+				key := fmt.Sprintf("%d_torrent_%d", i, t.ID)
+				seenKeys[key] = true
+
+				isActive := t.Active && !t.DownloadFinished
+				if isActive {
 					active++
 				}
+
+				dm.mu.Lock()
+				tracker, shouldRemove, reason := evaluateStaleDownload(
+					"torrent", t.CreatedAt, t.Downloaded, t.Progress, t.DownloadSpeed,
+					t.Active, t.DownloadFinished, t.DownloadPresent, t.DownloadState,
+					now, staleTimeout, dm.stallTrackers[key],
+				)
+				dm.stallTrackers[key] = tracker
+				if shouldRemove {
+					tracker.LastDeleteTryAt = now
+					staleCandidates = append(staleCandidates, staleRemovalCandidate{
+						clientIndex: i,
+						dlType:      "torrent",
+						downloadID:  t.ID,
+						name:        t.Name,
+						key:         key,
+						reason:      reason,
+						wasActive:   isActive,
+					})
+				}
+				dm.mu.Unlock()
+
 				var eta int64 = 0
 				if t.DownloadSpeed > 0 {
 					eta = (t.Size - t.Downloaded) / t.DownloadSpeed
@@ -186,7 +362,6 @@ func (dm *DownloadManager) RefreshActiveCount() {
 				if eta < 0 {
 					eta = 0
 				}
-				key := fmt.Sprintf("%d_torrent_%d", i, t.ID)
 				isArchive := false
 				if len(t.Files) == 1 {
 					ext := strings.ToLower(filepath.Ext(t.Files[0].Name))
@@ -202,6 +377,21 @@ func (dm *DownloadManager) RefreshActiveCount() {
 					FilesCount:    len(t.Files),
 					IsArchive:     isArchive,
 				}
+				if isActive {
+					newActiveDownloads = append(newActiveDownloads, ActiveDownloadItem{
+						ID:            t.ID,
+						Type:          "torrent",
+						Name:          t.Name,
+						ClientIndex:   i,
+						Progress:      t.Progress,
+						DownloadSpeed: t.DownloadSpeed,
+						DownloadState: t.DownloadState,
+						Size:          t.Size,
+						Downloaded:    t.Downloaded,
+						ETA:           eta,
+						CreatedAt:     t.CreatedAt,
+					})
+				}
 			}
 		}
 
@@ -209,9 +399,35 @@ func (dm *DownloadManager) RefreshActiveCount() {
 		webdls, errWebDLs := client.ListWebDownloads()
 		if errWebDLs == nil {
 			for _, w := range webdls {
-				if w.Active && !w.DownloadFinished {
+				key := fmt.Sprintf("%d_webdl_%d", i, w.ID)
+				seenKeys[key] = true
+
+				isActive := w.Active && !w.DownloadFinished
+				if isActive {
 					active++
 				}
+
+				dm.mu.Lock()
+				tracker, shouldRemove, reason := evaluateStaleDownload(
+					"webdl", w.CreatedAt, w.Downloaded, w.Progress, w.DownloadSpeed,
+					w.Active, w.DownloadFinished, w.DownloadPresent, w.DownloadState,
+					now, staleTimeout, dm.stallTrackers[key],
+				)
+				dm.stallTrackers[key] = tracker
+				if shouldRemove {
+					tracker.LastDeleteTryAt = now
+					staleCandidates = append(staleCandidates, staleRemovalCandidate{
+						clientIndex: i,
+						dlType:      "webdl",
+						downloadID:  w.ID,
+						name:        w.Name,
+						key:         key,
+						reason:      reason,
+						wasActive:   isActive,
+					})
+				}
+				dm.mu.Unlock()
+
 				var eta int64 = 0
 				if w.DownloadSpeed > 0 {
 					eta = (w.Size - w.Downloaded) / w.DownloadSpeed
@@ -219,7 +435,6 @@ func (dm *DownloadManager) RefreshActiveCount() {
 				if eta < 0 {
 					eta = 0
 				}
-				key := fmt.Sprintf("%d_webdl_%d", i, w.ID)
 				isArchive := false
 				if len(w.Files) == 1 {
 					ext := strings.ToLower(filepath.Ext(w.Files[0].Name))
@@ -239,6 +454,21 @@ func (dm *DownloadManager) RefreshActiveCount() {
 					ETA:           eta,
 					FilesCount:    len(w.Files),
 					IsArchive:     isArchive,
+				}
+				if isActive {
+					newActiveDownloads = append(newActiveDownloads, ActiveDownloadItem{
+						ID:            w.ID,
+						Type:          "webdl",
+						Name:          w.Name,
+						ClientIndex:   i,
+						Progress:      w.Progress,
+						DownloadSpeed: w.DownloadSpeed,
+						DownloadState: w.DownloadState,
+						Size:          w.Size,
+						Downloaded:    w.Downloaded,
+						ETA:           eta,
+						CreatedAt:     w.CreatedAt,
+					})
 				}
 			}
 		}
@@ -286,7 +516,83 @@ func (dm *DownloadManager) RefreshActiveCount() {
 	dm.mu.Lock()
 	dm.activeCount = newActiveCount
 	dm.progressCache = newProgressCache
+	dm.activeDownloads = newActiveDownloads
+	for key := range dm.stallTrackers {
+		if !seenKeys[key] {
+			delete(dm.stallTrackers, key)
+		}
+	}
 	dm.mu.Unlock()
+
+	if len(staleCandidates) > 0 {
+		go dm.cleanupStaleDownloads(staleCandidates)
+	}
+}
+
+func (dm *DownloadManager) cleanupStaleDownloads(candidates []staleRemovalCandidate) {
+	freedAny := false
+	for _, c := range candidates {
+		adapter := dm.server.getAdapterForType(c.dlType, c.clientIndex)
+		if adapter == nil {
+			continue
+		}
+
+		resp, err := adapter.Control(c.downloadID, "delete", false)
+		if err != nil {
+			if !strings.Contains(strings.ToLower(err.Error()), "not found") {
+				log.Printf("Stale download cleanup: failed to delete %s #%d (%q) on client #%d: %v",
+					c.dlType, c.downloadID, c.name, c.clientIndex+1, err)
+				continue
+			}
+		} else if resp != nil && !resp.Success {
+			detailLower := strings.ToLower(resp.Detail)
+			if !strings.Contains(detailLower, "not found") {
+				log.Printf("Stale download cleanup: TorBox rejected delete for %s #%d (%q) on client #%d: %s",
+					c.dlType, c.downloadID, c.name, c.clientIndex+1, resp.Detail)
+				continue
+			}
+		}
+
+		log.Printf("Stale download cleanup: auto-removed %s #%d (%q) on client #%d [%s]",
+			c.dlType, c.downloadID, c.name, c.clientIndex+1, c.reason)
+
+		if dm.server.store != nil {
+			if tokens, err := dm.server.store.GetTokensByDownload(c.dlType, c.downloadID, c.clientIndex); err == nil {
+				for _, token := range tokens {
+					dm.server.store.MarkDeleted(token)
+					dm.server.store.DeleteDownloadLink(token)
+
+					dm.server.mu.Lock()
+					delete(dm.server.downloads, token)
+					dm.server.mu.Unlock()
+				}
+			}
+		}
+
+		dm.mu.Lock()
+		delete(dm.stallTrackers, c.key)
+		delete(dm.progressCache, c.key)
+		if c.wasActive && dm.activeCount[c.clientIndex] > 0 {
+			dm.activeCount[c.clientIndex]--
+		}
+		dm.mu.Unlock()
+		freedAny = true
+	}
+
+	if freedAny {
+		dm.tryDispatch()
+	}
+}
+
+func (dm *DownloadManager) GetActiveDownloads() []ActiveDownloadItem {
+	dm.mu.Lock()
+	defer dm.mu.Unlock()
+	if len(dm.activeDownloads) == 0 {
+		return []ActiveDownloadItem{}
+	}
+	res := make([]ActiveDownloadItem, len(dm.activeDownloads))
+	copy(res, dm.activeDownloads)
+	return res
 }
 
 func (dm *DownloadManager) GetProgress(key string) (CachedProgress, bool) {

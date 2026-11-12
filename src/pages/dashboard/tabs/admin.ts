@@ -410,6 +410,7 @@ function initSettingsSection() {
     const rateLimit = (document.getElementById('admin-setting-rate-limit') as HTMLInputElement)?.value || '0';
     const gbLimit = (document.getElementById('admin-setting-gb-limit') as HTMLInputElement)?.value || '0';
     const maxConcurrent = (document.getElementById('admin-setting-max-concurrent') as HTMLInputElement)?.value || '0';
+    const staleTimeout = (document.getElementById('admin-setting-stale-timeout') as HTMLInputElement)?.value || '24';
     const tmdbKey = (document.getElementById('admin-setting-tmdb-key') as HTMLInputElement)?.value.trim() || '';
     const aiostreamsUrl = (document.getElementById('admin-setting-aiostreams-url') as HTMLInputElement)?.value.trim() || '';
     const aiostreamsUuid = (document.getElementById('admin-setting-aiostreams-uuid') as HTMLInputElement)?.value.trim() || '';
@@ -428,6 +429,7 @@ function initSettingsSection() {
       updateAdminSetting('public_api_delay_ms', rateLimit),
       updateAdminSetting('user_gb_limit', gbLimit),
       updateAdminSetting('max_concurrent_per_user', maxConcurrent),
+      updateAdminSetting('stale_download_timeout_hours', staleTimeout),
       updateAdminSetting('tmdb_api_key', tmdbKey),
       updateAdminSetting('aiostreams_url', aiostreamsUrl),
       updateAdminSetting('aiostreams_uuid', aiostreamsUuid),
@@ -458,6 +460,7 @@ async function loadAdminSettings() {
   const rateLimitEl = document.getElementById('admin-setting-rate-limit') as HTMLInputElement | null;
   const gbLimitEl = document.getElementById('admin-setting-gb-limit') as HTMLInputElement | null;
   const maxConcurrentEl = document.getElementById('admin-setting-max-concurrent') as HTMLInputElement | null;
+  const staleTimeoutEl = document.getElementById('admin-setting-stale-timeout') as HTMLInputElement | null;
   const tmdbKeyEl = document.getElementById('admin-setting-tmdb-key') as HTMLInputElement | null;
   const aiostreamsUrlEl = document.getElementById('admin-setting-aiostreams-url') as HTMLInputElement | null;
   const aiostreamsUuidEl = document.getElementById('admin-setting-aiostreams-uuid') as HTMLInputElement | null;
@@ -474,6 +477,7 @@ async function loadAdminSettings() {
   if (rateLimitEl) rateLimitEl.value = String(map.public_api_delay_ms ?? 0);
   if (gbLimitEl) gbLimitEl.value = String(map.user_gb_limit ?? 0);
   if (maxConcurrentEl) maxConcurrentEl.value = String(map.max_concurrent_per_user ?? 0);
+  if (staleTimeoutEl) staleTimeoutEl.value = String(map.stale_download_timeout_hours ?? 24);
   if (tmdbKeyEl) tmdbKeyEl.value = String(map.tmdb_api_key ?? '');
   if (aiostreamsUrlEl) aiostreamsUrlEl.value = String(map.aiostreams_url ?? '');
   if (aiostreamsUuidEl) aiostreamsUuidEl.value = String(map.aiostreams_uuid ?? '');

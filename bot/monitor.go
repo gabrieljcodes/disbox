@@ -128,10 +128,31 @@ func (m *Monitor) checkDownloads() {
 	}
 }
 
+func (m *Monitor) evictIfMissing(key string, download *TrackedDownload, err error) bool {
+	if err == nil || !strings.Contains(strings.ToLower(err.Error()), "not found") {
+		return false
+	}
+
+	log.Printf("Removing %s %d (client #%d) from Discord monitor: no longer present in TorBox", download.Type, download.ID, download.ClientIndex+1)
+	m.mu.Lock()
+	delete(m.tracked, key)
+	m.mu.Unlock()
+
+	if m.proxyServer != nil {
+		if dm := m.proxyServer.GetDownloadManager(); dm != nil {
+			dm.OnDownloadComplete(download.UserID)
+		}
+	}
+	return true
+}
+
 func (m *Monitor) checkTorrent(key string, download *TrackedDownload) {
 	client := m.torboxClientPool.GetClient(download.ClientIndex)
 	info, err := client.GetTorrentInfo(download.ID)
 	if err != nil {
+		if m.evictIfMissing(key, download, err) {
+			return
+		}
 		log.Printf("Error checking torrent %d (client #%d): %v", download.ID, download.ClientIndex+1, err)
 		return
 	}
@@ -170,6 +191,9 @@ func (m *Monitor) checkWebDownload(key string, download *TrackedDownload) {
 	client := m.torboxClientPool.GetClient(download.ClientIndex)
 	info, err := client.GetWebDownloadInfo(download.ID)
 	if err != nil {
+		if m.evictIfMissing(key, download, err) {
+			return
+		}
 		log.Printf("Error checking web download %d (client #%d): %v", download.ID, download.ClientIndex+1, err)
 		return
 	}

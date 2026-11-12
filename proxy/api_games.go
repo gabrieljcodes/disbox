@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -452,18 +453,30 @@ func cleanGameTitle(rawTitle string) string {
 const defaultGameSourcesJSON = `[
 	"https://hydralinks.cloud/sources/onlinefix.json",
 	"https://hydralinks.cloud/sources/fitgirl.json",
+	"https://hydralinks.cloud/sources/dodi.json",
+	"https://hydralinks.cloud/sources/steamrip.json",
 	"https://raw.githubusercontent.com/ertila007/ErtilaRepo.json/main/ErtilaRepo.json"
 ]`
 
+func (s *Server) getFlareSolverrURL() string {
+	u := strings.TrimSpace(s.store.GetSetting("flaresolverr_url", "http://flaresolverr:8191/v1"))
+	if u == "" {
+		u = "http://flaresolverr:8191/v1"
+	}
+	return u
+}
+
 func (s *Server) ensureGameSourcesLoaded() {
 	sourcesRaw := s.store.GetSetting("game_sources", defaultGameSourcesJSON)
-	flaresolverrURL := s.store.GetSetting("flaresolverr_url", "http://flaresolverr:8191/v1")
+	flaresolverrURL := s.getFlareSolverrURL()
 
 	var sources []string
 	if err := json.Unmarshal([]byte(sourcesRaw), &sources); err != nil || len(sources) == 0 {
 		sources = []string{
 			"https://hydralinks.cloud/sources/onlinefix.json",
 			"https://hydralinks.cloud/sources/fitgirl.json",
+			"https://hydralinks.cloud/sources/dodi.json",
+			"https://hydralinks.cloud/sources/steamrip.json",
 			"https://raw.githubusercontent.com/ertila007/ErtilaRepo.json/main/ErtilaRepo.json",
 		}
 	}
@@ -509,10 +522,16 @@ func fetchSourceWithFlareSolverr(flaresolverrURL, targetURL string) ([]byte, err
 		endpoint += "/v1"
 	}
 
+	maxTimeout := 120000
+	if strings.Contains(strings.ToLower(targetURL), "fitgirl") {
+		// fitgirl.json is ~19MB, requiring more time for headless Chrome DOM serialization and transfer on resource-constrained hosts
+		maxTimeout = 300000
+	}
+
 	payload := flareSolverrRequest{
 		Cmd:        "request.get",
 		URL:        targetURL,
-		MaxTimeout: 60000,
+		MaxTimeout: maxTimeout,
 	}
 
 	bodyBytes, err := json.Marshal(payload)
@@ -526,7 +545,7 @@ func fetchSourceWithFlareSolverr(flaresolverrURL, targetURL string) ([]byte, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{Timeout: 75 * time.Second}
+	client := &http.Client{Timeout: time.Duration(maxTimeout/1000+30) * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to contact FlareSolverr: %w", err)
@@ -628,13 +647,21 @@ func (m *gameSourcesManager) syncSources(sourceURLs []string, flaresolverrURL st
 
 		// 2. If direct fetch failed or was blocked by Cloudflare (403/503/HTML), try FlareSolverr
 		if len(body) == 0 && flaresolverrURL != "" {
-			fsBody, fsErr := fetchSourceWithFlareSolverr(flaresolverrURL, srcURL)
-			if fsErr == nil && len(fsBody) > 0 {
-				body = fsBody
-				fetchErr = nil
-				usedFlareSolverr = true
-			} else if fetchErr == nil {
-				fetchErr = fsErr
+			// Retry once: FlareSolverr's Chrome/chromedriver can be temporarily
+			// wedged right after a previous timeout, and the next attempt recovers.
+			for attempt := 0; attempt < 2; attempt++ {
+				if attempt > 0 {
+					time.Sleep(10 * time.Second)
+				}
+				fsBody, fsErr := fetchSourceWithFlareSolverr(flaresolverrURL, srcURL)
+				if fsErr == nil && len(fsBody) > 0 {
+					body = fsBody
+					fetchErr = nil
+					usedFlareSolverr = true
+					break
+				} else if fetchErr == nil {
+					fetchErr = fsErr
+				}
 			}
 		}
 
@@ -656,6 +683,7 @@ func (m *gameSourcesManager) syncSources(sourceURLs []string, flaresolverrURL st
 				LastSync: time.Now().Format(time.RFC3339),
 			}
 			m.mu.Unlock()
+			log.Printf("game source sync: %s fetch failed: %s", sourceName, errDesc)
 			continue
 		}
 
@@ -683,6 +711,12 @@ func (m *gameSourcesManager) syncSources(sourceURLs []string, flaresolverrURL st
 			LastSync:  time.Now().Format(time.RFC3339),
 		}
 		m.mu.Unlock()
+
+		if statusLabel == "ok" {
+			log.Printf("game source sync: %s ok (%d items%s)", sourceName, len(items), map[bool]string{true: ", via FlareSolverr", false: ""}[usedFlareSolverr])
+		} else {
+			log.Printf("game source sync: %s failed: %s", sourceName, errorMsg)
+		}
 	}
 }
 
@@ -963,7 +997,7 @@ func (s *Server) handleAdminGameSources(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	flaresolverrURL := s.store.GetSetting("flaresolverr_url", "http://flaresolverr:8191/v1")
+	flaresolverrURL := s.getFlareSolverrURL()
 
 	switch r.Method {
 	case http.MethodGet:
@@ -1067,7 +1101,7 @@ func (s *Server) handleAdminSyncGameSources(w http.ResponseWriter, r *http.Reque
 	}
 
 	sourcesRaw := s.store.GetSetting("game_sources", defaultGameSourcesJSON)
-	flaresolverrURL := s.store.GetSetting("flaresolverr_url", "http://flaresolverr:8191/v1")
+	flaresolverrURL := s.getFlareSolverrURL()
 	var sources []string
 	_ = json.Unmarshal([]byte(sourcesRaw), &sources)
 

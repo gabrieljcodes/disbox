@@ -404,6 +404,7 @@ func (s *Server) AddTorrentDownload(userID, link string) (*QueuedDownload, error
 	}
 
 	username, avatar := s.getUserDetails(userID)
+	cacheOnly := s.store.GetSetting("cache_only", "false") == "true"
 
 	qd := &QueuedDownload{
 		userID:    userID,
@@ -411,7 +412,7 @@ func (s *Server) AddTorrentDownload(userID, link string) (*QueuedDownload, error
 		Avatar:    avatar,
 		Type:      "torrent",
 		Link:      link,
-		CacheOnly: false,
+		CacheOnly: cacheOnly,
 	}
 
 	return s.downloadManager.Submit(qd)
@@ -523,6 +524,9 @@ func (s *Server) handleAddWebdl(w http.ResponseWriter, r *http.Request) {
 
 // AddWebdlDownload queues a direct/debrid web download for the given user
 func (s *Server) AddWebdlDownload(userID, link string) (*QueuedDownload, error) {
+	if s.store.GetSetting("cache_only", "false") == "true" {
+		return nil, fmt.Errorf("cached-only mode is enabled; web downloads are currently disabled")
+	}
 	if err := s.checkGBLimit(userID); err != nil {
 		return nil, err
 	}
@@ -1135,21 +1139,10 @@ func (s *Server) handleUserCloud(w http.ResponseWriter, r *http.Request) {
 	jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
 }
 
-func (s *Server) handleIntegration(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
-		return
-	}
-
-	userID, ok := s.resolveUser(w, r)
-	if !ok {
-		return
-	}
-
-	provider := strings.TrimPrefix(r.URL.Path, "/v1/integration/")
+// SendDownloadToCloud uploads a user's download (or a specific file inside it) to a configured cloud provider.
+func (s *Server) SendDownloadToCloud(userID, provider, historyToken string, targetFileID int, reqZip bool, extra map[string]interface{}) (int, *torbox.APIResponse, error) {
 	if provider == "" || strings.Contains(provider, "/") {
-		jsonError(w, http.StatusBadRequest, "Invalid provider")
-		return
+		return http.StatusBadRequest, nil, fmt.Errorf("Invalid provider")
 	}
 
 	validProviders := map[string]string{
@@ -1163,53 +1156,38 @@ func (s *Server) handleIntegration(w http.ResponseWriter, r *http.Request) {
 
 	dbField, valid := validProviders[provider]
 	if !valid {
-		jsonError(w, http.StatusBadRequest, "Unsupported provider")
-		return
+		return http.StatusBadRequest, nil, fmt.Errorf("Unsupported provider")
 	}
 
 	token, err := s.store.GetCloudProviderToken(userID, dbField)
 	if err != nil || token == "" {
-		jsonError(w, http.StatusForbidden, "API token for this provider is not configured. Please set it in your Profile.")
-		return
+		return http.StatusForbidden, nil, fmt.Errorf("API token for this provider is not configured. Please set it in your Profile.")
 	}
 
-	var req map[string]interface{}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		jsonError(w, http.StatusBadRequest, "Invalid JSON")
-		return
-	}
-
-	req[dbField] = token
-
-	historyToken, _ := req["token"].(string)
 	if historyToken == "" {
-		jsonError(w, http.StatusBadRequest, "token is required")
-		return
+		return http.StatusBadRequest, nil, fmt.Errorf("token is required")
 	}
 
 	dlType, downloadID, clientIndex, _, err := s.store.FindDownloadForExport(historyToken, userID)
 	if err != nil {
-		jsonError(w, http.StatusNotFound, "Download not found")
-		return
+		return http.StatusNotFound, nil, fmt.Errorf("Download not found")
 	}
 
+	req := make(map[string]interface{}, len(extra)+4)
+	for k, v := range extra {
+		req[k] = v
+	}
+	delete(req, "token")
+	req[dbField] = token
 	req["id"] = downloadID
 	if dlType == "webdl" {
 		req["type"] = "webdownload"
 	} else {
 		req["type"] = dlType
 	}
-	delete(req, "token")
 
 	client := s.clientPool.GetClient(clientIndex)
-	var adapter torbox.DownloadAdapter
-	if dlType == "webdl" {
-		adapter = &torbox.WebDLAdapter{Client: client}
-	} else {
-		adapter = &torbox.TorrentAdapter{Client: client}
-	}
-
-	// Fetch metadata to check files and prevent double-zipping archives
+	adapter := s.getAdapterForType(dlType, clientIndex)
 	info, _ := adapter.GetInfo(downloadID)
 
 	isSingleArchive := false
@@ -1224,9 +1202,101 @@ func (s *Server) handleIntegration(w http.ResponseWriter, r *http.Request) {
 			strings.HasSuffix(singleFileName, ".xz")
 	}
 
-	rawFileID, hasFileID := req["file_id"]
-	var targetFileID int = -1
-	if hasFileID && rawFileID != nil {
+	var resp *torbox.APIResponse
+	if targetFileID >= 0 {
+		req["file_id"] = targetFileID
+		req["zip"] = false
+		resp, err = client.UploadToCloud(provider, req)
+	} else if isSingleArchive {
+		if len(info.Files) > 0 {
+			req["file_id"] = info.Files[0].ID
+		}
+		req["zip"] = false
+		resp, err = client.UploadToCloud(provider, req)
+	} else if reqZip {
+		req["zip"] = true
+		delete(req, "file_id")
+		resp, err = client.UploadToCloud(provider, req)
+	} else if info != nil && len(info.Files) > 1 {
+		var lastResp *torbox.APIResponse
+		var lastErr error
+		successCount := 0
+
+		for _, f := range info.Files {
+			fileReq := make(map[string]interface{}, len(req)+2)
+			for k, v := range req {
+				fileReq[k] = v
+			}
+			fileReq["file_id"] = f.ID
+			fileReq["zip"] = false
+			r, errUpload := client.UploadToCloud(provider, fileReq)
+			if errUpload != nil {
+				lastErr = errUpload
+			} else if r != nil {
+				lastResp = r
+				if r.Success {
+					successCount++
+				}
+			}
+		}
+
+		if successCount > 0 {
+			resp = &torbox.APIResponse{
+				Success: true,
+				Detail:  fmt.Sprintf("Successfully dispatched %d files to %s", successCount, provider),
+			}
+		} else if lastResp != nil {
+			resp = lastResp
+		} else if lastErr != nil {
+			return http.StatusInternalServerError, nil, lastErr
+		}
+	} else if info != nil && len(info.Files) == 1 {
+		req["file_id"] = info.Files[0].ID
+		req["zip"] = false
+		resp, err = client.UploadToCloud(provider, req)
+	} else {
+		delete(req, "file_id")
+		req["zip"] = false
+		resp, err = client.UploadToCloud(provider, req)
+	}
+
+	if err != nil {
+		log.Printf("[Cloud] Request to Torbox failed: %v", err)
+		return http.StatusInternalServerError, nil, err
+	}
+
+	if resp != nil && !resp.Success {
+		log.Printf("[Cloud] Torbox rejected %s upload: %s (error: %s)", provider, resp.Detail, resp.Error)
+	} else {
+		log.Printf("[Cloud] Successfully requested %s upload", provider)
+	}
+
+	return http.StatusOK, resp, nil
+}
+
+func (s *Server) handleIntegration(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	userID, ok := s.resolveUser(w, r)
+	if !ok {
+		return
+	}
+
+	provider := strings.TrimPrefix(r.URL.Path, "/v1/integration/")
+
+	var req map[string]interface{}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, http.StatusBadRequest, "Invalid JSON")
+		return
+	}
+
+	historyToken, _ := req["token"].(string)
+
+	targetFileID := -1
+	if rawFileID, hasFileID := req["file_id"]; hasFileID && rawFileID != nil {
 		switch v := rawFileID.(type) {
 		case float64:
 			targetFileID = int(v)
@@ -1236,85 +1306,12 @@ func (s *Server) handleIntegration(w http.ResponseWriter, r *http.Request) {
 			targetFileID, _ = strconv.Atoi(v)
 		}
 	}
-
 	reqZip, _ := req["zip"].(bool)
 
-	var resp *torbox.APIResponse
-
-	if targetFileID >= 0 {
-		// Explicit single file dispatch from file browser
-		req["file_id"] = targetFileID
-		req["zip"] = false
-		resp, err = client.UploadToCloud(provider, req)
-	} else if isSingleArchive {
-		// Single archive file: dispatch directly without double-zipping into .zip.zip
-		if len(info.Files) > 0 {
-			req["file_id"] = info.Files[0].ID
-		}
-		req["zip"] = false
-		resp, err = client.UploadToCloud(provider, req)
-	} else if reqZip {
-		// Whole package as ZIP archive
-		req["zip"] = true
-		delete(req, "file_id")
-		resp, err = client.UploadToCloud(provider, req)
-	} else {
-		// Unzipped multi-file dispatch: upload each individual file
-		if info != nil && len(info.Files) > 1 {
-			var lastResp *torbox.APIResponse
-			var lastErr error
-			successCount := 0
-
-			for _, f := range info.Files {
-				fileReq := make(map[string]interface{})
-				for k, v := range req {
-					fileReq[k] = v
-				}
-				fileReq["file_id"] = f.ID
-				fileReq["zip"] = false
-				r, errUpload := client.UploadToCloud(provider, fileReq)
-				if errUpload != nil {
-					lastErr = errUpload
-				} else if r != nil {
-					lastResp = r
-					if r.Success {
-						successCount++
-					}
-				}
-			}
-
-			if successCount > 0 {
-				resp = &torbox.APIResponse{
-					Success: true,
-					Detail:  fmt.Sprintf("Successfully dispatched %d files to %s", successCount, provider),
-				}
-			} else if lastResp != nil {
-				resp = lastResp
-			} else if lastErr != nil {
-				jsonError(w, http.StatusInternalServerError, lastErr.Error())
-				return
-			}
-		} else if info != nil && len(info.Files) == 1 {
-			req["file_id"] = info.Files[0].ID
-			req["zip"] = false
-			resp, err = client.UploadToCloud(provider, req)
-		} else {
-			delete(req, "file_id")
-			req["zip"] = false
-			resp, err = client.UploadToCloud(provider, req)
-		}
-	}
-
+	statusCode, resp, err := s.SendDownloadToCloud(userID, provider, historyToken, targetFileID, reqZip, req)
 	if err != nil {
-		log.Printf("[Cloud] Request to Torbox failed: %v", err)
-		jsonError(w, http.StatusInternalServerError, err.Error())
+		jsonError(w, statusCode, err.Error())
 		return
-	}
-
-	if resp != nil && !resp.Success {
-		log.Printf("[Cloud] Torbox rejected %s upload: %s (error: %s)", provider, resp.Detail, resp.Error)
-	} else {
-		log.Printf("[Cloud] Successfully requested %s upload", provider)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -1796,11 +1793,12 @@ func (s *Server) handleAdminSettingsGet(w http.ResponseWriter, r *http.Request) 
 		"tmdb_api_key":                 s.store.GetSetting("tmdb_api_key", ""),
 		"igdb_client_id":               s.store.GetSetting("igdb_client_id", ""),
 		"igdb_client_secret":           s.store.GetSetting("igdb_client_secret", ""),
-		"flaresolverr_url":             s.store.GetSetting("flaresolverr_url", "http://flaresolverr:8191/v1"),
-		"game_sources":                 s.store.GetSetting("game_sources", `["https://hydralinks.cloud/sources/onlinefix.json","https://hydralinks.cloud/sources/fitgirl.json","https://raw.githubusercontent.com/ertila007/ErtilaRepo.json/main/ErtilaRepo.json"]`),
+		"flaresolverr_url":             s.getFlareSolverrURL(),
+		"game_sources":                 s.store.GetSetting("game_sources", `["https://hydralinks.cloud/sources/onlinefix.json","https://hydralinks.cloud/sources/fitgirl.json","https://hydralinks.cloud/sources/dodi.json","https://hydralinks.cloud/sources/steamrip.json","https://raw.githubusercontent.com/ertila007/ErtilaRepo.json/main/ErtilaRepo.json"]`),
 		"search_default_language":      s.store.GetSetting("search_default_language", "all"),
 		"remove_from_torbox_on_delete": s.store.GetSetting("remove_from_torbox_on_delete", "true") == "true",
 		"max_concurrent_per_user":      s.store.GetSetting("max_concurrent_per_user", "0"),
+		"stale_download_timeout_hours": s.store.GetSetting("stale_download_timeout_hours", "24"),
 		"whitelist_guild_roles":        s.store.GetSetting("whitelist_guild_roles", "{}"),
 		"guilds_info":                  guildsInfo,
 	})
@@ -1928,6 +1926,7 @@ func (s *Server) handleAdminSettingsUpdate(w http.ResponseWriter, r *http.Reques
 		"igdb_client_id": true, "igdb_client_secret": true, "game_sources": true,
 		"flaresolverr_url": true,
 		"remove_from_torbox_on_delete": true, "max_concurrent_per_user": true,
+		"stale_download_timeout_hours": true,
 		"whitelist_guild_roles": true,
 	}
 
@@ -2171,7 +2170,7 @@ func (s *Server) handleQueueItems(w http.ResponseWriter, r *http.Request) {
 	
 	// Merge ftp items to the end of the queue
 	for _, fItem := range ftpItems {
-		fItem.Position = len(items)
+		fItem.Position = len(items) + 1
 		items = append(items, fItem)
 	}
 

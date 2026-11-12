@@ -592,6 +592,51 @@ func (st *Store) FindDownloadForFTP(token, userID string) (dlType, name string, 
 	return
 }
 
+// GetTokensByDownload returns all non-deleted history tokens and link_tokens for a specific TorBox download.
+func (st *Store) GetTokensByDownload(dlType string, downloadID, clientIndex int) ([]string, error) {
+	rows, err := st.db.Query(
+		"SELECT token, COALESCE(link_token, '') FROM download_history WHERE type = $1 AND download_id = $2 AND client_index = $3 AND deleted = false",
+		dlType, downloadID, clientIndex,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	seen := make(map[string]bool)
+	var tokens []string
+	for rows.Next() {
+		var token, linkToken string
+		if err := rows.Scan(&token, &linkToken); err == nil {
+			if token != "" && !seen[token] {
+				seen[token] = true
+				tokens = append(tokens, token)
+			}
+			if linkToken != "" && !seen[linkToken] {
+				seen[linkToken] = true
+				tokens = append(tokens, linkToken)
+			}
+		}
+	}
+	return tokens, nil
+}
+
+// FindDownloadInfoByToken looks up download metadata for a token (respecting ownership unless admin).
+func (st *Store) FindDownloadInfoByToken(token, userID string, isAdmin bool) (dlType string, downloadID, clientIndex int, name string, err error) {
+	if isAdmin {
+		err = st.db.QueryRow(
+			"SELECT type, download_id, client_index, COALESCE(NULLIF(custom_name, ''), name) FROM download_history WHERE (token = $1 OR link_token = $2) AND deleted = false LIMIT 1",
+			token, token,
+		).Scan(&dlType, &downloadID, &clientIndex, &name)
+	} else {
+		err = st.db.QueryRow(
+			"SELECT type, download_id, client_index, COALESCE(NULLIF(custom_name, ''), name) FROM download_history WHERE (token = $1 OR link_token = $2) AND user_id = $3 AND deleted = false LIMIT 1",
+			token, token, userID,
+		).Scan(&dlType, &downloadID, &clientIndex, &name)
+	}
+	return
+}
+
 // GetNonDeletedHistory returns non-deleted download history for a client index (for sync).
 // It excludes items created within the last 5 minutes to avoid race conditions with
 // the TorBox API not yet reflecting newly added torrents/webdls.
@@ -672,9 +717,10 @@ func (st *Store) InitDefaultSettings(existingKeys []string) {
 	initIfMissing("igdb_client_id", "")
 	initIfMissing("igdb_client_secret", "")
 	initIfMissing("flaresolverr_url", "http://flaresolverr:8191/v1")
-	initIfMissing("game_sources", `["https://hydralinks.cloud/sources/onlinefix.json","https://hydralinks.cloud/sources/fitgirl.json","https://raw.githubusercontent.com/ertila007/ErtilaRepo.json/main/ErtilaRepo.json"]`)
+	initIfMissing("game_sources", `["https://hydralinks.cloud/sources/onlinefix.json","https://hydralinks.cloud/sources/fitgirl.json","https://hydralinks.cloud/sources/dodi.json","https://hydralinks.cloud/sources/steamrip.json","https://raw.githubusercontent.com/ertila007/ErtilaRepo.json/main/ErtilaRepo.json"]`)
 	initIfMissing("search_default_language", "all")
 	initIfMissing("remove_from_torbox_on_delete", "true")
+	initIfMissing("stale_download_timeout_hours", "24")
 	initIfMissing("whitelist_guild_roles", "{}")
 }
 

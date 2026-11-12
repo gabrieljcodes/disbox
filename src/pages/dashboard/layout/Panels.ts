@@ -316,7 +316,96 @@ export function renderPanels(): string {
         </p>
         <div class="api-guide-code">
           <span class="comment"># Example: Fetch user profile & download statistics</span><br>
-          curl -s -H <span class="token-highlight">"Authorization: Bearer &lt;YOUR_API_KEY&gt;"</span> http://localhost:8080/v1/user/profile
+          curl -s -H <span class="token-highlight">"Authorization: Bearer &lt;YOUR_API_KEY&gt;"</span> <span id="api-guide-origin">http://localhost:8080</span>/v1/user/profile
+        </div>
+      </div>
+
+      <!-- Native MCP (Model Context Protocol) Integration -->
+      <div class="mcp-guide-card">
+        <div class="section-header between" style="margin-bottom: 10px; gap: 10px; flex-wrap: wrap;">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <div class="mcp-icon-badge">${icon('zap', 16, '#818cf8')}</div>
+            <div>
+              <h4 style="margin: 0; font-size: 14px; font-weight: 600; color: var(--text-primary);">Model Context Protocol (MCP) for AI Assistants</h4>
+              <p style="margin: 2px 0 0 0; font-size: 12px; color: var(--text-secondary);">
+                Connect Claude Desktop, Cursor, Antigravity, Windsurf, VS Code, or Open WebUI directly to your Disbox account.
+              </p>
+            </div>
+          </div>
+          <span class="badge badge-accent" id="mcp-token-status" style="font-size: 11px;">Uses Personal API Key</span>
+        </div>
+
+        <div class="mcp-endpoints-grid">
+          <div class="mcp-endpoint-row">
+            <div class="mcp-endpoint-meta">
+              <span class="mcp-endpoint-label">Streamable HTTP <span class="badge badge-success" style="font-size: 10px;">Recommended</span></span>
+              <code class="mcp-endpoint-url" id="mcp-url-http">http://localhost:8080/v1/mcp</code>
+            </div>
+            <button type="button" class="btn btn-secondary btn-sm" id="btn-copy-mcp-http" title="Copy Streamable HTTP endpoint">
+              ${icon('copy', 13)} Copy URL
+            </button>
+          </div>
+          <div class="mcp-endpoint-row">
+            <div class="mcp-endpoint-meta">
+              <span class="mcp-endpoint-label">Legacy SSE</span>
+              <code class="mcp-endpoint-url" id="mcp-url-sse">http://localhost:8080/v1/mcp/sse</code>
+            </div>
+            <button type="button" class="btn btn-secondary btn-sm" id="btn-copy-mcp-sse" title="Copy Legacy SSE endpoint">
+              ${icon('copy', 13)} Copy URL
+            </button>
+          </div>
+        </div>
+
+        <!-- Ready-to-send AI Setup Prompt -->
+        <div class="mcp-subblock">
+          <div class="section-header between" style="margin-bottom: 8px; gap: 8px; flex-wrap: wrap;">
+            <div style="display: flex; align-items: center; gap: 6px;">
+              ${icon('code', 14, '#818cf8')}
+              <span style="font-size: 12px; font-weight: 600; color: var(--text-primary);">Ready-to-Send AI Setup Prompt</span>
+            </div>
+            <button type="button" class="btn btn-primary btn-sm" id="btn-copy-mcp-prompt">
+              ${icon('copy', 13)} Copy Prompt for AI
+            </button>
+          </div>
+          <p style="font-size: 12px; color: var(--text-secondary); margin: 0 0 8px 0;">
+            Paste this prompt into Claude, Cursor, Windsurf, or Antigravity so your AI configures Disbox MCP for you automatically:
+          </p>
+          <pre class="mcp-prompt-box" id="mcp-ai-prompt"></pre>
+        </div>
+
+        <!-- Switchable JSON Configuration Snippets -->
+        <div class="mcp-subblock">
+          <div class="section-header between" style="margin-bottom: 8px; gap: 8px; flex-wrap: wrap;">
+            <div class="mcp-tabs" role="tablist" aria-label="MCP client configuration formats">
+              <button type="button" class="mcp-tab active" data-mcp-tab="http">Streamable HTTP</button>
+              <button type="button" class="mcp-tab" data-mcp-tab="sse">Legacy SSE</button>
+              <button type="button" class="mcp-tab" data-mcp-tab="stdio">Local CLI (--mcp)</button>
+            </div>
+            <button type="button" class="btn btn-secondary btn-sm" id="btn-copy-mcp-config">
+              ${icon('copy', 13)} Copy Config JSON
+            </button>
+          </div>
+          <pre class="api-guide-code mcp-config-pre" id="mcp-config-json"></pre>
+        </div>
+
+        <div class="mcp-tools-footer">
+          <span style="font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em;">14 Available MCP Tools:</span>
+          <div class="mcp-tools-grid">
+            <span class="mcp-tool-pill" title="Search movies, series & anime torrents">disbox_search_media</span>
+            <span class="mcp-tool-pill" title="Resolve TMDB metadata">disbox_search_tmdb</span>
+            <span class="mcp-tool-pill" title="Search AniList anime catalog">disbox_search_anime</span>
+            <span class="mcp-tool-pill" title="Search IGDB video games">disbox_search_games</span>
+            <span class="mcp-tool-pill" title="Search Hydra & scraper game downloads">disbox_get_game_downloads</span>
+            <span class="mcp-tool-pill" title="Queue magnet/torrent download">disbox_add_torrent</span>
+            <span class="mcp-tool-pill" title="Queue hoster/debrid link">disbox_add_webdl</span>
+            <span class="mcp-tool-pill" title="List downloads, links & live progress">disbox_get_history</span>
+            <span class="mcp-tool-pill" title="Check queue, slots & active jobs">disbox_get_queue</span>
+            <span class="mcp-tool-pill" title="Inspect files & file_id inside downloads">disbox_get_download_files</span>
+            <span class="mcp-tool-pill" title="Remove a download">disbox_remove_download</span>
+            <span class="mcp-tool-pill" title="Check supported debrid hosters">disbox_get_hosters</span>
+            <span class="mcp-tool-pill" title="Upload download to FTP server">disbox_send_ftp</span>
+            <span class="mcp-tool-pill" title="Upload to Drive/Dropbox/Gofile/etc.">disbox_send_cloud</span>
+          </div>
         </div>
       </div>
     </div>
@@ -456,6 +545,11 @@ export function renderPanels(): string {
             <div class="input-group">
               <label class="input-label" for="admin-setting-max-concurrent">Max Concurrent Downloads Per User (0 = Unlimited)</label>
               <input type="number" id="admin-setting-max-concurrent" class="input" min="0" placeholder="0">
+            </div>
+            <div class="input-group">
+              <label class="input-label" for="admin-setting-stale-timeout">Auto-Cleanup Stale Incomplete Downloads (Hours, 0 = Disabled)</label>
+              <input type="number" id="admin-setting-stale-timeout" class="input" min="0" placeholder="24">
+              <span class="help-text">Automatically removes broken or dead incomplete downloads (e.g. expired Mega/Gofile links) after this many hours to free TorBox slots and storage.</span>
             </div>
           </div>
         </div>

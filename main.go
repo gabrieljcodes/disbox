@@ -58,13 +58,7 @@ func main() {
 	}
 
 	if isMCPMode {
-		defaultUser := ""
-		if len(cfg.AdminUsers) > 0 {
-			defaultUser = cfg.AdminUsers[0]
-		}
-		if envUser := os.Getenv("DISBOX_USER_ID"); envUser != "" {
-			defaultUser = envUser
-		}
+		defaultUser := os.Getenv("DISBOX_USER_ID")
 
 		if err := proxyServer.ServeMCPStdio(defaultUser); err != nil {
 			log.Fatalf("MCP server error: %v", err)

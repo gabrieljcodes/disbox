@@ -27,6 +27,7 @@ export interface AdminSettingsMap {
   search_enabled: boolean | string;
   user_gb_limit: string;
   max_concurrent_per_user: string;
+  stale_download_timeout_hours?: string;
   tmdb_api_key?: string;
   igdb_client_id?: string;
   igdb_client_secret?: string;

@@ -79,6 +79,23 @@ tags:
     description: Administrative endpoints for access control
 
 paths:
+  /v1/mcp:
+    post:
+      tags:
+        - MCP
+      summary: Streamable HTTP endpoint for Model Context Protocol (MCP)
+      description: Modern Streamable HTTP MCP transport supporting JSON-RPC 2.0 requests and responses (GET/POST/DELETE)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: JSON-RPC response or SSE stream
+        "401":
+          description: Unauthorized
   /v1/mcp/sse:
     get:
       tags:
